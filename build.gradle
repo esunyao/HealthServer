@@ -7,7 +7,7 @@ plugins {
 
 group = 'cn.esuny'
 version = '0.0.1-SNAPSHOT'
-description = 'DietServer'
+description = 'HealthServer'
 
 java {
     toolchain {
