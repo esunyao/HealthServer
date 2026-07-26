@@ -1,0 +1,29 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+    id 'org.jetbrains.kotlin.plugin.spring'
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    // Spring Cloud Gateway (WebMVC 版本) — 网关核心，提供路由转发能力
+    implementation 'org.springframework.cloud:spring-cloud-starter-gateway-server-webmvc'
+
+    // Spring Boot Actuator — 提供 /actuator/health 等运维监控端点
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // 测试依赖
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll '-Xjsr305=strict', '-Xannotation-default-target=param-property'
+    }
+}
+
+
+// Source - https://stackoverflow.com/a/69099942
+// Posted by Issa Khodadadi
+// Retrieved 2026-07-26, License - CC BY-SA 4.0
+
+tasks.register("prepareKotlinBuildScriptModel"){}

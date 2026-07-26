@@ -1,10 +1,10 @@
-package cn.esuny.health_server
+package cn.esuny.gateway
 
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 
 @SpringBootTest
-class HealthServerApplicationTests {
+class GatewayApplicationTests {
 
     @Test
     fun contextLoads() {
