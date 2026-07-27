@@ -1,7 +1,6 @@
 package cn.esuny.gateway.filter
 
 import cn.esuny.gateway.model.ApiResponse
-import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.servlet.Filter
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ServletRequest
@@ -14,16 +13,16 @@ import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import tools.jackson.databind.ObjectMapper
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
 /**
  * 令牌桶速率限制过滤器 (Rate Limit Filter)
- * 
+ *
  * 作用：基于客户端 IP 进行限流，防止恶意请求或瞬时高并发导致系统崩溃。
  * 使用了简单的内存令牌桶算法 (Token Bucket)：
  * - 系统以恒定速率向桶里放入令牌 (requests-per-second)。
@@ -32,7 +31,6 @@ import kotlin.math.min
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 2) // 在日志过滤器之后执行
-@EnableScheduling // 开启定时任务，用于清理过期数据
 class RateLimitFilter(
     private val objectMapper: ObjectMapper,
     @Value("\${gateway.rate-limit.requests-per-second:20}")
@@ -67,7 +65,7 @@ class RateLimitFilter(
             httpResponse.status = HttpStatus.TOO_MANY_REQUESTS.value()
             httpResponse.contentType = MediaType.APPLICATION_JSON_VALUE
             httpResponse.characterEncoding = "UTF-8"
-            
+
             val apiResponse = ApiResponse.error<Nothing>(429, "请求过于频繁，请稍后再试")
             httpResponse.writer.write(objectMapper.writeValueAsString(apiResponse))
         }
@@ -127,7 +125,7 @@ class RateLimitFilter(
     fun cleanupStaleBuckets() {
         val now = System.nanoTime()
         val staleThreshold = TimeUnit.MINUTES.toNanos(10)
-        
+
         // 遍历并移除过期的桶
         buckets.entries.removeIf { entry ->
             val timeElapsed = now - entry.value.lastRefillTime

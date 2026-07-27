@@ -35,7 +35,7 @@ class RequestLoggingFilter : Filter {
         val userAgent = httpRequest.getHeader("User-Agent") ?: "Unknown"
 
         // 记录请求开始信息
-        log.info("Request Start: [{}] {} | IP: {} | UA: {}", method, uri, clientIp, userAgent)
+        log.debug("Request Start: [{}] {} | IP: {} | UA: {}", method, uri, clientIp, userAgent)
 
         // 记录开始时间。使用 nanoTime 计算时间差比 currentTimeMillis 更精确且不受系统时间修改的影响
         val startTime = System.nanoTime()
@@ -51,7 +51,7 @@ class RequestLoggingFilter : Filter {
             val status = httpResponse.status
             
             // 记录请求结束信息，包括状态码和耗时
-            log.info("Request End: [{}] {} | Status: {} | Elapsed: {} ms", method, uri, status, elapsedMillis)
+            log.debug("Request End: [{}] {} | Status: {} | Elapsed: {} ms", method, uri, status, elapsedMillis)
         }
     }
 

@@ -1,14 +1,14 @@
 package cn.esuny.gateway.health
 
-import org.springframework.boot.actuate.health.Health
-import org.springframework.boot.actuate.health.HealthIndicator
+import org.springframework.boot.health.contributor.Health
+import org.springframework.boot.health.contributor.HealthIndicator
 import org.springframework.stereotype.Component
 import java.time.Duration
 import java.time.Instant
 
 /**
  * 自定义健康检查指示器 (Custom Health Indicator)
- * 
+ *
  * 作用：扩展 Spring Boot Actuator 的 /actuator/health 接口。
  * 默认的 health 接口通常只返回系统是否 UP。
  * 通过实现 HealthIndicator，我们可以向健康检查响应中添加额外的诊断信息，
@@ -24,7 +24,7 @@ class GatewayHealthIndicator : HealthIndicator {
         val now = Instant.now()
         // 计算运行时间
         val uptimeDuration = Duration.between(startupTime, now)
-        
+
         // 格式化为人类可读的格式 (例如: 12h 30m 15s)
         val uptimeString = formatDuration(uptimeDuration)
 
