@@ -41,7 +41,7 @@ subprojects {
     dependencies {
         // 所有子模块共用的依赖
         implementation 'org.jetbrains.kotlin:kotlin-reflect'
-        implementation 'tools.jackson.module:jackson-module-kotlin'
+        implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
         implementation 'io.projectreactor.kotlin:reactor-kotlin-extensions'
         implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-reactor'
 
