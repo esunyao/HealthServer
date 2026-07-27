@@ -1,5 +1,6 @@
 package cn.esuny.gateway.filter
 
+import cn.esuny.gateway.config.RateLimitProperties
 import cn.esuny.gateway.model.ApiResponse
 import jakarta.servlet.Filter
 import jakarta.servlet.FilterChain
@@ -8,7 +9,6 @@ import jakarta.servlet.ServletResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
 import org.springframework.http.HttpStatus
@@ -33,10 +33,7 @@ import kotlin.math.min
 @Order(Ordered.HIGHEST_PRECEDENCE + 2) // 在日志过滤器之后执行
 class RateLimitFilter(
     private val objectMapper: ObjectMapper,
-    @Value("\${gateway.rate-limit.requests-per-second:20}")
-    private val requestsPerSecond: Double,
-    @Value("\${gateway.rate-limit.burst-capacity:40}")
-    private val burstCapacity: Double
+    private val rateLimitProperties: RateLimitProperties
 ) : Filter {
 
     private val log = LoggerFactory.getLogger(RateLimitFilter::class.java)
@@ -77,7 +74,7 @@ class RateLimitFilter(
     private fun allowRequest(clientIp: String): Boolean {
         // computeIfAbsent 会在 Map 中不存在该 IP 时，创建一个新的装满令牌的桶
         val bucket = buckets.computeIfAbsent(clientIp) {
-            TokenBucket(burstCapacity, System.nanoTime())
+            TokenBucket(rateLimitProperties.burstCapacity, System.nanoTime())
         }
 
         // 使用 synchronized 锁住当前客户端的桶，保证多线程并发下（同一个 IP 多次并发请求）的数据一致性
@@ -87,11 +84,11 @@ class RateLimitFilter(
             val secondsElapsed = timeElapsed.toDouble() / TimeUnit.SECONDS.toNanos(1)
 
             // 计算自从上次补充之后，到现在应该补充多少令牌
-            val tokensToAdd = secondsElapsed * requestsPerSecond
+            val tokensToAdd = secondsElapsed * rateLimitProperties.requestsPerSecond
 
             // 更新桶内令牌数（不能超过最大容量）和上次补充时间
             if (tokensToAdd > 0) {
-                bucket.tokens = min(burstCapacity, bucket.tokens + tokensToAdd)
+                bucket.tokens = min(rateLimitProperties.burstCapacity, bucket.tokens + tokensToAdd)
                 bucket.lastRefillTime = now
             }
 
