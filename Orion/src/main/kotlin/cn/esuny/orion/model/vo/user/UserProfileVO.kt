@@ -11,8 +11,9 @@ import java.util.UUID
  * 用户画像视图对象（返回给客户端）
  */
 data class UserProfileVO(
-    val profileId: UUID,
-    val userId: UUID,
+    // 使用String，防止精度丢失
+    val profileId: String,
+    val userId: String,
     val age: Short?,
     val gender: Gender?,
     val heightCm: BigDecimal?,

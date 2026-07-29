@@ -6,12 +6,8 @@ plugins {
 }
 
 dependencies {
-    // Spring Cloud Gateway (WebFlux 版本) — 网关核心，提供路由转发能力（响应式）
-    implementation 'org.springframework.boot:spring-boot-starter-webflux'
-
-    // Spring Boot 4.x 新拆分的模块，包含 WebServerInitializedEvent
-    // Spring Cloud Commons 依赖此类进行服务注册，但不会自动传递引入
-//    implementation 'org.springframework.boot:spring-boot-web-server'
+    // Spring Cloud Gateway (WebFlux) — 路由、过滤器、负载均衡（响应式）
+    implementation 'org.springframework.cloud:spring-cloud-starter-gateway-server-webflux'
 
     // Nacos 服务注册与发现 — Spring Cloud Alibaba 原生支持
     implementation 'com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-config'
@@ -19,6 +15,9 @@ dependencies {
 
     // Spring Boot Actuator — 提供 /actuator/health 等运维监控端点
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // Spring Cloud LoadBalancer — 提供客户端负载均衡能力
+    implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
 
     // 测试依赖
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

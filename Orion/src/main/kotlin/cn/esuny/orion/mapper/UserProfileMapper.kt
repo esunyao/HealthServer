@@ -8,6 +8,6 @@ import org.apache.ibatis.annotations.Select
 @Mapper
 interface UserProfileMapper : BaseMapper<UserProfile> {
 
-    @Select("SELECT * FROM user_profiles WHERE user_id = #{userId}")
+    @Select("SELECT * FROM \"User\".user_profiles WHERE user_id = #{userId}")
     fun selectByUserId(userId: java.util.UUID): UserProfile?
 }

@@ -3,6 +3,8 @@ package cn.esuny.gateway
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient
+//import org.springframework.cloud.loadbalancer.annotation.LoadBalancerClient
+//import org.springframework.cloud.loadbalancer.annotation.LoadBalancerClients
 import org.springframework.scheduling.annotation.EnableScheduling
 
 /**
@@ -19,6 +21,7 @@ import org.springframework.scheduling.annotation.EnableScheduling
 @SpringBootApplication
 @EnableDiscoveryClient
 @EnableScheduling
+//@LoadBalancerClients(value = [LoadBalancerClient("Orion")])
 class GatewayApplication
 
 /**

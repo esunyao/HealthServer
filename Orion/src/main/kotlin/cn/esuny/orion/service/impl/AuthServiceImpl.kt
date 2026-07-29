@@ -51,12 +51,11 @@ class AuthServiceImpl(
             throw BusinessException(400, "邮箱已被注册")
         }
 
-        val userId = UUID.randomUUID()
+//        val userId = UUID.randomUUID()
         val now = OffsetDateTime.now()
 
         // 创建用户
         val user = User(
-            userId = userId,
             username = request.username,
             email = request.email,
             passwordHash = passwordEncoder.encode(request.password)!!,
@@ -68,14 +67,16 @@ class AuthServiceImpl(
         userMapper.insert(user)
 
         // 创建用户画像（1:1 关系）
-        val profile = UserProfile(
-            userId = userId,
-            createdAt = now,
-            updatedAt = now
-        )
+        val profile = user.userId?.let {
+            UserProfile(
+                userId = it,
+                createdAt = now,
+                updatedAt = now
+            )
+        }
         userProfileMapper.insert(profile)
 
-        log.info("用户注册成功: username={}, userId={}", request.username, userId)
+        log.info("用户注册成功: username={}, userId={}", request.username)//, userId)
     }
 
     override fun login(request: LoginRequest): LoginResponse {
@@ -90,7 +91,7 @@ class AuthServiceImpl(
             throw BusinessException(403, "账户已被禁用", org.springframework.http.HttpStatus.FORBIDDEN)
         }
 
-        val userId = user.userId!!.toString()
+        val userId = user.userId.toString()
         val username = user.username
 
         // 生成 Token

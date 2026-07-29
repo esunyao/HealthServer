@@ -20,6 +20,7 @@ class MyBatisPlusConfig {
     @Bean
     fun mybatisPlusInterceptor(): MybatisPlusInterceptor {
         val interceptor = MybatisPlusInterceptor()
+        // 添加分页拦截器，并明确指定数据库为 PostgreSQL
         interceptor.addInnerInterceptor(PaginationInnerInterceptor(DbType.POSTGRE_SQL))
         return interceptor
     }

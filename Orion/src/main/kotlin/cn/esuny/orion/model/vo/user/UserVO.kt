@@ -8,7 +8,8 @@ import java.util.UUID
  * 用户信息视图对象（返回给客户端）
  */
 data class UserVO(
-    val userId: UUID,
+    // 使用String，防止精度丢失
+    val userId: String,
     val username: String,
     val email: String,
     val nickname: String,

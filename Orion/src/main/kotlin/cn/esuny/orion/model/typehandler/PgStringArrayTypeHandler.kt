@@ -18,10 +18,8 @@ import java.sql.ResultSet
 class PgStringArrayTypeHandler : BaseTypeHandler<List<String>>() {
 
     override fun setNonNullParameter(ps: PreparedStatement, i: Int, parameter: List<String>, jdbcType: JdbcType?) {
-        val obj = PGobject()
-        obj.type = "text[]"
-        obj.value = parameter.joinToString(",") { "\"$it\"" }
-        ps.setObject(i, obj)
+        val array = ps.connection.createArrayOf("text", parameter.toTypedArray())
+        ps.setArray(i, array)
     }
 
     override fun getNullableResult(rs: ResultSet, columnName: String): List<String>? {

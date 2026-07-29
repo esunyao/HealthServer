@@ -4,8 +4,10 @@ import cn.esuny.orion.model.enums.user.ActivityLevel
 import cn.esuny.orion.model.enums.user.Gender
 import cn.esuny.orion.model.enums.user.HealthGoal
 import cn.esuny.orion.model.typehandler.PgStringArrayTypeHandler
+import com.baomidou.mybatisplus.annotation.IdType
 
 import com.baomidou.mybatisplus.annotation.TableField
+import com.baomidou.mybatisplus.annotation.TableId
 import com.baomidou.mybatisplus.annotation.TableName
 import java.math.BigDecimal
 import java.time.OffsetDateTime
@@ -16,14 +18,14 @@ import java.util.UUID
  *
  * 与 users 1:1 关系，级联删除。
  */
-@TableName("user_profiles")
+@TableName("\"User\".user_profiles")
 data class UserProfile(
     /** 画像记录唯一标识 */
-    @TableField("profile_id")
-    val profileId: UUID? = null,
+    @TableId(type=IdType.ASSIGN_ID)
+    val profileId: Long? = null,
 
     /** 关联用户，1:1 关系 */
-    val userId: UUID? = null,
+    var userId: Long,
 
     /** 年龄，限制合理范围 10–120 */
     val age: Short? = null,

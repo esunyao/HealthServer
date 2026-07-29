@@ -1,7 +1,6 @@
 package cn.esuny.orion.model.entity.user
 
 import cn.esuny.orion.model.enums.user.UserStatus
-
 import com.baomidou.mybatisplus.annotation.IdType
 import com.baomidou.mybatisplus.annotation.TableField
 import com.baomidou.mybatisplus.annotation.TableId
@@ -15,11 +14,11 @@ import java.util.UUID
  * 存储登录凭证、昵称、头像、账户状态等，
  * 是其他所有业务表的关联核心。
  */
-@TableName("users")
+@TableName("\"User\".users")
 data class User(
     /** 用户唯一标识，时间有序 UUID */
-    @TableId(value = "user_id", type = IdType.ASSIGN_UUID)
-    val userId: UUID? = null,
+    @TableId(type = IdType.ASSIGN_ID)
+    var userId: Long? = null,
 
     /** 登录用户名，全局唯一 */
     val username: String = "",
@@ -37,7 +36,7 @@ data class User(
     val avatarUrl: String = "",
 
     /** 账户状态：active / disabled / deleted */
-    @TableField("`status`")
+    @TableField("status")
     val status: UserStatus = UserStatus.active,
 
     /** 最后登录时间 */

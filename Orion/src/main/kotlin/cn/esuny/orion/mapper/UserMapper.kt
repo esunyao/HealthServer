@@ -8,9 +8,9 @@ import org.apache.ibatis.annotations.Select
 @Mapper
 interface UserMapper : BaseMapper<User> {
 
-    @Select("SELECT * FROM users WHERE username = #{username}")
+    @Select("SELECT * FROM \"User\".users WHERE username = #{username}")
     fun selectByUsername(username: String): User?
 
-    @Select("SELECT * FROM users WHERE email = #{email}")
+    @Select("SELECT * FROM \"User\".users WHERE email = #{email}")
     fun selectByEmail(email: String): User?
 }

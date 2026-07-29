@@ -94,7 +94,7 @@ class UserServiceImpl(
     // ==================== Entity → VO 转换 ====================
 
     private fun cn.esuny.orion.model.entity.user.User.toVO() = UserVO(
-        userId = userId!!,
+        userId = userId.toString(),
         username = username,
         email = email,
         nickname = nickname,
@@ -105,8 +105,8 @@ class UserServiceImpl(
     )
 
     private fun UserProfile.toVO() = UserProfileVO(
-        profileId = profileId!!,
-        userId = userId!!,
+        profileId = profileId.toString(),
+        userId = userId.toString(),
         age = age,
         gender = gender,
         heightCm = heightCm,

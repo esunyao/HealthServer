@@ -4,103 +4,125 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-HealthServer 是一个基于 Spring Cloud 的微服务健康/饮食管理系统。目前仅实现了 **API 网关** 模块，下游服务（`user-service`、`diet-service`、`health-service`）尚未实现。
+Gateway 是 HealthServer 微服务架构的 **API 网关**（端口 8080），采用 Spring Cloud Gateway WebFlux 作为流量入口。负责路由分发、限流、日志和认证预处理。
 
 ## 技术栈
 
-| 组件 | 版本 |
+| 组件 | 版本/说明 |
 |---|---|
-| Kotlin | 2.3.21 |
-| Spring Boot | 4.1.0（使用 Jackson 3，包名 `tools.jackson`，不是 `com.fasterxml.jackson`） |
-| Spring Cloud | 2025.1.2 |
-| Spring Cloud Alibaba | 2025.1.0.0 |
-| Java | 21（toolchain） |
-| Gradle | 9.6.1（wrapper） |
+| Spring Cloud Gateway | WebFlux 版本（`spring-cloud-starter-gateway-server-webflux`） |
+| Spring Boot | 4.1.0（WebFlux，响应式，非 Servlet） |
+| Jackson | 3.x（`tools.jackson`，Spring Boot 4 默认） |
 
 ## 常用命令
 
 ```bash
-# 构建所有模块
-./gradlew build
-
-# 仅构建 gateway
+# 构建
 ./gradlew :gateway:build
 
-# 启动 gateway
+# 启动
 ./gradlew :gateway:bootRun
 
-# 运行所有测试
-./gradlew test
+# 测试
+./gradlew :gateway:test
 
-# 运行单个测试类（例如 RateLimitFilterTest）
+# 运行单个测试类
 ./gradlew :gateway:test --tests "cn.esuny.gateway.filter.RateLimitFilterTest"
-
-# 清理
-./gradlew clean
 ```
 
-## 多模块结构
+## 架构
 
-根 `build.gradle` 为所有子模块统一配置：
-- `java-library` 和 `io.spring.dependency-management` 插件
-- Java 21 toolchain
-- Spring Cloud BOM + Spring Cloud Alibaba BOM 统一版本管理
-- 公共依赖：`kotlin-reflect`、`jackson-module-kotlin`、`reactor-kotlin-extensions`、`kotlinx-coroutines-reactor`
+Gateway 采用过滤器链模式处理请求：
 
-每个子模块的 `build.gradle` 声明自己的 Kotlin/Spring Boot 插件和模块专属依赖。
+```
+Client Request
+    ↓
+TraceIdFilter (生成/提取 X-Trace-Id)
+    ↓
+RequestLoggingFilter (记录请求日志)
+    ↓
+RateLimitFilter (基于 IP 的令牌桶限流)
+    ↓
+路由匹配 → lb://Orion → 负载均衡 → 后端服务
+    ↓
+响应返回
+```
 
-## 网关架构
+## 路由配置
 
-网关（`gateway/`）是唯一的流量入口（端口 8080），采用 **WebMVC** 版本的 Spring Cloud Gateway（Servlet + Tomcat，非 WebFlux）。
+在 `application.yaml` 中通过 Spring Cloud Gateway WebFlux 配置路由规则：
 
-### 路由配置（Nacos 服务发现）
+| 路径模式 | 目标服务 | 说明 |
+|---|---|---|
+| `/v1/auth/**` | `lb://Orion` | 认证端点（注册/登录/刷新/登出） |
+| `/v1/users/**` | `lb://Orion` | 用户管理端点（查询/修改信息） |
 
-在 `GatewayRouteConfig.kt` 中通过代码定义路由规则，使用 `lb://` 负载均衡 URI：
-- `/api/user/**` → `user-service`
-- `/api/diet/**` → `diet-service`
-- `/api/health/**` → `health-service`
+路由使用 `lb://` 协议，通过 Nacos 服务发现解析服务实例地址。
 
-路由使用 `lb://` 协议，通过 Nacos 服务发现解析服务实例，支持负载均衡。
+### 路由 Filter
 
-### 过滤器链（Servlet Filter，按 precedence 排序）
+每个路由添加自定义请求头：`X-Gateway-Source: HealthServer-Gateway`
 
-1. `TraceIdFilter`（最高优先级）— 生成/提取 `X-Trace-Id`，设置 SLF4J MDC
-2. `RequestLoggingFilter`（+1）— 记录请求方法、URI、IP、User-Agent、状态码、耗时
-3. `RateLimitFilter`（+2）— 基于客户端 IP 的令牌桶限流（20 req/s，突发 40，返回 429）
+## 过滤器链（按 Precedence 排序）
 
-### 配置管理
+1. **TraceIdFilter**（最高优先级）
+   - 生成或提取 `X-Trace-Id` 请求头
+   - 设置 SLF4J MDC 以便日志追踪
 
-#### Nacos 配置中心
-- 通过 `spring.config.import=nacos:` 启用，配置文件名为 `GateWay_Application.yaml`
-- 支持动态刷新：`RateLimitProperties` 使用 `@RefreshScope`，修改 Nacos 配置后自动生效
+2. **RequestLoggingFilter**（+1）
+   - 记录请求方法、URI、IP、User-Agent、状态码、耗时
+
+3. **RateLimitFilter**（+2）
+   - 基于客户端 IP 的令牌桶限流
+   - 默认：20 请求/秒，突发容量 40
+   - 返回 429 Too Many Requests
+
+## 包结构
+
+```
+cn.esuny.gateway/
+├── config/
+│   ├── CorsConfig            # CORS 配置（允许所有来源，生产环境需限制）
+│   ├── JacksonConfig         # Jackson 3 配置（日期格式、时区 GMT+8）
+│   └── RateLimitProperties   # 限流参数（支持 @RefreshScope 热更新）
+├── filter/
+│   ├── TraceIdFilter         # 链路追踪 ID 过滤器
+│   ├── RequestLoggingFilter  # 请求日志过滤器
+│   └── RateLimitFilter       # 限流过滤器
+├── handler/
+│   ├── GlobalExceptionHandler  # 全局异常处理 → 统一 ApiResponse JSON
+│   └── FallbackController    # 降级端点（/fallback → 503）
+├── health/
+│   └── GatewayHealthIndicator  # 健康检查扩展（启动时间、运行时长）
+└── model/
+    └── ApiResponse           # 统一响应模型
+```
+
+## 配置管理
+
+### Nacos 配置中心
+
+- 配置文件名：`GateWay_Application.yaml`
+- 配置组：`GATEWAY_GROUP`
+- 支持动态刷新：`RateLimitProperties` 使用 `@RefreshScope`
 - 配置优先级：Nacos 远程配置 > 本地 `application.yaml`
 
-#### 配置分类
+### 配置分类
+
 - **动态配置**（支持热更新）：限流参数（`gateway.rate-limit.*`）
-- **静态配置**（需重启）：CORS、MVC、日志等框架级配置
+- **静态配置**（需重启）：CORS、日志等框架级配置
 
-### 错误处理
+## 错误处理
 
-- `GlobalExceptionHandler`（`@RestControllerAdvice`）— 捕获 404、405、异常 → 统一 `ApiResponse` JSON
+- `GlobalExceptionHandler`（`@RestControllerAdvice`）— 捕获异常 → 统一 `ApiResponse` JSON
 - `FallbackController` — `/fallback` 端点，返回 503 用于熔断降级
 
-### 其他配置
+## 其他配置
 
-- `CorsConfig` — 硬编码 CORS 规则（不支持动态刷新），允许所有来源（生产环境需限制）
-- `JacksonConfig` — Jackson 3：日期不转时间戳、忽略未知属性、时区 GMT+8
+- `CorsConfig` — CORS 配置（硬编码，不支持动态刷新）
+- `JacksonConfig` — Jackson 3 序列化配置
 - `GatewayHealthIndicator` — 扩展 `/actuator/health`，返回启动时间和运行时长
-
-### 统一响应模型
-
-`ApiResponse<T>` 统一包装所有响应：`code`、`message`、`data`、`traceId`、`timestamp`。
-
-## 关键约定
-
-- 基础包名：`cn.esuny`
-- 代码注释使用中文
-- `cn.esuny.gateway` 下的包结构：`config/`、`filter/`、`handler/`、`health/`、`model/`
-- 新增子模块放在独立目录，有独立 `build.gradle`，并在 `settings.gradle` 中注册
 
 ## 外部依赖
 
-- **Nacos** 服务发现和配置中心（地址见 `application.yaml`）
+- **Nacos** — `192.168.3.101:8848`（配置组：GATEWAY_GROUP）
