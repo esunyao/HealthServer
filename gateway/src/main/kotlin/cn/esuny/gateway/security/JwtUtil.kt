@@ -20,6 +20,11 @@ import javax.crypto.SecretKey
 @Component
 class JwtUtil(private val jwtProperties: JwtProperties) {
 
+    companion object {
+        private const val ACCESS_TOKEN_TYPE = "access"
+        private const val TOKEN_TYPE_CLAIM = "tokenType"
+    }
+
     private val log = LoggerFactory.getLogger(JwtUtil::class.java)
 
     private val key: SecretKey by lazy {
@@ -29,10 +34,10 @@ class JwtUtil(private val jwtProperties: JwtProperties) {
     /**
      * 验证 Token 是否有效（签名正确且未过期）
      */
-    fun validateToken(token: String): Boolean {
+    fun validateAccessToken(token: String): Boolean {
         return try {
             val claims = parseToken(token)
-            claims.expiration.after(Date())
+            claims.expiration.after(Date()) && claims[TOKEN_TYPE_CLAIM] == ACCESS_TOKEN_TYPE
         } catch (e: SignatureException) {
             log.debug("Invalid token signature: {}", e.message)
             false

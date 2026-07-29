@@ -33,6 +33,9 @@ import reactor.core.publisher.Mono
 class JwtAuthFilter(
     private val jwtUtil: JwtUtil,
     private val objectMapper: ObjectMapper,
+    // 指定注入名称为 reactiveStringRedisTemplate 的 Bean：
+    // 1. 消除依赖注入歧义（防止与默认的 reactiveRedisTemplate<Object, Object> 冲突导致启动报错）
+    // 2. 保证 Redis 的 Key/Value 均使用 UTF-8 字符串格式序列化，避免查询黑名单时出现乱码匹配失败
     @Qualifier("reactiveStringRedisTemplate")
     private val redisTemplate: ReactiveRedisTemplate<String, String>,
     private val jwtAuthProperties: JwtAuthProperties
@@ -64,7 +67,7 @@ class JwtAuthFilter(
         }
 
         // 3. 验证 Token
-        if (!jwtUtil.validateToken(token)) {
+        if (!jwtUtil.validateAccessToken(token)) {
             log.warn("Invalid or expired token for path: {}", path)
             return unauthorized(exchange, "Token 无效或已过期")
         }

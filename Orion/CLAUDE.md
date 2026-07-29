@@ -147,6 +147,7 @@ cn.esuny.orion/
 
 - Access Token: 15 分钟，用于 API 认证
 - Refresh Token: 7 天，存储在 Redis 中，用于获取新的 Access Token
+- JWT payload 使用 `tokenType` 区分 `access` 和 `refresh`；Gateway 仅接受 `access`，刷新/登出仅接受 `refresh`
 - 密钥和有效期配置在 `application.yaml` 的 `jwt.*` 属性
 
 ## 外部依赖

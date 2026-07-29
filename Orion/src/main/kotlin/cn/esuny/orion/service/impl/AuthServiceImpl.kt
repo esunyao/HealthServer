@@ -116,7 +116,7 @@ class AuthServiceImpl(
 
     override fun refresh(request: RefreshRequest): LoginResponse {
         // 校验 refreshToken 有效性
-        if (!jwtUtil.validateToken(request.refreshToken)) {
+        if (!jwtUtil.validateToken(request.refreshToken, JwtUtil.REFRESH_TOKEN_TYPE)) {
             throw BusinessException(401, "refreshToken 无效或已过期", org.springframework.http.HttpStatus.UNAUTHORIZED)
         }
 
@@ -145,6 +145,10 @@ class AuthServiceImpl(
     }
 
     override fun logout(refreshToken: String) {
+        if (!jwtUtil.validateToken(refreshToken, JwtUtil.REFRESH_TOKEN_TYPE)) {
+            throw BusinessException(401, "refreshToken 无效或已过期", org.springframework.http.HttpStatus.UNAUTHORIZED)
+        }
+
         try {
             val userId = jwtUtil.getUserId(refreshToken)
             val redisKey = "$REFRESH_TOKEN_PREFIX$userId"
@@ -152,6 +156,7 @@ class AuthServiceImpl(
             log.info("用户登出成功: userId={}", userId)
         } catch (e: Exception) {
             log.warn("登出时解析 refreshToken 失败: {}", e.message)
+            throw BusinessException(401, "refreshToken 无效或已过期", org.springframework.http.HttpStatus.UNAUTHORIZED)
         }
     }
 }
