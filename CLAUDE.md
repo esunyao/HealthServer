@@ -54,6 +54,9 @@ HealthServer/
 ## 常用命令
 
 ```bash
+# 设置 Java 21 环境（必须，Gradle toolchain 需要）
+export JAVA_HOME="D:/Users/Esuny/.jdks/azul-21.0.4"
+
 # 构建所有模块
 ./gradlew build
 

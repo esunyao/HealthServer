@@ -13,6 +13,8 @@ Gateway 是 HealthServer 微服务架构的 **API 网关**（端口 8080），�
 | Spring Cloud Gateway | WebFlux 版本（`spring-cloud-starter-gateway-server-webflux`） |
 | Spring Boot | 4.1.0（WebFlux，响应式，非 Servlet） |
 | Jackson | 3.x（`tools.jackson`，Spring Boot 4 默认） |
+| JJWT | 0.12.6（JWT 验证） |
+| Redis | Spring Data Redis Reactive（Token 黑名单检查） |
 
 ## 常用命令
 
@@ -42,6 +44,8 @@ TraceIdFilter (生成/提取 X-Trace-Id)
 RequestLoggingFilter (记录请求日志)
     ↓
 RateLimitFilter (基于 IP 的令牌桶限流)
+    ↓
+JwtAuthFilter (JWT 认证 + 注入 X-User-Id)   ← 新增
     ↓
 路由匹配 → lb://Orion → 负载均衡 → 后端服务
     ↓
@@ -77,6 +81,13 @@ RateLimitFilter (基于 IP 的令牌桶限流)
    - 默认：20 请求/秒，突发容量 40
    - 返回 429 Too Many Requests
 
+4. **JwtAuthFilter**（+3）← **新增**
+   - JWT 认证过滤器，验证 Token 有效性
+   - 白名单路径（`/v1/auth/**`、`/actuator/**`、`/fallback`）无需认证
+   - 从 Token 解析 userId，注入到 `X-User-Id` header
+   - 检查 Redis 黑名单，已登出的 Token 被拒绝
+   - 返回 401 Unauthorized 如果 Token 无效/过期/已登出
+
 ## 包结构
 
 ```
@@ -84,18 +95,22 @@ cn.esuny.gateway/
 ├── config/
 │   ├── CorsConfig            # CORS 配置（允许所有来源，生产环境需限制）
 │   ├── JacksonConfig         # Jackson 3 配置（日期格式、时区 GMT+8）
+│   ├── JwtProperties         # JWT 密钥配置
 │   └── RateLimitProperties   # 限流参数（支持 @RefreshScope 热更新）
 ├── filter/
 │   ├── TraceIdFilter         # 链路追踪 ID 过滤器
 │   ├── RequestLoggingFilter  # 请求日志过滤器
-│   └── RateLimitFilter       # 限流过滤器
+│   ├── RateLimitFilter       # 限流过滤器
+│   └── JwtAuthFilter         # JWT 认证过滤器（新增）
 ├── handler/
 │   ├── GlobalExceptionHandler  # 全局异常处理 → 统一 ApiResponse JSON
 │   └── FallbackController    # 降级端点（/fallback → 503）
 ├── health/
 │   └── GatewayHealthIndicator  # 健康检查扩展（启动时间、运行时长）
-└── model/
-    └── ApiResponse           # 统一响应模型
+├── model/
+│   └── ApiResponse           # 统一响应模型
+└── security/
+    └── JwtUtil               # JWT 验证工具类（新增）
 ```
 
 ## 配置管理
@@ -126,3 +141,4 @@ cn.esuny.gateway/
 ## 外部依赖
 
 - **Nacos** — `192.168.3.101:8848`（配置组：GATEWAY_GROUP）
+- **Redis** — `192.168.3.101:6379`（与 Orion 相同实例，用于 Token 黑名单检查）
