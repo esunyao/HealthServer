@@ -14,7 +14,7 @@ data class UserProfileVO(
     // 使用String，防止精度丢失
     val profileId: String,
     val userId: String,
-    val age: Short?,
+    val age: Int?,
     val gender: Gender?,
     val heightCm: BigDecimal?,
     val weightKg: BigDecimal?,

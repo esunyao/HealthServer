@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import java.util.UUID
 
 /**
  * 用户信息控制器
@@ -33,7 +32,7 @@ class UserController(private val userService: UserService) {
      * GET /v1/users/self
      */
     @GetMapping("/self")
-    fun getSelf(@RequestHeader("X-User-Id") userId: UUID): ApiResponse<UserVO> {
+    fun getSelf(@RequestHeader("X-User-Id") userId: Long): ApiResponse<UserVO> {
         val user = userService.getSelf(userId)
         return ApiResponse.success(data = user)
     }
@@ -44,7 +43,7 @@ class UserController(private val userService: UserService) {
      * PUT /v1/users/self
      */
     @PutMapping("/self")
-    fun updateSelf(@RequestHeader("X-User-Id") userId: UUID, @RequestBody @Valid request: UserUpdateRequest): ApiResponse<UserVO> {
+    fun updateSelf(@RequestHeader("X-User-Id") userId: Long, @RequestBody @Valid request: UserUpdateRequest): ApiResponse<UserVO> {
         val user = userService.updateSelf(userId, request)
         return ApiResponse.success(data = user, message = "更新成功")
     }
@@ -55,7 +54,7 @@ class UserController(private val userService: UserService) {
      * PUT /v1/users/self/password
      */
     @PutMapping("/self/password")
-    fun changePassword(@RequestHeader("X-User-Id") userId: UUID, @RequestBody @Valid request: PasswordChangeRequest): ApiResponse<Unit> {
+    fun changePassword(@RequestHeader("X-User-Id") userId: Long, @RequestBody @Valid request: PasswordChangeRequest): ApiResponse<Unit> {
         userService.changePassword(userId, request)
         return ApiResponse.success(message = "密码修改成功")
     }
@@ -66,7 +65,7 @@ class UserController(private val userService: UserService) {
      * GET /v1/users/self/profile
      */
     @GetMapping("/self/profile")
-    fun getProfile(@RequestHeader("X-User-Id") userId: UUID): ApiResponse<UserProfileVO> {
+    fun getProfile(@RequestHeader("X-User-Id") userId: Long): ApiResponse<UserProfileVO> {
         val profile = userService.getProfile(userId)
         return ApiResponse.success(data = profile)
     }
@@ -77,7 +76,7 @@ class UserController(private val userService: UserService) {
      * PUT /v1/users/self/profile
      */
     @PutMapping("/self/profile")
-    fun updateProfile(@RequestHeader("X-User-Id") userId: UUID, @RequestBody @Valid request: UserProfileUpdateRequest): ApiResponse<UserProfileVO> {
+    fun updateProfile(@RequestHeader("X-User-Id") userId: Long, @RequestBody @Valid request: UserProfileUpdateRequest): ApiResponse<UserProfileVO> {
         val profile = userService.updateProfile(userId, request)
         return ApiResponse.success(data = profile, message = "画像更新成功")
     }

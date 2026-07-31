@@ -9,7 +9,7 @@ import java.math.BigDecimal
  * 更新用户画像请求体（全部字段可选，仅更新非 null 字段）
  */
 data class UserProfileUpdateRequest(
-    val age: Short? = null,
+    val age: Int? = null,
     val gender: Gender? = null,
     val heightCm: BigDecimal? = null,
     val weightKg: BigDecimal? = null,

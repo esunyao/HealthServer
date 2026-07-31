@@ -28,7 +28,7 @@ data class UserProfile(
     var userId: Long,
 
     /** 年龄，限制合理范围 10–120 */
-    val age: Short? = null,
+    val age: Int? = null,
 
     /** 性别：male / female / other */
     val gender: Gender? = null,

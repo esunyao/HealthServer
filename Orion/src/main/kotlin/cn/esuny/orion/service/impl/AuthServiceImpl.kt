@@ -17,9 +17,8 @@ import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
 import java.time.OffsetDateTime
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 /**
  * 认证业务实现
@@ -76,7 +75,7 @@ class AuthServiceImpl(
         }
         userProfileMapper.insert(profile)
 
-        log.info("用户注册成功: username={}, userId={}", request.username)//, userId)
+        log.info("用户注册成功: username={}", request.username)//, userId)
     }
 
     override fun login(request: LoginRequest): LoginResponse {
@@ -100,7 +99,11 @@ class AuthServiceImpl(
 
         // Refresh Token 存入 Redis
         val redisKey = "$REFRESH_TOKEN_PREFIX$userId"
-        redisTemplate.opsForValue().set(redisKey, refreshToken, jwtUtil.getRefreshTokenExpirationSeconds(), TimeUnit.SECONDS)
+        redisTemplate.opsForValue().set(
+            redisKey,
+            refreshToken,
+            Duration.ofSeconds(jwtUtil.getRefreshTokenExpirationSeconds())
+        )
 
         // 更新最后登录时间
         userMapper.updateById(user.copy(lastLoginAt = OffsetDateTime.now()))
@@ -135,7 +138,7 @@ class AuthServiceImpl(
         val newRefreshToken = jwtUtil.generateRefreshToken(userId, username)
 
         // 替换 Redis 中的 refreshToken
-        redisTemplate.opsForValue().set(redisKey, newRefreshToken, jwtUtil.getRefreshTokenExpirationSeconds(), TimeUnit.SECONDS)
+        redisTemplate.opsForValue().set(redisKey, newRefreshToken, Duration.ofSeconds(jwtUtil.getRefreshTokenExpirationSeconds()))
 
         return LoginResponse(
             accessToken = newAccessToken,

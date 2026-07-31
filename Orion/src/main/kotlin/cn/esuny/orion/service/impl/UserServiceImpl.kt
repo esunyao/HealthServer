@@ -14,7 +14,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.stereotype.Service
 import java.time.OffsetDateTime
-import java.util.UUID
 
 /**
  * 用户信息业务实现
@@ -28,13 +27,13 @@ class UserServiceImpl(
     private val log = LoggerFactory.getLogger(UserServiceImpl::class.java)
     private val passwordEncoder = BCryptPasswordEncoder()
 
-    override fun getSelf(userId: UUID): UserVO {
+    override fun getSelf(userId: Long): UserVO {
         val user = userMapper.selectById(userId)
             ?: throw BusinessException(404, "用户不存在", org.springframework.http.HttpStatus.NOT_FOUND)
         return user.toVO()
     }
 
-    override fun updateSelf(userId: UUID, request: UserUpdateRequest): UserVO {
+    override fun updateSelf(userId: Long, request: UserUpdateRequest): UserVO {
         val user = userMapper.selectById(userId)
             ?: throw BusinessException(404, "用户不存在", org.springframework.http.HttpStatus.NOT_FOUND)
 
@@ -47,7 +46,7 @@ class UserServiceImpl(
         return updated.toVO()
     }
 
-    override fun changePassword(userId: UUID, request: PasswordChangeRequest) {
+    override fun changePassword(userId: Long, request: PasswordChangeRequest) {
         val user = userMapper.selectById(userId)
             ?: throw BusinessException(404, "用户不存在", org.springframework.http.HttpStatus.NOT_FOUND)
 
@@ -63,13 +62,13 @@ class UserServiceImpl(
         log.info("用户修改密码成功: userId={}", userId)
     }
 
-    override fun getProfile(userId: UUID): UserProfileVO {
+    override fun getProfile(userId: Long): UserProfileVO {
         val profile = userProfileMapper.selectByUserId(userId)
             ?: throw BusinessException(404, "用户画像不存在", org.springframework.http.HttpStatus.NOT_FOUND)
         return profile.toVO()
     }
 
-    override fun updateProfile(userId: UUID, request: UserProfileUpdateRequest): UserProfileVO {
+    override fun updateProfile(userId: Long, request: UserProfileUpdateRequest): UserProfileVO {
         val profile = userProfileMapper.selectByUserId(userId)
             ?: throw BusinessException(404, "用户画像不存在", org.springframework.http.HttpStatus.NOT_FOUND)
 
