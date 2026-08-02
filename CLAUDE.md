@@ -47,7 +47,12 @@ HealthServer/
 │       ├── service/                # 业务接口与实现
 │       └── util/                   # JWT 工具
 │
-├── diet-service/                   # 饮食服务（未实现）
+├── DietServer/                     # 饮食管理服务（端口 8082，待实现）
+│   ├── CLAUDE.md                   # DietServer 模块详细指引
+│   ├── build.gradle
+│   └── src/main/kotlin/cn/esuny/dietserver/
+│       └── DietServerApplication.kt  # Spring Boot 启动类（基础骨架）
+│
 └── health-service/                 # 健康服务（未实现）
 ```
 
@@ -87,14 +92,17 @@ export JAVA_HOME="D:/Users/Esuny/.jdks/azul-21.0.4"
 
 每个子模块的 `build.gradle` 声明自己的 Kotlin/Spring Boot 插件和模块专属依赖。
 
-## Gateway → Orion 路由
+## Gateway → 后端服务路由
 
-Gateway（WebFlux）路由到 Orion 服务，使用 `lb://` 负载均衡协议：
+Gateway（WebFlux）路由到后端服务，使用 `lb://` 负载均衡协议：
 
-- `/v1/auth/**` → `lb://Orion` （认证端点）
-- `/v1/users/**` → `lb://Orion` （用户管理端点）
+| 路径模式 | 目标服务 | 说明 |
+|---|---|---|
+| `/v1/auth/**` | `lb://Orion` | 认证端点（注册/登录/刷新/登出） |
+| `/v1/users/**` | `lb://Orion` | 用户管理端点（查询/修改信息） |
+| `/v1/diet/**` | `lb://DietServer` | 饮食管理端点（规划中） |
 
-注意：Gateway 和 Orion 都使用 Jackson 3（`tools.jackson`），不是 Jackson 2（`com.fasterxml.jackson`）。
+注意：Gateway、Orion 和 DietServer 都使用 Jackson 3（`tools.jackson`），不是 Jackson 2（`com.fasterxml.jackson`）。
 
 ## 关键约定
 

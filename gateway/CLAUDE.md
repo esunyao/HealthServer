@@ -60,6 +60,7 @@ JwtAuthFilter (JWT 认证 + 注入 X-User-Id)   ← 新增
 |---|---|---|
 | `/v1/auth/**` | `lb://Orion` | 认证端点（注册/登录/刷新/登出） |
 | `/v1/users/**` | `lb://Orion` | 用户管理端点（查询/修改信息） |
+| `/v1/diet/**` | `lb://DietServer` | 饮食管理端点（规划中） |
 
 路由使用 `lb://` 协议，通过 Nacos 服务发现解析服务实例地址。
 
