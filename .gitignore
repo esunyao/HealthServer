@@ -43,3 +43,5 @@ out/
 .claude
 .remember
 plans
+.mcp.json
+.mcp

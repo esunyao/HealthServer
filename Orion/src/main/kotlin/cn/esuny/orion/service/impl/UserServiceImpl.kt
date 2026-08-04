@@ -34,12 +34,15 @@ class UserServiceImpl(
     }
 
     override fun updateSelf(userId: Long, request: UserUpdateRequest): UserVO {
+        if (request.avatarUrl != null) {
+            throw BusinessException(400, "头像只能通过文件上传确认接口更新", org.springframework.http.HttpStatus.BAD_REQUEST)
+        }
+
         val user = userMapper.selectById(userId)
             ?: throw BusinessException(404, "用户不存在", org.springframework.http.HttpStatus.NOT_FOUND)
 
         val updated = user.copy(
             nickname = request.nickname ?: user.nickname,
-            avatarUrl = request.avatarUrl ?: user.avatarUrl,
             updatedAt = OffsetDateTime.now()
         )
         userMapper.updateById(updated)

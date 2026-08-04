@@ -1,0 +1,40 @@
+spring:
+  config:
+    import: "optional:nacos:Orion_Application.yaml?group=ORION_GROUP&refreshEnabled=true"
+  cloud:
+    nacos:
+      config:
+        import-check:
+          enabled: false
+      discovery:
+        enabled: false
+  datasource:
+    url: jdbc:postgresql://localhost:5432/test
+    username: test
+    password: test
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  task:
+    scheduling:
+      enabled: false
+
+jwt:
+  secret: test-secret-key-for-unit-tests-only-32-bytes!!!
+  access-token-expiration: 900000
+  refresh-token-expiration: 604800000
+
+oss:
+  endpoint: http://localhost:9000
+  access-key: test-key
+  secret-key: test-secret
+  bucket: test-bucket
+  region: us-east-1
+
+logging:
+  level:
+    cn.esuny.orion: WARN
