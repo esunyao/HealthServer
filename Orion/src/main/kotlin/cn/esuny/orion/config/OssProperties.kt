@@ -42,6 +42,12 @@ data class CleanupProperties(
     val fixedDelay: Long = 60_000,
     /** 单次领取的清理任务数量 */
     val batchSize: Int = 100,
+    val orphanScanBatchSize: Int = 1000,
+    val orphanProtectionHours: Long = 24,
+    val maxAttempts: Int = 8,
+    val processingTimeoutMinutes: Long = 30,
     /** 正式区孤儿对象对账表达式 */
     val orphanScanCron: String = "0 30 3 * * *"
 )
+
+

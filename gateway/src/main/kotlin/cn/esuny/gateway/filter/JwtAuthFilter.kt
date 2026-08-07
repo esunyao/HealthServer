@@ -1,5 +1,6 @@
 package cn.esuny.gateway.filter
 
+import cn.esuny.gateway.config.FilterOrder
 import cn.esuny.gateway.config.JwtAuthProperties
 import cn.esuny.gateway.model.ApiResponse
 import cn.esuny.gateway.security.JwtUtil
@@ -8,6 +9,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.core.Ordered
 import org.springframework.data.redis.core.ReactiveRedisTemplate
+import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
@@ -48,10 +50,16 @@ class JwtAuthFilter(
         private const val BLACKLIST_PREFIX = "token_blacklist:"
     }
 
-    override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE + 3
+    override fun getOrder(): Int = FilterOrder.JWT_AUTH
 
     override fun filter(exchange: ServerWebExchange, chain: WebFilterChain): Mono<Void> {
         val path = exchange.request.path.value()
+
+        // 0. 预检请求放行：浏览器 CORS 预检不带 token，且不含任何业务操作
+        if (exchange.request.method == HttpMethod.OPTIONS) {
+            log.debug("Preflight request, skipping auth: {}", path)
+            return chain.filter(exchange)
+        }
 
         // 1. 白名单检查
         if (isWhitelistPath(path)) {

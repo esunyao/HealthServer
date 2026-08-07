@@ -1,5 +1,6 @@
 package cn.esuny.gateway.filter
 
+import cn.esuny.gateway.config.FilterOrder
 import org.slf4j.MDC
 import org.springframework.core.Ordered
 import org.springframework.stereotype.Component
@@ -24,7 +25,7 @@ class TraceIdFilter : WebFilter, Ordered {
         const val MDC_TRACE_ID_KEY = "traceId"
     }
 
-    override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE // 最高优先级
+    override fun getOrder(): Int = FilterOrder.TRACE_ID // 最高优先级
 
     override fun filter(exchange: ServerWebExchange, chain: WebFilterChain): Mono<Void> {
         val request = exchange.request

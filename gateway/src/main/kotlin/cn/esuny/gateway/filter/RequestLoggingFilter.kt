@@ -1,5 +1,6 @@
 package cn.esuny.gateway.filter
 
+import cn.esuny.gateway.config.FilterOrder
 import org.slf4j.LoggerFactory
 import org.springframework.core.Ordered
 import org.springframework.stereotype.Component
@@ -21,7 +22,7 @@ class RequestLoggingFilter : WebFilter, Ordered {
 
     private val log = LoggerFactory.getLogger(RequestLoggingFilter::class.java)
 
-    override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE + 1 // 在 TraceIdFilter 之后执行
+    override fun getOrder(): Int = FilterOrder.REQUEST_LOGGING
 
     override fun filter(exchange: ServerWebExchange, chain: WebFilterChain): Mono<Void> {
         val request = exchange.request

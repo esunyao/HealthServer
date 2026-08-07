@@ -8,7 +8,6 @@ import org.apache.ibatis.annotations.Select
 
 @Mapper
 interface UserMapper : BaseMapper<User> {
-
     @Select("SELECT * FROM \"User\".users WHERE username = #{username}")
     fun selectByUsername(username: String): User?
 
@@ -18,6 +17,7 @@ interface UserMapper : BaseMapper<User> {
     @Select("SELECT * FROM \"User\".users WHERE user_id = #{userId} FOR UPDATE")
     fun selectByIdForUpdate(@Param("userId") userId: Long): User?
 
-    @Select("SELECT avatar_url FROM \"User\".users WHERE avatar_url IS NOT NULL AND avatar_url <> ''")
-    fun selectAvatarObjectKeys(): List<String>
+    @Select("<script>SELECT avatar_url FROM \"User\".users " +
+            "WHERE avatar_url IN <foreach collection='keys' item='key' open='(' separator=',' close=')'>#{key}</foreach></script>")
+    fun selectReferencedAvatarKeys(@Param("keys") keys: Collection<String>): List<String>
 }

@@ -134,16 +134,24 @@ class FileServiceTest {
     }
 
     @Test
-    fun `confirmAvatarUpload should reject invalid object key prefix`() {
+    fun `confirmAvatarUpload should reject final and foreign object key prefixes`() {
         // Given
         val userId = 123L
-        val invalidObjectKey = "other/456/file.jpg"
+        val invalidObjectKeys = listOf(
+            "avatars/123/file.jpg",
+            "avatar-staging/456/file.jpg",
+            "other/456/file.jpg"
+        )
 
-        // When & Then
-        val exception = assertThrows<BusinessException> {
-            fileService.confirmAvatarUpload(userId, invalidObjectKey)
+        invalidObjectKeys.forEach { invalidObjectKey ->
+            // When & Then
+            val exception = assertThrows<BusinessException> {
+                fileService.confirmAvatarUpload(userId, invalidObjectKey)
+            }
+            assertEquals(403, exception.code)
         }
-        assertEquals(403, exception.code)
+
+        verify(exactly = 0) { s3Client.headObject(any<HeadObjectRequest>()) }
     }
 
     @Test

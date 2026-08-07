@@ -26,26 +26,45 @@ class FileCleanupTaskServiceImpl(
     private val log = LoggerFactory.getLogger(FileCleanupTaskServiceImpl::class.java)
 
     /** 提交旧头像清理任务 */
-    override fun enqueueOldAvatar(bucket: String, objectKey: String) = 
+    override fun enqueueOldAvatar(bucket: String, objectKey: String) =
         enqueue(bucket, objectKey, FileCleanupTask.TYPE_OLD_AVATAR)
 
     /** 提交暂存区源文件清理任务 */
-    override fun enqueueStagingSource(bucket: String, objectKey: String) = 
+    override fun enqueueStagingSource(bucket: String, objectKey: String) =
         enqueue(bucket, objectKey, FileCleanupTask.TYPE_STAGING_SOURCE)
 
     /** 提交对账扫描出的孤儿头像清理任务 */
-    override fun enqueueOrphanAvatar(bucket: String, objectKey: String) = 
+    override fun enqueueOrphanAvatar(bucket: String, objectKey: String) =
         enqueue(bucket, objectKey, FileCleanupTask.TYPE_ORPHAN_AVATAR)
+
+    /**
+     * 批量提交对账扫描出的孤儿头像清理任务。
+     * 将解析出的多个孤儿文件 Key 批量映射为带雪花算法 ID 的任务实体，并调用批量 SQL 幂等写入数据库。
+     */
+    override fun enqueueOrphanAvatars(bucket: String, objectKeys: Collection<String>) {
+        // 1. 空集合直接返回，避免无意义的数据库交互
+        if (objectKeys.isEmpty()) return
+
+        // 2. 构造对象列表并执行批量幂等入队 (ON CONFLICT DO NOTHING)
+        fileCleanupTaskMapper.enqueueIfAbsentBatch(
+            objectKeys.map {
+                FileCleanupTask(
+                    taskId = IdWorker.getId(), // 生成分布式雪花算法唯一 ID
+                    bucket = bucket, objectKey = it, taskType = FileCleanupTask.TYPE_ORPHAN_AVATAR
+                )
+            })
+    }
 
     /**
      * 定时消费待处理的清理任务。
      * 上一次处理完后间隔 fixed-delay 毫秒（默认 60 秒）再次拉取执行。
      */
-    @Scheduled(fixedDelayString = "\${oss.cleanup.fixed-delay:60000}")
+    @Scheduled(fixedDelayString = "\${oss.cleanup.fixed-delay:60000}", scheduler = "cleanupConsumerScheduler")
     override fun processPendingTasks() {
+        fileCleanupTaskMapper.requeueStaleProcessing(ossProperties.cleanup.processingTimeoutMinutes)
         // 1. 从数据库竞争抢占并锁定指定批次数量（batchSize）的 pending 状态任务
         val tasks = fileCleanupTaskMapper.claimPending(ossProperties.cleanup.batchSize)
-        
+
         tasks.forEach { task ->
             try {
                 // 2. 调用 S3/RustFS API 物理删除对象文件
@@ -57,12 +76,13 @@ class FileCleanupTaskServiceImpl(
             } catch (exception: Exception) {
                 // 4. 删除失败，使用指数退避算法计算下一次重试时间
                 val nextAttemptAt = OffsetDateTime.now().plusMinutes(backoffMinutes(task.attempts))
-                
+
                 // 5. 重新调度任务：恢复 status 为 pending，增加尝试次数，记录错误日志
                 fileCleanupTaskMapper.reschedule(
                     requireNotNull(task.taskId),
                     nextAttemptAt,
-                    exception.message?.take(1000) ?: exception.javaClass.simpleName
+                    exception.message?.take(1000) ?: exception.javaClass.simpleName,
+                    ossProperties.cleanup.maxAttempts
                 )
                 log.warn("删除对象失败，已安排重试: taskId={}, objectKey={}", task.taskId, task.objectKey, exception)
             }
@@ -76,9 +96,7 @@ class FileCleanupTaskServiceImpl(
         fileCleanupTaskMapper.enqueueIfAbsent(
             FileCleanupTask(
                 taskId = IdWorker.getId(), // 使用 MyBatis-Plus 雪花算法生成分布式唯一 ID
-                bucket = bucket,
-                objectKey = objectKey,
-                taskType = taskType
+                bucket = bucket, objectKey = objectKey, taskType = taskType
             )
         )
     }
@@ -89,3 +107,11 @@ class FileCleanupTaskServiceImpl(
      */
     private fun backoffMinutes(attempts: Int): Long = 1L shl attempts.coerceIn(0, 8)
 }
+
+
+
+
+
+
+
+

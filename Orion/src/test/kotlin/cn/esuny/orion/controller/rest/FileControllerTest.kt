@@ -5,11 +5,11 @@ import cn.esuny.orion.model.dto.file.PresignedUrlResponse
 import cn.esuny.orion.model.dto.file.AvatarConfirmResponse
 import cn.esuny.orion.service.FileService
 import tools.jackson.databind.ObjectMapper
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.ArgumentMatchers.anyString
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -37,8 +37,8 @@ class FileControllerTest {
         // Given
         val request = AvatarPresignRequest(fileName = "avatar.jpg", contentType = "image/jpeg")
         val response = PresignedUrlResponse(
-            uploadUrl = "http://localhost:9000/bucket/avatars/123/test.jpg?X-Amz-Algorithm=...",
-            objectKey = "avatars/123/test.jpg",
+            uploadUrl = "http://localhost:9000/bucket/avatar-staging/123/test.jpg?X-Amz-Algorithm=...",
+            objectKey = "avatar-staging/123/test.jpg",
             expiresIn = 300
         )
 
@@ -58,9 +58,9 @@ class FileControllerTest {
     }
 
     @Test
-    fun `confirm avatar upload should return avatar URL`() {
+    fun `confirm avatar upload should pass decoded staging key to service`() {
         // Given
-        val objectKey = "avatars/123/test.jpg"
+        val objectKey = "avatar-staging/123/test.jpg"
         val response = AvatarConfirmResponse(avatarUrl = "http://localhost:9000/bucket/$objectKey?signed")
 
         given(fileService.confirmAvatarUpload(anyLong(), anyString())).willReturn(response)
@@ -75,6 +75,27 @@ class FileControllerTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.code").value(200))
             .andExpect(jsonPath("$.data.avatarUrl").exists())
+
+        verify(fileService).confirmAvatarUpload(testUserId, objectKey)
+    }
+
+    @Test
+    fun `confirm avatar upload should reject non string or empty bodies`() {
+        listOf(
+            "null",
+            "\"\"",
+            "{\"objectKey\":\"avatar-staging/123/test.jpg\"}",
+            "not-json"
+        ).forEach { body ->
+            mockMvc.perform(
+                post("/v1/files/avatar/confirm")
+                    .header("X-User-Id", testUserId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(body)
+            )
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value(400))
+        }
     }
 
     @Test

@@ -1,11 +1,13 @@
 package cn.esuny.orion.controller.rest
 
+import cn.esuny.orion.handler.BusinessException
 import cn.esuny.orion.model.dto.file.AvatarConfirmResponse
 import cn.esuny.orion.model.dto.file.AvatarPresignRequest
 import cn.esuny.orion.model.dto.file.PresignedUrlResponse
 import cn.esuny.orion.model.result.ApiResponse
 import cn.esuny.orion.service.FileService
 import jakarta.validation.Valid
+import tools.jackson.databind.JsonNode
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -45,8 +47,14 @@ class FileController(private val fileService: FileService) {
     @PostMapping("/avatar/confirm")
     fun confirmAvatarUpload(
         @RequestHeader("X-User-Id") userId: Long,
-        @RequestBody objectKey: String
+        @RequestBody body: JsonNode?
     ): ApiResponse<AvatarConfirmResponse> {
+        val objectKey = body
+            ?.takeIf { it.isTextual }
+            ?.textValue()
+            ?.takeIf { it.isNotBlank() }
+            ?: throw BusinessException(400, "objectKey 必须是非空 JSON 字符串")
+
         val response = fileService.confirmAvatarUpload(userId, objectKey)
         return ApiResponse.success(data = response, message = "头像上传确认成功")
     }

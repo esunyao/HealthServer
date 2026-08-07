@@ -1,10 +1,12 @@
 package cn.esuny.gateway.filter
 
+import cn.esuny.gateway.config.FilterOrder
 import cn.esuny.gateway.config.RateLimitProperties
 import cn.esuny.gateway.model.ApiResponse
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.core.Ordered
+import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.scheduling.annotation.Scheduled
@@ -39,9 +41,14 @@ class RateLimitFilter(
 
     data class TokenBucket(var tokens: Double, var lastRefillTime: Long)
 
-    override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE + 2 // 在日志过滤器之后执行
+    override fun getOrder(): Int = FilterOrder.RATE_LIMIT
 
     override fun filter(exchange: ServerWebExchange, chain: WebFilterChain): Mono<Void> {
+        // 预检请求不消耗限流额度
+        if (exchange.request.method == HttpMethod.OPTIONS) {
+            return chain.filter(exchange)
+        }
+
         val clientIp = getClientIp(exchange)
 
         return if (allowRequest(clientIp)) {

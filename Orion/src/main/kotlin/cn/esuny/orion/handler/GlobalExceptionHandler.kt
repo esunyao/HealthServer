@@ -4,6 +4,7 @@ import cn.esuny.orion.model.result.ApiResponse
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -26,6 +27,15 @@ class GlobalExceptionHandler {
         val message = e.bindingResult.fieldErrors.joinToString("; ") { "${it.field}: ${it.defaultMessage}" }
         log.warn("400 Validation Failed: {}", message)
         return ResponseEntity.badRequest().body(ApiResponse.error(400, message))
+    }
+
+    /**
+     * 处理无法解析的 JSON 请求体，避免错误请求被包装成 500。
+     */
+    @ExceptionHandler(HttpMessageNotReadableException::class)
+    fun handleUnreadableMessage(e: HttpMessageNotReadableException): ResponseEntity<ApiResponse<Nothing>> {
+        log.warn("400 Malformed Request Body: {}", e.message)
+        return ResponseEntity.badRequest().body(ApiResponse.error(400, "请求体格式无效"))
     }
 
     /**
