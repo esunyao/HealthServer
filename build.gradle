@@ -45,6 +45,8 @@ subprojects {
         implementation 'io.projectreactor.kotlin:reactor-kotlin-extensions'
         implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-reactor'
 
+        implementation 'me.paulschwarz:springboot4-dotenv:5.1.0'
+
         testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
         testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

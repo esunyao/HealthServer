@@ -1,0 +1,120 @@
+# ============================================================================
+# Gateway 公共配置
+# ----------------------------------------------------------------------------
+# 本文件可安全提交至公开仓库：不含任何真实密钥 / 凭据 / 机器专属信息。
+# 所有敏感项通过环境变量注入，未设置时为空字符串（服务会因缺少凭据而拒绝工作，
+# 这正是期望行为 —— 防止"开箱即用"时静默使用已知弱配置）。
+#
+# 环境变量速查表（可在 .env / 部署平台 / 运行配置中设置）：
+#   SERVER_PORT        网关监听端口
+#   NACOS_SERVER_ADDR  Nacos 地址           默认 192.168.3.101:8848（本机调试）
+#   NACOS_USERNAME     Nacos 用户名         无默认，必填
+#   NACOS_PASSWORD     Nacos 密码           无默认，必填
+#   REDIS_HOST         Redis 地址           默认 192.168.3.101
+#   REDIS_PORT         Redis 端口           默认 6379
+#   REDIS_PASSWORD     Redis 密码           无默认（按需）
+#   JWT_SECRET         JWT 共享密钥         无默认，必填（须与 Orion 保持一致）
+#
+# 本地调试：在模块目录放置 .env（模板见 .env.example，已被 gitignore），
+# spring-dotenv 自动注入，无需设置环境变量或 profile。
+# ============================================================================
+
+server:
+  port: ${SERVER_PORT:8091}
+
+spring:
+  application:
+    name: GateWay
+
+  config:
+    import:
+      - nacos:GateWay_Application.yaml?group=GATEWAY_GROUP&refreshEnabled=true
+
+  # ----------------------------------------------------------
+  # Nacos 服务发现配置（Spring Cloud Alibaba 原生）
+  # ----------------------------------------------------------
+  cloud:
+    nacos:
+      serverAddr: ${NACOS_SERVER_ADDR:}
+      username: ${NACOS_USERNAME:}
+      password: ${NACOS_PASSWORD:}
+      discovery:
+        enabled: true
+        group: 'HEALTH_GROUP'
+
+    # ----------------------------------------------------------
+    # Spring Cloud Gateway (WebFlux) 路由配置
+    # ----------------------------------------------------------
+    gateway:
+      routes:
+        # 文件管理路由 → Orion
+        - id: file_service_route
+          uri: lb://Orion
+          predicates:
+            - name: Path
+              args:
+                pattern: /v1/files/**
+          filters:
+            - AddRequestHeader=X-Gateway-Source, HealthServer-Gateway
+
+  # ----------------------------------------------------------
+  # Redis 配置（用于检查 Token 黑名单）
+  # ----------------------------------------------------------
+  data:
+    redis:
+      host: ${REDIS_HOST:192.168.3.101}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000ms
+
+# ----------------------------------------------------------
+# JWT 配置（与 Orion 共享同一密钥，通过环境变量注入）
+# ----------------------------------------------------------
+jwt:
+  secret: ${JWT_SECRET:}
+
+# ----------------------------------------------------------
+# Actuator 监控端点配置
+# ----------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# ----------------------------------------------------------
+# 网关自定义配置 — 限流参数
+# ----------------------------------------------------------
+gateway:
+  rate-limit:
+    requests-per-second: 20
+    burst-capacity: 40
+
+  # ----------------------------------------------------------
+  # JWT 认证白名单配置（支持 Nacos 动态刷新）
+  # ----------------------------------------------------------
+  jwt-auth:
+    whitelist:
+      - /v1/auth/
+      - /actuator/
+      - /fallback
+
+  # ----------------------------------------------------------
+  # CORS 跨域配置（支持 Nacos 动态刷新）
+  # ----------------------------------------------------------
+  cors:
+    allowed-origins:
+      # - "*"   # 生产前务必收紧为具体来源
+
+# ----------------------------------------------------------
+# 日志配置
+# ----------------------------------------------------------
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:-NO_TRACE}] %-5level %logger{36} - %msg%n"
+  level:
+    cn.esuny.gateway: INFO
+    org.springframework.cloud.gateway: INFO
