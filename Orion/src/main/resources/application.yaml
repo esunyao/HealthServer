@@ -18,6 +18,7 @@
 #   REDIS_PASSWORD    Redis 密码
 #   JWT_SECRET        JWT 共享密钥
 #   OSS_ENDPOINT      S3 兼容存储端点
+#   OSS_ADDR          预签名地址
 #   OSS_ACCESS_KEY    存储访问密钥
 #   OSS_SECRET_KEY    存储私密密钥
 #   OSS_BUCKET        存储桶名称
@@ -101,6 +102,7 @@ jwt:
 # ----------------------------------------------------------
 oss:
   endpoint: ${OSS_ENDPOINT:}
+  presignedAddr: ${OSS_ADDR:}
   access-key: ${OSS_ACCESS_KEY:}
   secret-key: ${OSS_SECRET_KEY:}
   bucket: ${OSS_BUCKET:}

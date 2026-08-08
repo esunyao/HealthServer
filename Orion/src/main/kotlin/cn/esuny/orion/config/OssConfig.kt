@@ -59,7 +59,7 @@ class OssConfig {
 
         return S3Presigner.builder()
             // 覆盖默认 Endpoint 地址
-            .endpointOverride(URI.create(properties.endpoint))
+            .endpointOverride(URI.create(properties.presignedAddr))
             .credentialsProvider(credentialsProvider)
             .region(Region.of(properties.region))
             .build()

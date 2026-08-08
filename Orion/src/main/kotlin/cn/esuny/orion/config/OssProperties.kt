@@ -20,6 +20,8 @@ data class OssProperties(
     val bucket: String,
     /** 区域（RustFS 默认 us-east-1） */
     val region: String = "us-east-1",
+    /** 预签名地址 **/
+    val presignedAddr: String,
     /** 预签名 URL 有效期 */
     val presignedExpiration: Duration = Duration.ofMinutes(5),
     /** 最大文件大小（字节） */
