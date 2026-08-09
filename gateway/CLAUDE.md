@@ -13,8 +13,7 @@ Gateway 是 HealthServer 微服务架构的 **API 网关**（端口 8080），�
 | Spring Cloud Gateway | WebFlux 版本（`spring-cloud-starter-gateway-server-webflux`） |
 | Spring Boot | 4.1.0（WebFlux，响应式，非 Servlet） |
 | Jackson | 3.x（`tools.jackson`，Spring Boot 4 默认） |
-| JJWT | 0.12.6（JWT 验证） |
-| Redis | Spring Data Redis Reactive（Token 黑名单检查） |
+| Spring Security OAuth2 JOSE | Authentik OIDC Discovery/JWKS 验证（RS256） |
 
 ## 常用命令
 
@@ -45,7 +44,7 @@ RequestLoggingFilter (记录请求日志)
     ↓
 RateLimitFilter (基于 IP 的令牌桶限流)
     ↓
-JwtAuthFilter (JWT 认证 + 注入 X-User-Id)   ← 新增
+AuthentikAuthFilter (OIDC 认证 + 注入 X-Auth-Subject)
     ↓
 路由匹配 → lb://Orion → 负载均衡 → 后端服务
     ↓
@@ -58,8 +57,8 @@ JwtAuthFilter (JWT 认证 + 注入 X-User-Id)   ← 新增
 
 | 路径模式 | 目标服务 | 说明 |
 |---|---|---|
-| `/v1/auth/**` | `lb://Orion` | 认证端点（注册/登录/刷新/登出） |
 | `/v1/users/**` | `lb://Orion` | 用户管理端点（查询/修改信息） |
+| `/v1/files/avatar/**` | `lb://Orion` | 用户头像文件端点 |
 | `/v1/diet/**` | `lb://DietServer` | 饮食管理端点（规划中） |
 
 路由使用 `lb://` 协议，通过 Nacos 服务发现解析服务实例地址。
@@ -82,12 +81,12 @@ JwtAuthFilter (JWT 认证 + 注入 X-User-Id)   ← 新增
    - 默认：20 请求/秒，突发容量 40
    - 返回 429 Too Many Requests
 
-4. **JwtAuthFilter**（+3）← **新增**
-   - JWT 认证过滤器，验证 Token 有效性
-   - 白名单路径（`/v1/auth/**`、`/actuator/**`、`/fallback`）无需认证
-   - 从 Token 解析 userId，注入到 `X-User-Id` header
-   - 检查 Redis 黑名单，已登出的 Token 被拒绝
-   - 返回 401 Unauthorized 如果 Token 无效/过期/已登出
+4. **AuthentikAuthFilter**（+4）
+   - 通过 Authentik OIDC Discovery/JWKS 验证 Access Token 的签名、issuer、时效和 audience
+   - 白名单路径（`/actuator/**`、`/fallback`）无需认证
+   - 仅在验签成功后注入 `X-Auth-Subject`（Authentik UUID）及可选的用户名、邮箱、显示名
+   - 移除客户端传入的身份头、`Authorization` 和伪造的 `X-Gateway-Source`
+   - 返回 401 Unauthorized 如果 Token 缺失、无效、过期或主体不是 UUID
 
 ## 包结构
 
@@ -96,13 +95,14 @@ cn.esuny.gateway/
 ├── config/
 │   ├── CorsConfig            # CORS 配置（允许所有来源，生产环境需限制）
 │   ├── JacksonConfig         # Jackson 3 配置（日期格式、时区 GMT+8）
-│   ├── JwtProperties         # JWT 密钥配置
+│   ├── AuthentikProperties   # Authentik issuer / audience 配置
+│   ├── AuthentikJwtDecoderConfig # 延迟初始化 Discovery/JWKS 解码器
 │   └── RateLimitProperties   # 限流参数（支持 @RefreshScope 热更新）
 ├── filter/
 │   ├── TraceIdFilter         # 链路追踪 ID 过滤器
 │   ├── RequestLoggingFilter  # 请求日志过滤器
 │   ├── RateLimitFilter       # 限流过滤器
-│   └── JwtAuthFilter         # JWT 认证过滤器（新增）
+│   └── AuthentikAuthFilter   # Authentik OIDC 认证过滤器
 ├── handler/
 │   ├── GlobalExceptionHandler  # 全局异常处理 → 统一 ApiResponse JSON
 │   └── FallbackController    # 降级端点（/fallback → 503）
@@ -111,7 +111,7 @@ cn.esuny.gateway/
 ├── model/
 │   └── ApiResponse           # 统一响应模型
 └── security/
-    └── JwtUtil               # JWT 验证工具类（新增）
+    └── AudienceValidator     # OIDC audience 验证器
 ```
 
 ## 配置管理
@@ -125,8 +125,8 @@ cn.esuny.gateway/
 
 ### 配置分类
 
-- **动态配置**（支持热更新）：限流参数（`gateway.rate-limit.*`）
-- **静态配置**（需重启）：CORS、日志等框架级配置
+- **动态配置**（支持热更新）：限流参数、OIDC 白名单
+- **静态配置**（需重启）：Authentik issuer/audience、CORS、日志等框架级配置
 
 ## 错误处理
 
@@ -142,4 +142,4 @@ cn.esuny.gateway/
 ## 外部依赖
 
 - **Nacos** — `192.168.3.101:8848`（配置组：GATEWAY_GROUP）
-- **Redis** — `192.168.3.101:6379`（与 Orion 相同实例，用于 Token 黑名单检查）
+- **Authentik** — OIDC Discovery 端点及其公开 JWKS；issuer/audience 通过环境变量配置

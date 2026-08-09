@@ -10,10 +10,8 @@
 #   NACOS_SERVER_ADDR  Nacos 地址           默认 192.168.3.101:8848（本机调试）
 #   NACOS_USERNAME     Nacos 用户名         无默认，必填
 #   NACOS_PASSWORD     Nacos 密码           无默认，必填
-#   REDIS_HOST         Redis 地址           默认 192.168.3.101
-#   REDIS_PORT         Redis 端口           默认 6379
-#   REDIS_PASSWORD     Redis 密码           无默认（按需）
-#   JWT_SECRET         JWT 共享密钥         无默认，必填（须与 Orion 保持一致）
+#   AUTHENTIK_ISSUER_URI  Authentik Discovery 的 issuer 字段，必填
+#   AUTHENTIK_AUDIENCES   本 OIDC 应用 Client ID；多个值用逗号分隔，必填
 #
 # 本地调试：在模块目录放置 .env（模板见 .env.example，已被 gitignore），
 # spring-dotenv 自动注入，无需设置环境变量或 profile。
@@ -54,25 +52,9 @@ spring:
               predicates:
                 - name: Path
                   args:
-                    pattern: /v1/auth/**, /v1/files/avatar/**, /v1/users/**
+                    pattern: /v1/files/avatar/**, /v1/users/**
               filters:
                 - AddRequestHeader=X-Gateway-Source, HealthServer-Gateway
-
-  # ----------------------------------------------------------
-  # Redis 配置（用于检查 Token 黑名单）
-  # ----------------------------------------------------------
-  data:
-    redis:
-      host: ${REDIS_HOST:192.168.3.101}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      timeout: 5000ms
-
-# ----------------------------------------------------------
-# JWT 配置（与 Orion 共享同一密钥，通过环境变量注入）
-# ----------------------------------------------------------
-jwt:
-  secret: ${JWT_SECRET:}
 
 # ----------------------------------------------------------
 # Actuator 监控端点配置
@@ -95,11 +77,15 @@ gateway:
     burst-capacity: 40
 
   # ----------------------------------------------------------
-  # JWT 认证白名单配置（支持 Nacos 动态刷新）
+  # Authentik OIDC 资源服务器配置。issuer 必须与 Discovery 中的 issuer 完全一致。
+  authentik:
+    issuer-uri: ${AUTHENTIK_ISSUER_URI:}
+    audiences: ${AUTHENTIK_AUDIENCES:}
+
+  # OIDC 认证白名单配置（支持 Nacos 动态刷新）
   # ----------------------------------------------------------
-  jwt-auth:
+  oidc-auth:
     whitelist:
-      - /v1/auth/
       - /actuator/
       - /fallback
 

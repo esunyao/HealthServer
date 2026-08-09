@@ -12,5 +12,5 @@ object FilterOrder {
     const val TRACE_ID        = Ordered.HIGHEST_PRECEDENCE + 1
     const val REQUEST_LOGGING = Ordered.HIGHEST_PRECEDENCE + 2
     const val RATE_LIMIT      = Ordered.HIGHEST_PRECEDENCE + 3
-    const val JWT_AUTH        = Ordered.HIGHEST_PRECEDENCE + 4
+    const val AUTHENTIK_AUTH  = Ordered.HIGHEST_PRECEDENCE + 4
 }

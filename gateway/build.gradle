@@ -9,13 +9,9 @@ dependencies {
     // Spring Cloud Gateway (WebFlux) — 路由、过滤器、负载均衡（响应式）
     implementation 'org.springframework.cloud:spring-cloud-starter-gateway-server-webflux'
 
-    // JWT — 验证 Access Token（只做解析验证，不签发）
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
-
-    // Redis — 检查 Token 黑名单（响应式版本，与 WebFlux 架构一致）
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
+    // OAuth2/OIDC Resource Server — 通过 Authentik 的 JWKS 验证 RS256 Access Token
+    // 不引入 spring-boot-starter-security，认证边界由本项目的 WebFilter 明确控制。
+    implementation 'org.springframework.security:spring-security-oauth2-jose'
 
     // Nacos 服务注册与发现 — Spring Cloud Alibaba 原生支持
     implementation 'com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-config'

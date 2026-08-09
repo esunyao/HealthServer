@@ -5,14 +5,14 @@ import org.springframework.cloud.context.config.annotation.RefreshScope
 import org.springframework.stereotype.Component
 
 /**
- * JWT 认证白名单配置属性
+ * OIDC 认证白名单配置属性。
  *
  * 支持 Nacos 动态刷新，修改配置后无需重启 Gateway。
  *
  * 配置示例：
  * ```yaml
  * gateway:
- *   jwt-auth:
+ *   oidc-auth:
  *     whitelist:
  *       - /v1/auth/
  *       - /actuator/
@@ -21,8 +21,8 @@ import org.springframework.stereotype.Component
  */
 @Component
 @RefreshScope
-@ConfigurationProperties(prefix = "gateway.jwt-auth")
-class JwtAuthProperties {
-    /** 白名单路径前缀列表，匹配的路径无需 JWT 认证 */
+@ConfigurationProperties(prefix = "gateway.oidc-auth")
+class OidcAuthProperties {
+    /** 白名单路径前缀列表，匹配的路径无需 OIDC Access Token */
     var whitelist: List<String> = mutableListOf()
 }
