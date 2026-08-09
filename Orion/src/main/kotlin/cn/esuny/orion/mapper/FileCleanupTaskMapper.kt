@@ -18,8 +18,8 @@ interface FileCleanupTaskMapper : BaseMapper<FileCleanupTask> {
      * 当表中已存在完全相同的待清理记录时自动忽略，防止重复入队。
      */
     @Insert(
-        "INSERT INTO \"User\".file_cleanup_tasks (task_id,bucket,object_key,task_type,status,attempts,next_attempt_at,created_at) VALUES " +
-        "(#{taskId},#{bucket},#{objectKey},#{taskType},#{status},#{attempts},#{nextAttemptAt},#{createdAt}) " +
+        "INSERT INTO orion.file_cleanup_tasks (task_id,owner_user_id,bucket,object_key,task_type,status,attempts,next_attempt_at,created_at) VALUES " +
+        "(#{taskId},#{ownerUserId,typeHandler=cn.esuny.orion.model.typehandler.PgUuidTypeHandler},#{bucket},#{objectKey},#{taskType},#{status},#{attempts},#{nextAttemptAt},#{createdAt}) " +
         "ON CONFLICT (bucket,object_key,task_type) DO NOTHING"
     )
     fun enqueueIfAbsent(task: FileCleanupTask): Int
@@ -29,8 +29,8 @@ interface FileCleanupTaskMapper : BaseMapper<FileCleanupTask> {
      * 使用 MyBatis `<script>` 和 `<foreach>` 标签拼接批量插入语句，同样具备 `ON CONFLICT DO NOTHING` 防重能力。
      */
     @Insert(
-        "<script>INSERT INTO \"User\".file_cleanup_tasks (task_id,bucket,object_key,task_type,status,attempts,next_attempt_at,created_at) VALUES " +
-        "<foreach collection='tasks' item='task' separator=','>(#{task.taskId},#{task.bucket},#{task.objectKey},#{task.taskType},#{task.status},#{task.attempts},#{task.nextAttemptAt},#{task.createdAt})</foreach> " +
+        "<script>INSERT INTO orion.file_cleanup_tasks (task_id,owner_user_id,bucket,object_key,task_type,status,attempts,next_attempt_at,created_at) VALUES " +
+        "<foreach collection='tasks' item='task' separator=','>(#{task.taskId},#{task.ownerUserId,typeHandler=cn.esuny.orion.model.typehandler.PgUuidTypeHandler},#{task.bucket},#{task.objectKey},#{task.taskType},#{task.status},#{task.attempts},#{task.nextAttemptAt},#{task.createdAt})</foreach> " +
         "ON CONFLICT (bucket,object_key,task_type) DO NOTHING</script>"
     )
     fun enqueueIfAbsentBatch(@Param("tasks") tasks: Collection<FileCleanupTask>): Int
@@ -46,11 +46,11 @@ interface FileCleanupTaskMapper : BaseMapper<FileCleanupTask> {
      */
     @Select(
         "WITH claimed AS (" +
-        "  SELECT task_id FROM \"User\".file_cleanup_tasks " +
+        "  SELECT task_id FROM orion.file_cleanup_tasks " +
         "  WHERE status='pending' AND next_attempt_at<=NOW() " +
         "  ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT #{limit}" +
         ") " +
-        "UPDATE \"User\".file_cleanup_tasks task " +
+        "UPDATE orion.file_cleanup_tasks task " +
         "SET status='processing', processing_started_at=NOW() " +
         "FROM claimed WHERE task.task_id=claimed.task_id " +
         "RETURNING task.*"
@@ -62,7 +62,7 @@ interface FileCleanupTaskMapper : BaseMapper<FileCleanupTask> {
      * 文件成功删除后调用：把状态改为 'completed'，清空处理开始时间与最近错误，记录完成时间。
      */
     @Update(
-        "UPDATE \"User\".file_cleanup_tasks " +
+        "UPDATE orion.file_cleanup_tasks " +
         "SET status='completed',completed_at=NOW(),processing_started_at=NULL,last_error=NULL " +
         "WHERE task_id=#{taskId}"
     )
@@ -77,7 +77,7 @@ interface FileCleanupTaskMapper : BaseMapper<FileCleanupTask> {
      * 3. 更新下一次允许尝试的时间 (`nextAttemptAt`) 和截断后的报错日志 (`lastError`)。
      */
     @Update(
-        "UPDATE \"User\".file_cleanup_tasks SET status=" +
+        "UPDATE orion.file_cleanup_tasks SET status=" +
         "CASE WHEN attempts+1>=#{maxAttempts} THEN 'failed' ELSE 'pending' END,attempts=attempts+1,processing_started_at=NULL,next_attempt_at=#{nextAttemptAt},last_error=#{lastError} " +
         "WHERE task_id=#{taskId}"
     )
@@ -95,10 +95,9 @@ interface FileCleanupTaskMapper : BaseMapper<FileCleanupTask> {
      * 作用：扫描处理开始时间 `processing_started_at` 已经超过指定超时时间（如 10 分钟）的任务，强行重置为 'pending' 状态，由其他健康节点接管重新处理。
      */
     @Update(
-        "UPDATE \"User\".file_cleanup_tasks " +
+        "UPDATE orion.file_cleanup_tasks " +
         "SET status='pending',processing_started_at=NULL " +
         "WHERE status='processing' AND processing_started_at < NOW() - (#{timeoutMinutes} * INTERVAL '1 minute')"
     )
     fun requeueStaleProcessing(@Param("timeoutMinutes") timeoutMinutes: Long): Int
 }
-

@@ -17,9 +17,6 @@ dependencies {
     // PostgreSQL JDBC 驱动（PgStringArrayTypeHandler 编译期需要 PGobject）
     implementation 'org.postgresql:postgresql'
 
-    // Redis — 缓存 / 会话 / 分布式锁
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-
     // Nacos 服务注册与发现 — Spring Cloud Alibaba 原生支持
     implementation 'com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-config'
     implementation 'com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-discovery'
@@ -29,17 +26,6 @@ dependencies {
 
     // 验证 — Bean Validation，配合实体校验
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-
-    // JWT — 令牌生成与解析
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
-
-    // Spring Security Crypto — 仅使用 BCrypt 密码加密，不引入完整安全过滤链
-    implementation 'org.springframework.security:spring-security-crypto'
-
-    // Jackson JSR310 — 支持 Java 8 时间类型序列化（Redis 配置需要）
-    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 
     // AWS S3 SDK（S3 兼容协议，支持 RustFS / MinIO / 阿里云 OSS）
     implementation 'software.amazon.awssdk:s3:2.31.6'

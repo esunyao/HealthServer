@@ -13,10 +13,6 @@
 #   NACOS_SERVER_ADDR Nacos 地址
 #   NACOS_USERNAME    Nacos 用户名
 #   NACOS_PASSWORD    Nacos 密码
-#   REDIS_HOST        Redis 地址
-#   REDIS_PORT        Redis 端口
-#   REDIS_PASSWORD    Redis 密码
-#   JWT_SECRET        JWT 共享密钥
 #   OSS_ENDPOINT      S3 兼容存储端点
 #   OSS_ADDR          预签名地址
 #   OSS_ACCESS_KEY    存储访问密钥
@@ -55,24 +51,7 @@ spring:
       connection-timeout: 20000  # 获取连接超时时间（20秒）
 
   flyway:
-    enabled: false   # 由 FlywayConfig.kt 手动管理，解决 "User" schema 大小写问题
-
-  # ----------------------------------------------------------
-  # Redis 配置
-  # ----------------------------------------------------------
-  data:
-    redis:
-      host: ${REDIS_HOST:}
-      port: ${REDIS_PORT:}
-      password: ${REDIS_PASSWORD:}
-      database: 0
-      timeout: 5000ms
-      lettuce:
-        pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
-          max-wait: 3000ms
+    enabled: false   # 由 FlywayConfig.kt 管理 orion Schema
 
   # ----------------------------------------------------------
   # Nacos 服务发现配置（Spring Cloud Alibaba 原生）
@@ -85,17 +64,6 @@ spring:
       discovery:
         enabled: true
         group: 'HEALTH_GROUP'
-
-# ----------------------------------------------------------
-# JWT 配置（密钥与 Gateway 共享，通过环境变量注入）
-# ----------------------------------------------------------
-jwt:
-  # 密钥（至少 256 位 / 32 字节），生产环境应从环境变量或 Nacos 注入
-  secret: ${JWT_SECRET:}
-  # Access Token 有效期：15 分钟（毫秒）
-  access-token-expiration: 900000
-  # Refresh Token 有效期：7 天（毫秒）
-  refresh-token-expiration: 604800000
 
 # ----------------------------------------------------------
 # OSS 对象存储配置（S3 兼容协议）

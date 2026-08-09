@@ -1,127 +1,83 @@
 package cn.esuny.orion.service.impl
 
 import cn.esuny.orion.handler.BusinessException
+import cn.esuny.orion.identity.AuthenticatedUser
 import cn.esuny.orion.mapper.UserMapper
 import cn.esuny.orion.mapper.UserProfileMapper
-import cn.esuny.orion.model.dto.user.PasswordChangeRequest
 import cn.esuny.orion.model.dto.user.UserProfileUpdateRequest
-import cn.esuny.orion.model.dto.user.UserUpdateRequest
+import cn.esuny.orion.model.entity.user.User
 import cn.esuny.orion.model.entity.user.UserProfile
 import cn.esuny.orion.model.vo.user.UserProfileVO
 import cn.esuny.orion.model.vo.user.UserVO
 import cn.esuny.orion.service.UserService
-import org.slf4j.LoggerFactory
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDate
 import java.time.OffsetDateTime
 
-/**
- * 用户信息业务实现
- */
 @Service
 class UserServiceImpl(
     private val userMapper: UserMapper,
     private val userProfileMapper: UserProfileMapper
 ) : UserService {
 
-    private val log = LoggerFactory.getLogger(UserServiceImpl::class.java)
-    private val passwordEncoder = BCryptPasswordEncoder()
-
-    override fun getSelf(userId: Long): UserVO {
-        val user = userMapper.selectById(userId)
-            ?: throw BusinessException(404, "用户不存在", org.springframework.http.HttpStatus.NOT_FOUND)
-        return user.toVO()
+    override fun getSelf(user: AuthenticatedUser): UserVO {
+        userMapper.touchLastSeen(user.userId, OffsetDateTime.now())
+        return requireUser(user.userId).toVO()
     }
 
-    override fun updateSelf(userId: Long, request: UserUpdateRequest): UserVO {
-        if (request.avatarUrl != null) {
-            throw BusinessException(400, "头像只能通过文件上传确认接口更新", org.springframework.http.HttpStatus.BAD_REQUEST)
-        }
+    override fun getProfile(user: AuthenticatedUser): UserProfileVO = requireProfile(user.userId).toVO()
 
-        val user = userMapper.selectById(userId)
-            ?: throw BusinessException(404, "用户不存在", org.springframework.http.HttpStatus.NOT_FOUND)
-
-        val updated = user.copy(
-            nickname = request.nickname ?: user.nickname,
-            updatedAt = OffsetDateTime.now()
-        )
-        userMapper.updateById(updated)
-        return updated.toVO()
-    }
-
-    override fun changePassword(userId: Long, request: PasswordChangeRequest) {
-        val user = userMapper.selectById(userId)
-            ?: throw BusinessException(404, "用户不存在", org.springframework.http.HttpStatus.NOT_FOUND)
-
-        if (!passwordEncoder.matches(request.oldPassword, user.passwordHash)) {
-            throw BusinessException(400, "旧密码不正确")
-        }
-
-        val updated = user.copy(
-            passwordHash = passwordEncoder.encode(request.newPassword)!!,
-            updatedAt = OffsetDateTime.now()
-        )
-        userMapper.updateById(updated)
-        log.info("用户修改密码成功: userId={}", userId)
-    }
-
-    override fun getProfile(userId: Long): UserProfileVO {
-        val profile = userProfileMapper.selectByUserId(userId)
-            ?: throw BusinessException(404, "用户画像不存在", org.springframework.http.HttpStatus.NOT_FOUND)
-        return profile.toVO()
-    }
-
-    override fun updateProfile(userId: Long, request: UserProfileUpdateRequest): UserProfileVO {
-        val profile = userProfileMapper.selectByUserId(userId)
-            ?: throw BusinessException(404, "用户画像不存在", org.springframework.http.HttpStatus.NOT_FOUND)
-
+    @Transactional
+    override fun updateProfile(user: AuthenticatedUser, request: UserProfileUpdateRequest): UserProfileVO {
+        val profile = requireProfile(user.userId)
+        val birthDate = request.birthDate ?: profile.birthDate
+        birthDate?.let(::validateBirthDate)
         val updated = profile.copy(
-            age = request.age ?: profile.age,
+            birthDate = birthDate,
             gender = request.gender ?: profile.gender,
             heightCm = request.heightCm ?: profile.heightCm,
-            weightKg = request.weightKg ?: profile.weightKg,
             activityLevel = request.activityLevel ?: profile.activityLevel,
-            healthGoal = request.healthGoal ?: profile.healthGoal,
-            allergies = request.allergies ?: profile.allergies,
-            dietaryRestrictions = request.dietaryRestrictions ?: profile.dietaryRestrictions,
-            medicalConditions = request.medicalConditions ?: profile.medicalConditions,
-            dailyWaterMl = request.dailyWaterMl ?: profile.dailyWaterMl,
-            preferredCuisine = request.preferredCuisine ?: profile.preferredCuisine,
-            updatedAt = OffsetDateTime.now()
+            dailyWaterTargetMl = request.dailyWaterTargetMl ?: profile.dailyWaterTargetMl,
+            profileCompletedAt = profile.profileCompletedAt ?: completedAt(birthDate, request.gender ?: profile.gender, request.heightCm ?: profile.heightCm, request.activityLevel ?: profile.activityLevel)
         )
         userProfileMapper.updateById(updated)
         return updated.toVO()
     }
 
-    // ==================== Entity → VO 转换 ====================
+    override fun deactivate(user: AuthenticatedUser) {
+        if (userMapper.deactivate(user.userId) == 0) {
+            throw BusinessException(409, "业务账户已注销", HttpStatus.CONFLICT)
+        }
+    }
 
-    private fun cn.esuny.orion.model.entity.user.User.toVO() = UserVO(
-        userId = userId.toString(),
-        username = username,
-        email = email,
-        nickname = nickname,
-        avatarUrl = avatarUrl,
-        status = status,
-        createdAt = createdAt,
-        updatedAt = updatedAt
+    private fun requireUser(userId: java.util.UUID): User = userMapper.selectById(userId)
+        ?: throw BusinessException(404, "用户不存在", HttpStatus.NOT_FOUND)
+
+    private fun requireProfile(userId: java.util.UUID): UserProfile = userProfileMapper.selectByUserId(userId)
+        ?: throw BusinessException(404, "用户档案不存在", HttpStatus.NOT_FOUND)
+
+    private fun validateBirthDate(birthDate: LocalDate) {
+        val years = java.time.Period.between(birthDate, LocalDate.now()).years
+        if (years !in 10..120) throw BusinessException(400, "出生日期对应年龄必须在 10 至 120 岁之间")
+    }
+
+    private fun completedAt(
+        birthDate: LocalDate?,
+        gender: cn.esuny.orion.model.enums.user.Gender?,
+        heightCm: java.math.BigDecimal?,
+        activityLevel: cn.esuny.orion.model.enums.user.ActivityLevel?
+    ): OffsetDateTime? = if (birthDate != null && gender != null && heightCm != null && activityLevel != null) OffsetDateTime.now() else null
+
+    private fun User.toVO() = UserVO(
+        userId, username, email, emailVerified, displayName,
+        if (avatarObjectKey == null) null else "/v1/files/avatar",
+        businessStatus, locale, timezone, lastSeenAt, createdAt, updatedAt
     )
 
     private fun UserProfile.toVO() = UserProfileVO(
-        profileId = profileId.toString(),
-        userId = userId.toString(),
-        age = age,
-        gender = gender,
-        heightCm = heightCm,
-        weightKg = weightKg,
-        bmi = bmi,
-        activityLevel = activityLevel,
-        healthGoal = healthGoal,
-        allergies = allergies,
-        dietaryRestrictions = dietaryRestrictions,
-        medicalConditions = medicalConditions,
-        dailyWaterMl = dailyWaterMl,
-        preferredCuisine = preferredCuisine,
-        createdAt = createdAt,
-        updatedAt = updatedAt
+        userId, birthDate, gender, heightCm, activityLevel, dailyWaterTargetMl,
+        profileCompletedAt, createdAt, updatedAt
     )
 }

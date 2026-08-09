@@ -66,6 +66,7 @@ class AuthentikAuthFilter(
                         jwt.stringClaim("name")?.let {
                             headers.set(HEADER_AUTH_DISPLAY_NAME, it)
                         }
+                        headers.set(HEADER_AUTH_EMAIL_VERIFIED, jwt.booleanClaim("email_verified").toString())
                     }
                     .build()
 
@@ -100,6 +101,12 @@ class AuthentikAuthFilter(
         ?.trim()
         ?.takeIf(String::isNotEmpty)
 
+    private fun Jwt.booleanClaim(name: String): Boolean = when (val value = claims[name]) {
+        is Boolean -> value
+        is String -> value.equals("true", ignoreCase = true)
+        else -> false
+    }
+
     private fun unauthorized(exchange: ServerWebExchange, message: String): Mono<Void> {
         val response = exchange.response
         response.statusCode = HttpStatus.UNAUTHORIZED
@@ -114,6 +121,7 @@ class AuthentikAuthFilter(
         const val HEADER_AUTH_USERNAME = "X-Auth-Username"
         const val HEADER_AUTH_EMAIL = "X-Auth-Email"
         const val HEADER_AUTH_DISPLAY_NAME = "X-Auth-Display-Name"
+        const val HEADER_AUTH_EMAIL_VERIFIED = "X-Auth-Email-Verified"
 
         val TRUSTED_HEADERS = setOf(
             "Authorization",
@@ -122,6 +130,7 @@ class AuthentikAuthFilter(
             HEADER_AUTH_USERNAME,
             HEADER_AUTH_EMAIL,
             HEADER_AUTH_DISPLAY_NAME,
+            HEADER_AUTH_EMAIL_VERIFIED,
             "X-Gateway-Source"
         )
     }

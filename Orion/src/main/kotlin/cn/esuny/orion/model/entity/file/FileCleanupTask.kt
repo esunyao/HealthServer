@@ -4,12 +4,14 @@ import com.baomidou.mybatisplus.annotation.IdType
 import com.baomidou.mybatisplus.annotation.TableId
 import com.baomidou.mybatisplus.annotation.TableName
 import java.time.OffsetDateTime
+import java.util.UUID
 
 /** 对象存储删除的可重试任务。 */
-@TableName("file_cleanup_tasks")
+@TableName("orion.file_cleanup_tasks")
 data class FileCleanupTask(
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.INPUT)
     val taskId: Long? = null,
+    val ownerUserId: UUID? = null,
     val bucket: String = "",
     val objectKey: String = "",
     val taskType: String = "",

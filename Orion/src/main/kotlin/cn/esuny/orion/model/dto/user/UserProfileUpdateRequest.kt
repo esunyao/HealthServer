@@ -2,22 +2,19 @@ package cn.esuny.orion.model.dto.user
 
 import cn.esuny.orion.model.enums.user.ActivityLevel
 import cn.esuny.orion.model.enums.user.Gender
-import cn.esuny.orion.model.enums.user.HealthGoal
+import jakarta.validation.constraints.DecimalMax
+import jakarta.validation.constraints.DecimalMin
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
 import java.math.BigDecimal
+import java.time.LocalDate
 
-/**
- * 更新用户画像请求体（全部字段可选，仅更新非 null 字段）
- */
 data class UserProfileUpdateRequest(
-    val age: Int? = null,
+    val birthDate: LocalDate? = null,
     val gender: Gender? = null,
+    @field:DecimalMin("50.0") @field:DecimalMax("300.0")
     val heightCm: BigDecimal? = null,
-    val weightKg: BigDecimal? = null,
     val activityLevel: ActivityLevel? = null,
-    val healthGoal: HealthGoal? = null,
-    val allergies: List<String>? = null,
-    val dietaryRestrictions: List<String>? = null,
-    val medicalConditions: List<String>? = null,
-    val dailyWaterMl: Int? = null,
-    val preferredCuisine: List<String>? = null
+    @field:Min(0) @field:Max(10000)
+    val dailyWaterTargetMl: Int? = null
 )

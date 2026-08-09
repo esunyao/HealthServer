@@ -6,5 +6,6 @@ package cn.esuny.orion.model.enums.user
 enum class Gender {
     male,
     female,
-    other
+    other,
+    unknown
 }

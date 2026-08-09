@@ -43,7 +43,7 @@ class FileServiceImpl(
     /**
      * 生成头像上传的预签名 PUT URL
      */
-    override fun presignAvatarUpload(userId: Long, request: AvatarPresignRequest): PresignedUrlResponse {
+    override fun presignAvatarUpload(userId: UUID, request: AvatarPresignRequest): PresignedUrlResponse {
         // 1. 验证 Content-Type
         if (request.contentType !in ossProperties.allowedContentTypes) {
             throw BusinessException(
@@ -85,7 +85,7 @@ class FileServiceImpl(
      * 确认头像上传完成，更新用户 avatarUrl
      */
     @Transactional
-    override fun confirmAvatarUpload(userId: Long, objectKey: String): AvatarConfirmResponse {
+    override fun confirmAvatarUpload(userId: UUID, objectKey: String): AvatarConfirmResponse {
         // 1. 验证临时对象 key 前缀
         if (!objectKey.startsWith("avatar-staging/$userId/")) {
             throw BusinessException(
@@ -137,15 +137,14 @@ class FileServiceImpl(
             )
 
         val updated = user.copy(
-            avatarUrl = finalObjectKey,
-            updatedAt = OffsetDateTime.now()
+            avatarObjectKey = finalObjectKey
         )
         userMapper.updateById(updated)
 
-        if (user.avatarUrl.isNotBlank() && user.avatarUrl != finalObjectKey) {
-            fileCleanupTaskService.enqueueOldAvatar(ossProperties.bucket, user.avatarUrl)
+        if (user.avatarObjectKey != null && user.avatarObjectKey != finalObjectKey) {
+            fileCleanupTaskService.enqueueOldAvatar(ossProperties.bucket, user.avatarObjectKey, userId)
         }
-        fileCleanupTaskService.enqueueStagingSource(ossProperties.bucket, objectKey)
+        fileCleanupTaskService.enqueueStagingSource(ossProperties.bucket, objectKey, userId)
 
         log.info("用户头像更新成功: userId={}, objectKey={}", userId, finalObjectKey)
 
@@ -157,7 +156,7 @@ class FileServiceImpl(
     /**
      * 获取当前用户头像的访问 URL
      */
-    override fun getAvatarUrl(userId: Long): String {
+    override fun getAvatarUrl(userId: UUID): String {
         val user = userMapper.selectById(userId)
             ?: throw BusinessException(
                 code = 404,
@@ -165,7 +164,7 @@ class FileServiceImpl(
                 httpStatus = HttpStatus.NOT_FOUND
             )
 
-        if (user.avatarUrl.isBlank()) {
+        val objectKey = user.avatarObjectKey ?: run {
             throw BusinessException(
                 code = 404,
                 message = "用户未设置头像",
@@ -173,13 +172,13 @@ class FileServiceImpl(
             )
         }
 
-        return generateAvatarDownloadUrl(userId, user.avatarUrl)
+        return generateAvatarDownloadUrl(userId, objectKey)
     }
 
     /**
      * 生成头像访问的 presigned GET URL
      */
-    private fun generateAvatarDownloadUrl(userId: Long, objectKey: String): String {
+    private fun generateAvatarDownloadUrl(userId: UUID, objectKey: String): String {
         // 如果配置了 CDN 域名，直接返回 CDN URL
         if (ossProperties.cdnDomain != null) {
             return "${ossProperties.cdnDomain}/$objectKey"
@@ -211,7 +210,7 @@ class FileServiceImpl(
         return fileName.substring(lastDotIndex + 1).lowercase()
     }
 
-    private fun createObjectKey(prefix: String, userId: Long, extension: String): String {
+    private fun createObjectKey(prefix: String, userId: UUID, extension: String): String {
         val timestamp = System.currentTimeMillis()
         val uuid = UUID.randomUUID().toString().substring(0, 8)
         return "$prefix/$userId/${timestamp}_${uuid}.$extension"

@@ -1,0 +1,1022 @@
+openapi: 3.0.3
+info:
+  title: Orion 用户服务 API
+  version: 1.0.0
+  description: |
+    Orion 用户服务。认证由 Authentik OIDC 和 Gateway 负责，Orion 不提供注册、登录、刷新 Token、登出或修改密码接口。
+
+    客户端只需向 Gateway 发送 Bearer Access Token。Gateway 验签后向 Orion 注入可信身份信息，Orion 使用 Authentik `sub` UUID 自动建档。
+    所有接口和字段均带有中文说明，导入 Apifox 后可直接生成接口目录、请求模型和响应模型。
+servers:
+  - url: http://localhost:8091
+    description: 本地 Gateway
+tags:
+  - name: 当前用户
+    description: 当前登录用户的身份缓存与业务账户操作
+  - name: 基础档案
+    description: 用户基础健康档案
+  - name: 身体测量
+    description: 身高、体重、体脂、血压等历史测量
+  - name: 健康目标
+    description: 用户健康目标
+  - name: 过敏记录
+    description: 用户过敏原记录
+  - name: 疾病记录
+    description: 用户医疗状况记录
+  - name: 饮食限制
+    description: 用户饮食限制记录
+  - name: 菜系偏好
+    description: 用户菜系偏好
+  - name: 临床观察
+    description: 只允许追加的临床观察记录
+  - name: 同意记录
+    description: 只允许追加的隐私或业务同意记录
+  - name: 头像
+    description: 头像预签名直传与确认
+security:
+  - bearerAuth: []
+paths:
+  /v1/users/self:
+    get:
+      tags: [当前用户]
+      summary: 获取当前用户
+      description: 首次认证访问时自动创建用户和空档案；返回的 userId 等于 Authentik OIDC sub。
+      operationId: getCurrentUser
+      responses:
+        '200': { $ref: '#/components/responses/UserResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [当前用户]
+      summary: 注销当前业务账户
+      description: 只执行 Orion 业务软注销，不删除 Authentik 身份；注销后不能通过身份同步自动恢复。
+      operationId: deactivateCurrentUser
+      responses:
+        '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/profile:
+    get:
+      tags: [基础档案]
+      summary: 获取当前用户基础档案
+      description: 返回当前用户的健康档案；用户首次认证访问时由服务端自动创建空档案。
+      operationId: getCurrentUserProfile
+      responses:
+        '200': { $ref: '#/components/responses/ProfileResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    patch:
+      tags: [基础档案]
+      summary: 更新当前用户基础档案
+      description: 所有字段均可选；出生日期对应年龄必须在 10 至 120 岁之间，完整填写出生日期、性别、身高和活动水平后标记档案完成。
+      operationId: updateCurrentUserProfile
+      requestBody: { $ref: '#/components/requestBodies/ProfileUpdate' }
+      responses:
+        '200': { $ref: '#/components/responses/ProfileResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/body-measurements:
+    get:
+      tags: [身体测量]
+      summary: 查询身体测量记录
+      description: 按当前用户查询身体测量历史，结果只包含当前用户自己的记录。
+      operationId: listBodyMeasurements
+      responses:
+        '200': { $ref: '#/components/responses/BodyMeasurementListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [身体测量]
+      summary: 新增身体测量记录
+      description: 至少填写一个测量指标；测量时间不能晚于当前时间 5 分钟。
+      operationId: createBodyMeasurement
+      requestBody: { $ref: '#/components/requestBodies/BodyMeasurement' }
+      responses:
+        '200': { $ref: '#/components/responses/BodyMeasurementResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/body-measurements/{id}:
+    parameters: [{ $ref: '#/components/parameters/RecordId' }]
+    patch:
+      tags: [身体测量]
+      summary: 修改身体测量记录
+      description: 只能修改当前用户自己的记录；请求至少保留一个测量指标。
+      operationId: updateBodyMeasurement
+      requestBody: { $ref: '#/components/requestBodies/BodyMeasurement' }
+      responses:
+        '200': { $ref: '#/components/responses/BodyMeasurementResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [身体测量]
+      summary: 删除身体测量记录
+      description: 删除当前用户指定的身体测量记录；不存在或不属于当前用户时返回 404。
+      operationId: deleteBodyMeasurement
+      responses:
+        '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/health-goals:
+    get:
+      tags: [健康目标]
+      summary: 查询健康目标
+      description: 查询当前用户的健康目标列表，结果只包含当前用户自己的目标。
+      operationId: listHealthGoals
+      responses:
+        '200': { $ref: '#/components/responses/HealthGoalListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [健康目标]
+      summary: 新增健康目标
+      description: 为当前用户新增健康目标；目标类型、状态和日期组合必须满足业务约束。
+      operationId: createHealthGoal
+      requestBody: { $ref: '#/components/requestBodies/HealthGoal' }
+      responses:
+        '200': { $ref: '#/components/responses/HealthGoalResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/health-goals/{id}:
+    parameters: [{ $ref: '#/components/parameters/RecordId' }]
+    patch:
+      tags: [健康目标]
+      summary: 修改健康目标
+      description: targetDate 不能早于 startedOn。
+      operationId: updateHealthGoal
+      requestBody: { $ref: '#/components/requestBodies/HealthGoal' }
+      responses:
+        '200': { $ref: '#/components/responses/HealthGoalResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [健康目标]
+      summary: 删除健康目标
+      description: 删除当前用户指定的健康目标；不存在或不属于当前用户时返回 404。
+      operationId: deleteHealthGoal
+      responses:
+        '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/allergies:
+    get:
+      tags: [过敏记录]
+      summary: 查询过敏记录
+      description: 查询当前用户的过敏原记录，结果只包含当前用户自己的记录。
+      operationId: listAllergies
+      responses:
+        '200': { $ref: '#/components/responses/AllergyListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [过敏记录]
+      summary: 新增过敏记录
+      description: 为当前用户新增过敏原记录；过敏名称不能为空，严重程度使用约定枚举值。
+      operationId: createAllergy
+      requestBody: { $ref: '#/components/requestBodies/Allergy' }
+      responses:
+        '200': { $ref: '#/components/responses/AllergyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/allergies/{id}:
+    parameters: [{ $ref: '#/components/parameters/RecordId' }]
+    patch:
+      tags: [过敏记录]
+      summary: 修改过敏记录
+      description: 修改当前用户指定的过敏原记录；不存在或不属于当前用户时返回 404。
+      operationId: updateAllergy
+      requestBody: { $ref: '#/components/requestBodies/Allergy' }
+      responses:
+        '200': { $ref: '#/components/responses/AllergyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [过敏记录]
+      summary: 删除过敏记录
+      description: 删除当前用户指定的过敏原记录；不存在或不属于当前用户时返回 404。
+      operationId: deleteAllergy
+      responses:
+        '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/medical-conditions:
+    get:
+      tags: [疾病记录]
+      summary: 查询疾病记录
+      description: 查询当前用户的医疗状况记录，结果只包含当前用户自己的记录。
+      operationId: listMedicalConditions
+      responses:
+        '200': { $ref: '#/components/responses/MedicalConditionListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [疾病记录]
+      summary: 新增疾病记录
+      description: 为当前用户新增医疗状况记录；诊断日期和状态必须符合业务约束。
+      operationId: createMedicalCondition
+      requestBody: { $ref: '#/components/requestBodies/MedicalCondition' }
+      responses:
+        '200': { $ref: '#/components/responses/MedicalConditionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/medical-conditions/{id}:
+    parameters: [{ $ref: '#/components/parameters/RecordId' }]
+    patch:
+      tags: [疾病记录]
+      summary: 修改疾病记录
+      description: resolvedOn 不能早于 diagnosedOn。
+      operationId: updateMedicalCondition
+      requestBody: { $ref: '#/components/requestBodies/MedicalCondition' }
+      responses:
+        '200': { $ref: '#/components/responses/MedicalConditionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [疾病记录]
+      summary: 删除疾病记录
+      description: 删除当前用户指定的疾病记录；不存在或不属于当前用户时返回 404。
+      operationId: deleteMedicalCondition
+      responses:
+        '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/dietary-restrictions:
+    get:
+      tags: [饮食限制]
+      summary: 查询饮食限制
+      description: 查询当前用户的饮食限制记录，结果只包含当前用户自己的记录。
+      operationId: listDietaryRestrictions
+      responses:
+        '200': { $ref: '#/components/responses/DietaryRestrictionListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [饮食限制]
+      summary: 新增饮食限制
+      description: 为当前用户新增饮食限制记录；限制类别和日期范围必须符合业务约束。
+      operationId: createDietaryRestriction
+      requestBody: { $ref: '#/components/requestBodies/DietaryRestriction' }
+      responses:
+        '200': { $ref: '#/components/responses/DietaryRestrictionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/dietary-restrictions/{id}:
+    parameters: [{ $ref: '#/components/parameters/RecordId' }]
+    patch:
+      tags: [饮食限制]
+      summary: 修改饮食限制
+      description: endsOn 不能早于 startsOn。
+      operationId: updateDietaryRestriction
+      requestBody: { $ref: '#/components/requestBodies/DietaryRestriction' }
+      responses:
+        '200': { $ref: '#/components/responses/DietaryRestrictionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [饮食限制]
+      summary: 删除饮食限制
+      description: 删除当前用户指定的饮食限制记录；不存在或不属于当前用户时返回 404。
+      operationId: deleteDietaryRestriction
+      responses:
+        '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/cuisine-preferences:
+    get:
+      tags: [菜系偏好]
+      summary: 查询菜系偏好
+      description: 查询当前用户的菜系偏好列表，结果只包含当前用户自己的偏好。
+      operationId: listCuisinePreferences
+      responses:
+        '200': { $ref: '#/components/responses/CuisinePreferenceListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    put:
+      tags: [菜系偏好]
+      summary: 全量替换菜系偏好
+      description: 用完整列表替换当前用户所有菜系偏好；cuisineCode 忽略大小写后不能重复。
+      operationId: replaceCuisinePreferences
+      requestBody: { $ref: '#/components/requestBodies/CuisinePreferences' }
+      responses:
+        '200': { $ref: '#/components/responses/CuisinePreferenceListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/clinical-observations:
+    get:
+      tags: [临床观察]
+      summary: 查询临床观察
+      description: 查询当前用户的临床观察历史；临床观察只允许追加，不能修改或删除。
+      operationId: listClinicalObservations
+      responses:
+        '200': { $ref: '#/components/responses/ClinicalObservationListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [临床观察]
+      summary: 追加临床观察
+      description: valueNumeric 与 valueText 必须且只能提供一个；metadata 必须是 JSON 对象字符串；记录创建后不可修改或删除。
+      operationId: createClinicalObservation
+      requestBody: { $ref: '#/components/requestBodies/ClinicalObservation' }
+      responses:
+        '200': { $ref: '#/components/responses/ClinicalObservationResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/users/self/consents:
+    get:
+      tags: [同意记录]
+      summary: 查询同意记录
+      description: 查询当前用户的同意记录历史；同意记录只允许追加，不能修改或删除。
+      operationId: listUserConsents
+      responses:
+        '200': { $ref: '#/components/responses/ConsentListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [同意记录]
+      summary: 追加同意记录
+      description: source 默认为 mobile；服务端记录客户端 IP 和 User-Agent；记录创建后不可修改或删除。
+      operationId: createUserConsent
+      requestBody: { $ref: '#/components/requestBodies/Consent' }
+      responses:
+        '200': { $ref: '#/components/responses/ConsentResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/files/avatar/presign:
+    post:
+      tags: [头像]
+      summary: 获取头像上传预签名 URL
+      description: 只生成临时对象键和 PUT URL；RN 应直接向对象存储上传，不经过 Orion。支持 image/jpeg、image/png、image/webp、image/gif。
+      operationId: presignAvatarUpload
+      requestBody: { $ref: '#/components/requestBodies/AvatarPresign' }
+      responses:
+        '200': { $ref: '#/components/responses/PresignedUrlResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/files/avatar/confirm:
+    post:
+      tags: [头像]
+      summary: 确认头像上传
+      description: 请求体必须是 objectKey 本身的 JSON 字符串，且必须属于当前用户的 avatar-staging/{userId}/ 命名空间；确认后转为正式 avatars/{userId}/ 对象。
+      operationId: confirmAvatarUpload
+      requestBody: { $ref: '#/components/requestBodies/AvatarConfirm' }
+      responses:
+        '200': { $ref: '#/components/responses/AvatarConfirmResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/files/avatar:
+    get:
+      tags: [头像]
+      summary: 获取当前用户头像访问 URL
+      description: 返回短期有效的预签名 GET URL；未设置头像时返回 404。
+      operationId: getAvatarUrl
+      responses:
+        '200': { $ref: '#/components/responses/AvatarUrlResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Authentik OIDC access_token。客户端不要伪造 X-Auth-* 或 X-Gateway-Source 请求头。
+  parameters:
+    RecordId:
+      name: id
+      in: path
+      required: true
+      description: 业务记录雪花 ID，64 位整数；只允许访问当前用户自己的记录。
+      schema: { type: integer, format: int64, minimum: 1 }
+  requestBodies:
+    ProfileUpdate:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/UserProfileUpdateRequest' }
+    BodyMeasurement:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/BodyMeasurementRequest' }
+    HealthGoal:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/HealthGoalRequest' }
+    Allergy:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AllergyRequest' }
+    MedicalCondition:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/MedicalConditionRequest' }
+    DietaryRestriction:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/DietaryRestrictionRequest' }
+    CuisinePreferences:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ReplaceCuisinePreferencesRequest' }
+    ClinicalObservation:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ClinicalObservationRequest' }
+    Consent:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/UserConsentRequest' }
+    AvatarPresign:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AvatarPresignRequest' }
+    AvatarConfirm:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: string
+            description: 'objectKey 本身的 JSON 字符串，不是 {objectKey: ...} 对象。'
+            example: avatar-staging/550e8400-e29b-41d4-a716-446655440000/1723190400000_a1b2c3d4.webp
+  responses:
+    BadRequest:
+      description: 请求参数无效或业务校验失败
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Unauthorized:
+      description: 缺少或无效的 Authentik Bearer Token
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Forbidden:
+      description: 邮箱未验证、业务账户已暂停/注销或对象不属于当前用户
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    NotFound:
+      description: 用户、档案、业务记录或头像不存在
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Conflict:
+      description: 业务账户已经注销
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    ServerError:
+      description: 服务器内部错误
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    UserResponse:
+      description: 当前用户
+      content: { application/json: { schema: { $ref: '#/components/schemas/UserResponse' } } }
+    ProfileResponse:
+      description: 当前用户基础档案
+      content: { application/json: { schema: { $ref: '#/components/schemas/ProfileResponse' } } }
+    BodyMeasurementResponse:
+      description: 身体测量记录
+      content: { application/json: { schema: { $ref: '#/components/schemas/BodyMeasurementResponse' } } }
+    BodyMeasurementListResponse:
+      description: 身体测量记录列表
+      content: { application/json: { schema: { $ref: '#/components/schemas/BodyMeasurementListResponse' } } }
+    HealthGoalResponse:
+      description: 健康目标
+      content: { application/json: { schema: { $ref: '#/components/schemas/HealthGoalResponse' } } }
+    HealthGoalListResponse:
+      description: 健康目标列表
+      content: { application/json: { schema: { $ref: '#/components/schemas/HealthGoalListResponse' } } }
+    AllergyResponse:
+      description: 过敏记录
+      content: { application/json: { schema: { $ref: '#/components/schemas/AllergyResponse' } } }
+    AllergyListResponse:
+      description: 过敏记录列表
+      content: { application/json: { schema: { $ref: '#/components/schemas/AllergyListResponse' } } }
+    MedicalConditionResponse:
+      description: 疾病记录
+      content: { application/json: { schema: { $ref: '#/components/schemas/MedicalConditionResponse' } } }
+    MedicalConditionListResponse:
+      description: 疾病记录列表
+      content: { application/json: { schema: { $ref: '#/components/schemas/MedicalConditionListResponse' } } }
+    DietaryRestrictionResponse:
+      description: 饮食限制记录
+      content: { application/json: { schema: { $ref: '#/components/schemas/DietaryRestrictionResponse' } } }
+    DietaryRestrictionListResponse:
+      description: 饮食限制记录列表
+      content: { application/json: { schema: { $ref: '#/components/schemas/DietaryRestrictionListResponse' } } }
+    CuisinePreferenceListResponse:
+      description: 菜系偏好列表
+      content: { application/json: { schema: { $ref: '#/components/schemas/CuisinePreferenceListResponse' } } }
+    ClinicalObservationResponse:
+      description: 临床观察记录
+      content: { application/json: { schema: { $ref: '#/components/schemas/ClinicalObservationResponse' } } }
+    ClinicalObservationListResponse:
+      description: 临床观察记录列表
+      content: { application/json: { schema: { $ref: '#/components/schemas/ClinicalObservationListResponse' } } }
+    ConsentResponse:
+      description: 同意记录
+      content: { application/json: { schema: { $ref: '#/components/schemas/ConsentResponse' } } }
+    ConsentListResponse:
+      description: 同意记录列表
+      content: { application/json: { schema: { $ref: '#/components/schemas/ConsentListResponse' } } }
+    PresignedUrlResponse:
+      description: 头像预签名上传信息
+      content: { application/json: { schema: { $ref: '#/components/schemas/PresignedUrlResponse' } } }
+    AvatarConfirmResponse:
+      description: 头像确认结果
+      content: { application/json: { schema: { $ref: '#/components/schemas/AvatarConfirmResponse' } } }
+    AvatarUrlResponse:
+      description: 当前头像访问 URL
+      content: { application/json: { schema: { $ref: '#/components/schemas/AvatarUrlResponse' } } }
+    EmptyResponse:
+      description: 操作成功，无业务数据
+      content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } }
+  schemas:
+    ApiResponseBase:
+      type: object
+      required: [code, message, timestamp]
+      properties:
+        code: { type: integer, format: int32, description: HTTP 风格业务状态码, example: 200 }
+        message: { type: string, description: 结果说明, example: Success }
+        traceId: { type: string, nullable: true, description: 请求链路 ID }
+        timestamp: { type: integer, format: int64, description: 服务端生成的毫秒时间戳, example: 1723190400000 }
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data: { nullable: true, description: 失败时固定为空 }
+    EmptyResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data: { nullable: true, description: 成功但没有业务数据 }
+    UserResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/UserVO' } }
+    ProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/UserProfileVO' } }
+    BodyMeasurementResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/UserBodyMeasurement' } }
+    BodyMeasurementListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/UserBodyMeasurement' } } }
+    HealthGoalResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/UserHealthGoal' } }
+    HealthGoalListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/UserHealthGoal' } } }
+    AllergyResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/UserAllergy' } }
+    AllergyListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/UserAllergy' } } }
+    MedicalConditionResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/UserMedicalCondition' } }
+    MedicalConditionListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/UserMedicalCondition' } } }
+    DietaryRestrictionResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/UserDietaryRestriction' } }
+    DietaryRestrictionListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/UserDietaryRestriction' } } }
+    CuisinePreferenceListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/UserCuisinePreference' } } }
+    ClinicalObservationResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/ClinicalObservation' } }
+    ClinicalObservationListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/ClinicalObservation' } } }
+    ConsentResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/UserConsent' } }
+    ConsentListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/UserConsent' } } }
+    PresignedUrlResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/PresignedUrl' } }
+    AvatarConfirmResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/AvatarConfirm' } }
+    AvatarUrlResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: string, format: uri, description: 头像访问 URL } }
+
+    UserProfileUpdateRequest:
+      type: object
+      description: 用户基础健康档案更新请求，所有字段可选。
+      properties:
+        birthDate: { type: string, format: date, description: 出生日期；对应年龄必须在 10 至 120 岁之间 }
+        gender: { type: string, enum: [male, female, other, unknown], description: 性别 }
+        heightCm: { type: number, format: double, minimum: 50, maximum: 300, description: 身高，单位厘米 }
+        activityLevel: { type: string, enum: [sedentary, light, moderate, active, very_active], description: 活动水平 }
+        dailyWaterTargetMl: { type: integer, format: int32, minimum: 0, maximum: 10000, description: 每日饮水目标，单位毫升 }
+    BodyMeasurementRequest:
+      type: object
+      description: 身体测量请求；至少填写一个测量指标。
+      properties:
+        measuredAt: { type: string, format: date-time, description: 测量时间，默认当前时间 }
+        heightCm: { type: number, format: double, minimum: 50, maximum: 300, description: 身高，单位厘米 }
+        weightKg: { type: number, format: double, minimum: 10, maximum: 500, description: 体重，单位千克 }
+        bodyFatPercentage: { type: number, format: double, minimum: 0, maximum: 100, description: 体脂率，百分比 }
+        waistCm: { type: number, format: double, minimum: 20, maximum: 300, description: 腰围，单位厘米 }
+        systolicBp: { type: integer, format: int32, minimum: 40, maximum: 300, description: 收缩压，单位 mmHg }
+        diastolicBp: { type: integer, format: int32, minimum: 20, maximum: 200, description: 舒张压，单位 mmHg }
+        restingHeartRate: { type: integer, format: int32, minimum: 20, maximum: 250, description: 静息心率，单位 bpm }
+        source: { type: string, enum: [manual, device, import, clinical], default: manual, description: 数据来源 }
+        sourceReference: { type: string, maxLength: 255, description: 外部设备或来源引用 }
+        notes: { type: string, maxLength: 500, description: 备注 }
+    HealthGoalRequest:
+      type: object
+      required: [goalType]
+      properties:
+        goalType: { type: string, enum: [weight_loss, muscle_gain, maintain, health_improve], description: 目标类型 }
+        targetWeightKg: { type: number, format: double, minimum: 10, maximum: 500, description: 目标体重，单位千克 }
+        targetBodyFatPercentage: { type: number, format: double, minimum: 0, maximum: 100, description: 目标体脂率 }
+        priority: { type: integer, format: int32, minimum: 1, maximum: 10, default: 1, description: 优先级 }
+        status: { type: string, enum: [planned, active, achieved, cancelled], default: active, description: 目标状态 }
+        startedOn: { type: string, format: date, description: 开始日期 }
+        targetDate: { type: string, format: date, description: 目标日期，不早于 startedOn }
+        notes: { type: string, maxLength: 500, description: 备注 }
+    AllergyRequest:
+      type: object
+      required: [allergenCode, allergenName]
+      properties:
+        allergenCode: { type: string, maxLength: 64, description: 过敏原编码 }
+        allergenName: { type: string, maxLength: 100, description: 过敏原名称 }
+        severity: { type: string, enum: [mild, moderate, severe, life_threatening], description: 严重程度 }
+        reactionDescription: { type: string, maxLength: 500, description: 反应描述 }
+        diagnosisStatus: { type: string, enum: [self_reported, suspected, confirmed], default: self_reported, description: 诊断状态 }
+        recordedOn: { type: string, format: date, description: 记录日期 }
+        active: { type: boolean, default: true, description: 是否仍然有效 }
+        notes: { type: string, maxLength: 500, description: 备注 }
+    MedicalConditionRequest:
+      type: object
+      required: [conditionCode, conditionName]
+      properties:
+        conditionCode: { type: string, maxLength: 64, description: 疾病编码 }
+        conditionName: { type: string, maxLength: 150, description: 疾病名称 }
+        status: { type: string, enum: [active, remission, resolved], default: active, description: 疾病状态 }
+        diagnosedOn: { type: string, format: date, description: 诊断日期 }
+        resolvedOn: { type: string, format: date, description: 解决日期，不早于 diagnosedOn }
+        source: { type: string, enum: [self_reported, clinical, imported], default: self_reported, description: 数据来源 }
+        notes: { type: string, description: 备注 }
+    DietaryRestrictionRequest:
+      type: object
+      required: [restrictionCode, restrictionName, category]
+      properties:
+        restrictionCode: { type: string, maxLength: 64, description: 饮食限制编码 }
+        restrictionName: { type: string, maxLength: 100, description: 饮食限制名称 }
+        category: { type: string, enum: [medical, religious, lifestyle, preference], description: 限制类别 }
+        source: { type: string, enum: [self_reported, clinician, system], default: self_reported, description: 数据来源 }
+        active: { type: boolean, default: true, description: 是否有效 }
+        startsOn: { type: string, format: date, description: 生效日期 }
+        endsOn: { type: string, format: date, description: 结束日期，不早于 startsOn }
+        notes: { type: string, maxLength: 500, description: 备注 }
+    CuisinePreferenceRequest:
+      type: object
+      required: [cuisineCode, cuisineName]
+      properties:
+        cuisineCode: { type: string, maxLength: 64, description: 菜系编码 }
+        cuisineName: { type: string, maxLength: 100, description: 菜系名称 }
+        preferenceScore: { type: integer, format: int32, minimum: -2, maximum: 2, default: 0, description: 偏好分数，-2 至 2 }
+        notes: { type: string, maxLength: 500, description: 备注 }
+    ReplaceCuisinePreferencesRequest:
+      type: object
+      required: [preferences]
+      properties:
+        preferences:
+          type: array
+          minItems: 1
+          description: 完整菜系偏好列表，编码不能重复
+          items: { $ref: '#/components/schemas/CuisinePreferenceRequest' }
+    ClinicalObservationRequest:
+      type: object
+      required: [observationCode, observationName]
+      description: valueNumeric 与 valueText 必须且只能提供一个。
+      properties:
+        observationCode: { type: string, maxLength: 64, description: 观察项编码 }
+        observationName: { type: string, maxLength: 150, description: 观察项名称 }
+        valueNumeric: { type: number, format: double, description: 数值结果，与 valueText 二选一 }
+        valueText: { type: string, maxLength: 500, description: 文本结果，与 valueNumeric 二选一 }
+        unit: { type: string, maxLength: 32, description: 数值单位 }
+        referenceLow: { type: number, format: double, description: 参考下限 }
+        referenceHigh: { type: number, format: double, description: 参考上限，不小于 referenceLow }
+        interpretation: { type: string, enum: [low, normal, high, critical, unknown], default: unknown, description: 解释结果 }
+        observedAt: { type: string, format: date-time, description: 观察时间，默认当前时间 }
+        source: { type: string, enum: [self_reported, clinical, device, imported], default: self_reported, description: 数据来源 }
+        reportObjectKey: { type: string, maxLength: 1024, description: 报告对象存储键 }
+        metadata: { type: string, default: '{}', description: JSON 对象字符串 }
+    UserConsentRequest:
+      type: object
+      required: [consentType, policyVersion]
+      properties:
+        consentType: { type: string, maxLength: 64, description: 同意类型 }
+        policyVersion: { type: string, maxLength: 32, description: 政策版本 }
+        granted: { type: boolean, default: true, description: 是否同意 }
+        source: { type: string, enum: [mobile, web, admin, imported], default: mobile, description: 记录来源 }
+    AvatarPresignRequest:
+      type: object
+      required: [fileName, contentType]
+      properties:
+        fileName: { type: string, minLength: 1, description: 原始文件名 }
+        contentType: { type: string, enum: [image/jpeg, image/png, image/webp, image/gif], description: 文件 MIME 类型 }
+
+    UserVO:
+      type: object
+      required: [userId, username, emailVerified, displayName, businessStatus, locale, timezone, createdAt, updatedAt]
+      properties:
+        userId: { type: string, format: uuid, description: Authentik sub UUID }
+        username: { type: string, description: Authentik 用户名 }
+        email: { type: string, format: email, nullable: true, description: Authentik 邮箱 }
+        emailVerified: { type: boolean, description: 邮箱是否已验证 }
+        displayName: { type: string, description: 显示名 }
+        avatarUrl: { type: string, format: uri, nullable: true, description: 头像访问入口；无头像时为空 }
+        businessStatus: { type: string, enum: [active, suspended, deactivated], description: Orion 业务状态 }
+        locale: { type: string, description: 区域语言 }
+        timezone: { type: string, description: 时区 }
+        lastSeenAt: { type: string, format: date-time, nullable: true, description: 最近一次业务访问时间 }
+        createdAt: { type: string, format: date-time, description: 首次建档时间 }
+        updatedAt: { type: string, format: date-time, description: 业务缓存更新时间 }
+    UserProfileVO:
+      type: object
+      required: [userId, dailyWaterTargetMl, createdAt, updatedAt]
+      properties:
+        userId: { type: string, format: uuid, description: 当前用户 UUID }
+        birthDate: { type: string, format: date, nullable: true, description: 出生日期 }
+        gender: { type: string, enum: [male, female, other, unknown], nullable: true, description: 性别 }
+        heightCm: { type: number, format: double, nullable: true, description: 身高，单位厘米 }
+        activityLevel: { type: string, enum: [sedentary, light, moderate, active, very_active], nullable: true, description: 活动水平 }
+        dailyWaterTargetMl: { type: integer, format: int32, description: 每日饮水目标，单位毫升 }
+        profileCompletedAt: { type: string, format: date-time, nullable: true, description: 档案完成时间 }
+        createdAt: { type: string, format: date-time, description: 创建时间 }
+        updatedAt: { type: string, format: date-time, description: 更新时间 }
+    UserBodyMeasurement:
+      type: object
+      required: [measurementId, userId, measuredAt, source, createdAt, updatedAt]
+      properties:
+        measurementId: { type: integer, format: int64, minimum: 1, description: 雪花测量记录 ID }
+        userId: { type: string, format: uuid, description: 当前用户 UUID }
+        measuredAt: { type: string, format: date-time, description: 测量时间 }
+        heightCm: { type: number, format: double, nullable: true, description: 身高厘米 }
+        weightKg: { type: number, format: double, nullable: true, description: 体重千克 }
+        bodyFatPercentage: { type: number, format: double, nullable: true, description: 体脂率 }
+        waistCm: { type: number, format: double, nullable: true, description: 腰围厘米 }
+        systolicBp: { type: integer, format: int32, nullable: true, description: 收缩压 }
+        diastolicBp: { type: integer, format: int32, nullable: true, description: 舒张压 }
+        restingHeartRate: { type: integer, format: int32, nullable: true, description: 静息心率 }
+        source: { type: string, enum: [manual, device, import, clinical], description: 数据来源 }
+        sourceReference: { type: string, nullable: true, description: 来源引用 }
+        notes: { type: string, nullable: true, description: 备注 }
+        createdAt: { type: string, format: date-time, description: 创建时间 }
+        updatedAt: { type: string, format: date-time, description: 更新时间 }
+    UserHealthGoal:
+      type: object
+      required: [goalId, userId, goalType, priority, status, startedOn, createdAt, updatedAt]
+      properties:
+        goalId: { type: integer, format: int64, minimum: 1, description: 雪花目标 ID }
+        userId: { type: string, format: uuid, description: 当前用户 UUID }
+        goalType: { type: string, enum: [weight_loss, muscle_gain, maintain, health_improve], description: 目标类型 }
+        targetWeightKg: { type: number, format: double, nullable: true, description: 目标体重千克 }
+        targetBodyFatPercentage: { type: number, format: double, nullable: true, description: 目标体脂率 }
+        priority: { type: integer, format: int32, description: 优先级 }
+        status: { type: string, enum: [planned, active, achieved, cancelled], description: 目标状态 }
+        startedOn: { type: string, format: date, description: 开始日期 }
+        targetDate: { type: string, format: date, nullable: true, description: 目标日期 }
+        completedAt: { type: string, format: date-time, nullable: true, description: 完成时间 }
+        notes: { type: string, nullable: true, description: 备注 }
+        createdAt: { type: string, format: date-time, description: 创建时间 }
+        updatedAt: { type: string, format: date-time, description: 更新时间 }
+    UserAllergy:
+      type: object
+      required: [allergyId, userId, allergenCode, allergenName, diagnosisStatus, active, createdAt, updatedAt]
+      properties:
+        allergyId: { type: integer, format: int64, minimum: 1, description: 雪花过敏记录 ID }
+        userId: { type: string, format: uuid, description: 当前用户 UUID }
+        allergenCode: { type: string, description: 过敏原编码 }
+        allergenName: { type: string, description: 过敏原名称 }
+        severity: { type: string, enum: [mild, moderate, severe, life_threatening], nullable: true, description: 严重程度 }
+        reactionDescription: { type: string, nullable: true, description: 反应描述 }
+        diagnosisStatus: { type: string, enum: [self_reported, suspected, confirmed], description: 诊断状态 }
+        recordedOn: { type: string, format: date, nullable: true, description: 记录日期 }
+        active: { type: boolean, description: 是否有效 }
+        notes: { type: string, nullable: true, description: 备注 }
+        createdAt: { type: string, format: date-time, description: 创建时间 }
+        updatedAt: { type: string, format: date-time, description: 更新时间 }
+    UserMedicalCondition:
+      type: object
+      required: [conditionId, userId, conditionCode, conditionName, status, source, createdAt, updatedAt]
+      properties:
+        conditionId: { type: integer, format: int64, minimum: 1, description: 雪花疾病记录 ID }
+        userId: { type: string, format: uuid, description: 当前用户 UUID }
+        conditionCode: { type: string, description: 疾病编码 }
+        conditionName: { type: string, description: 疾病名称 }
+        status: { type: string, enum: [active, remission, resolved], description: 疾病状态 }
+        diagnosedOn: { type: string, format: date, nullable: true, description: 诊断日期 }
+        resolvedOn: { type: string, format: date, nullable: true, description: 解决日期 }
+        source: { type: string, enum: [self_reported, clinical, imported], description: 数据来源 }
+        notes: { type: string, nullable: true, description: 备注 }
+        createdAt: { type: string, format: date-time, description: 创建时间 }
+        updatedAt: { type: string, format: date-time, description: 更新时间 }
+    UserDietaryRestriction:
+      type: object
+      required: [restrictionId, userId, restrictionCode, restrictionName, category, source, active, createdAt, updatedAt]
+      properties:
+        restrictionId: { type: integer, format: int64, minimum: 1, description: 雪花饮食限制 ID }
+        userId: { type: string, format: uuid, description: 当前用户 UUID }
+        restrictionCode: { type: string, description: 限制编码 }
+        restrictionName: { type: string, description: 限制名称 }
+        category: { type: string, enum: [medical, religious, lifestyle, preference], description: 限制类别 }
+        source: { type: string, enum: [self_reported, clinician, system], description: 数据来源 }
+        active: { type: boolean, description: 是否有效 }
+        startsOn: { type: string, format: date, nullable: true, description: 生效日期 }
+        endsOn: { type: string, format: date, nullable: true, description: 结束日期 }
+        notes: { type: string, nullable: true, description: 备注 }
+        createdAt: { type: string, format: date-time, description: 创建时间 }
+        updatedAt: { type: string, format: date-time, description: 更新时间 }
+    UserCuisinePreference:
+      type: object
+      required: [userId, cuisineCode, cuisineName, preferenceScore, createdAt, updatedAt]
+      properties:
+        userId: { type: string, format: uuid, description: 当前用户 UUID }
+        cuisineCode: { type: string, description: 菜系编码 }
+        cuisineName: { type: string, description: 菜系名称 }
+        preferenceScore: { type: integer, format: int32, minimum: -2, maximum: 2, description: 偏好分数 }
+        notes: { type: string, nullable: true, description: 备注 }
+        createdAt: { type: string, format: date-time, description: 创建时间 }
+        updatedAt: { type: string, format: date-time, description: 更新时间 }
+    ClinicalObservation:
+      type: object
+      required: [observationId, userId, observationCode, observationName, interpretation, observedAt, source, metadata, createdAt]
+      properties:
+        observationId: { type: integer, format: int64, minimum: 1, description: 雪花临床观察 ID }
+        userId: { type: string, format: uuid, description: 当前用户 UUID }
+        observationCode: { type: string, description: 观察项编码 }
+        observationName: { type: string, description: 观察项名称 }
+        valueNumeric: { type: number, format: double, nullable: true, description: 数值结果 }
+        valueText: { type: string, nullable: true, description: 文本结果 }
+        unit: { type: string, nullable: true, description: 单位 }
+        referenceLow: { type: number, format: double, nullable: true, description: 参考下限 }
+        referenceHigh: { type: number, format: double, nullable: true, description: 参考上限 }
+        interpretation: { type: string, enum: [low, normal, high, critical, unknown], description: 解释结果 }
+        observedAt: { type: string, format: date-time, description: 观察时间 }
+        source: { type: string, enum: [self_reported, clinical, device, imported], description: 数据来源 }
+        reportObjectKey: { type: string, nullable: true, description: 报告对象存储键 }
+        metadata: { type: string, description: JSON 对象字符串 }
+        createdAt: { type: string, format: date-time, description: 创建时间 }
+    UserConsent:
+      type: object
+      required: [consentId, userId, consentType, policyVersion, granted, recordedAt, source, createdAt]
+      properties:
+        consentId: { type: integer, format: int64, minimum: 1, description: 雪花同意记录 ID }
+        userId: { type: string, format: uuid, description: 当前用户 UUID }
+        consentType: { type: string, description: 同意类型 }
+        policyVersion: { type: string, description: 政策版本 }
+        granted: { type: boolean, description: 是否同意 }
+        recordedAt: { type: string, format: date-time, description: 记录时间 }
+        source: { type: string, enum: [mobile, web, admin, imported], description: 记录来源 }
+        clientIp: { type: string, nullable: true, description: 服务端获取的客户端 IP }
+        userAgent: { type: string, nullable: true, description: 服务端获取的 User-Agent }
+        createdAt: { type: string, format: date-time, description: 创建时间 }
+    PresignedUrl:
+      type: object
+      required: [uploadUrl, objectKey, expiresIn]
+      properties:
+        uploadUrl: { type: string, format: uri, description: 预签名 PUT URL }
+        objectKey: { type: string, description: 临时对象键，确认时原样提交 }
+        expiresIn: { type: integer, format: int64, description: URL 有效期，单位秒 }
+    AvatarConfirm:
+      type: object
+      required: [avatarUrl]
+      properties:
+        avatarUrl: { type: string, format: uri, description: 最终头像访问 URL }

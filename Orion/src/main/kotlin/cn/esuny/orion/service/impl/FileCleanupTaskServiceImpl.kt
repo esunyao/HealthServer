@@ -4,13 +4,14 @@ import cn.esuny.orion.config.OssProperties
 import cn.esuny.orion.mapper.FileCleanupTaskMapper
 import cn.esuny.orion.model.entity.file.FileCleanupTask
 import cn.esuny.orion.service.FileCleanupTaskService
-import com.baomidou.mybatisplus.core.toolkit.IdWorker
+import cn.esuny.orion.service.SnowflakeIdGenerator
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import java.time.OffsetDateTime
+import java.util.UUID
 
 /**
  * 对象存储异步清理任务服务实现类。
@@ -20,22 +21,23 @@ import java.time.OffsetDateTime
 class FileCleanupTaskServiceImpl(
     private val fileCleanupTaskMapper: FileCleanupTaskMapper,
     private val s3Client: S3Client,
-    private val ossProperties: OssProperties
+    private val ossProperties: OssProperties,
+    private val ids: SnowflakeIdGenerator
 ) : FileCleanupTaskService {
 
     private val log = LoggerFactory.getLogger(FileCleanupTaskServiceImpl::class.java)
 
     /** 提交旧头像清理任务 */
-    override fun enqueueOldAvatar(bucket: String, objectKey: String) =
-        enqueue(bucket, objectKey, FileCleanupTask.TYPE_OLD_AVATAR)
+    override fun enqueueOldAvatar(bucket: String, objectKey: String, ownerUserId: UUID?) =
+        enqueue(bucket, objectKey, FileCleanupTask.TYPE_OLD_AVATAR, ownerUserId)
 
     /** 提交暂存区源文件清理任务 */
-    override fun enqueueStagingSource(bucket: String, objectKey: String) =
-        enqueue(bucket, objectKey, FileCleanupTask.TYPE_STAGING_SOURCE)
+    override fun enqueueStagingSource(bucket: String, objectKey: String, ownerUserId: UUID?) =
+        enqueue(bucket, objectKey, FileCleanupTask.TYPE_STAGING_SOURCE, ownerUserId)
 
     /** 提交对账扫描出的孤儿头像清理任务 */
-    override fun enqueueOrphanAvatar(bucket: String, objectKey: String) =
-        enqueue(bucket, objectKey, FileCleanupTask.TYPE_ORPHAN_AVATAR)
+    override fun enqueueOrphanAvatar(bucket: String, objectKey: String, ownerUserId: UUID?) =
+        enqueue(bucket, objectKey, FileCleanupTask.TYPE_ORPHAN_AVATAR, ownerUserId)
 
     /**
      * 批量提交对账扫描出的孤儿头像清理任务。
@@ -49,7 +51,7 @@ class FileCleanupTaskServiceImpl(
         fileCleanupTaskMapper.enqueueIfAbsentBatch(
             objectKeys.map {
                 FileCleanupTask(
-                    taskId = IdWorker.getId(), // 生成分布式雪花算法唯一 ID
+                    taskId = ids.nextId(),
                     bucket = bucket, objectKey = it, taskType = FileCleanupTask.TYPE_ORPHAN_AVATAR
                 )
             })
@@ -92,10 +94,10 @@ class FileCleanupTaskServiceImpl(
     /**
      * 内部通用的任务入队逻辑（存在则忽略/幂等入队）
      */
-    private fun enqueue(bucket: String, objectKey: String, taskType: String) {
+    private fun enqueue(bucket: String, objectKey: String, taskType: String, ownerUserId: UUID? = null) {
         fileCleanupTaskMapper.enqueueIfAbsent(
             FileCleanupTask(
-                taskId = IdWorker.getId(), // 使用 MyBatis-Plus 雪花算法生成分布式唯一 ID
+                taskId = ids.nextId(), ownerUserId = ownerUserId,
                 bucket = bucket, objectKey = objectKey, taskType = taskType
             )
         )
@@ -107,7 +109,6 @@ class FileCleanupTaskServiceImpl(
      */
     private fun backoffMinutes(attempts: Int): Long = 1L shl attempts.coerceIn(0, 8)
 }
-
 
 
 
