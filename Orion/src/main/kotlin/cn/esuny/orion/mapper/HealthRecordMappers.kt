@@ -9,13 +9,20 @@ import cn.esuny.orion.model.entity.user.UserDietaryRestriction
 import cn.esuny.orion.model.entity.user.UserHealthGoal
 import cn.esuny.orion.model.entity.user.UserMedicalCondition
 import com.baomidou.mybatisplus.core.mapper.BaseMapper
+import org.apache.ibatis.annotations.Delete
 import org.apache.ibatis.annotations.Mapper
+import org.apache.ibatis.annotations.Param
+import java.util.UUID
 
 @Mapper interface UserBodyMeasurementMapper : BaseMapper<UserBodyMeasurement>
 @Mapper interface UserHealthGoalMapper : BaseMapper<UserHealthGoal>
 @Mapper interface UserAllergyMapper : BaseMapper<UserAllergy>
 @Mapper interface UserMedicalConditionMapper : BaseMapper<UserMedicalCondition>
 @Mapper interface UserDietaryRestrictionMapper : BaseMapper<UserDietaryRestriction>
-@Mapper interface UserCuisinePreferenceMapper : BaseMapper<UserCuisinePreference>
+@Mapper
+interface UserCuisinePreferenceMapper : BaseMapper<UserCuisinePreference> {
+    @Delete("DELETE FROM orion.user_cuisine_preferences WHERE user_id = #{userId,typeHandler=cn.esuny.orion.model.typehandler.PgUuidTypeHandler}")
+    fun deleteByUserId(@Param("userId") userId: UUID): Int
+}
 @Mapper interface ClinicalObservationMapper : BaseMapper<ClinicalObservation>
 @Mapper interface UserConsentMapper : BaseMapper<UserConsent>

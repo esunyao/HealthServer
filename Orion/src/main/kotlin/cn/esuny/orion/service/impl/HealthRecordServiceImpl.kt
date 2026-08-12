@@ -36,6 +36,19 @@ import tools.jackson.databind.ObjectMapper
 import java.time.OffsetDateTime
 import java.util.UUID
 
+private val MEASUREMENT_SOURCES = setOf("manual", "device", "import", "clinical")
+private val GOAL_TYPES = setOf("weight_loss", "muscle_gain", "maintain", "health_improve")
+private val GOAL_STATUSES = setOf("planned", "active", "achieved", "cancelled")
+private val ALLERGY_SEVERITIES = setOf("mild", "moderate", "severe", "life_threatening")
+private val ALLERGY_DIAGNOSIS_STATUSES = setOf("self_reported", "suspected", "confirmed")
+private val CONDITION_STATUSES = setOf("active", "remission", "resolved")
+private val CONDITION_SOURCES = setOf("self_reported", "clinical", "imported")
+private val DIETARY_CATEGORIES = setOf("medical", "religious", "lifestyle", "preference")
+private val DIETARY_SOURCES = setOf("self_reported", "clinician", "system")
+private val OBSERVATION_INTERPRETATIONS = setOf("low", "normal", "high", "critical", "unknown")
+private val OBSERVATION_SOURCES = setOf("self_reported", "clinical", "device", "imported")
+private val CONSENT_SOURCES = setOf("mobile", "web", "admin", "imported")
+
 @Service
 class HealthRecordServiceImpl(
     private val ids: SnowflakeIdGenerator,
@@ -107,7 +120,7 @@ class HealthRecordServiceImpl(
         if (request.preferences.map { it.cuisineCode.lowercase() }.distinct().size != request.preferences.size) {
             throw BusinessException(400, "菜系编码不能重复")
         }
-        cuisineMapper.delete(byUser(user.userId, "user_id", true))
+        cuisineMapper.deleteByUserId(user.userId)
         val records = request.preferences.map {
             UserCuisinePreference(user.userId, it.cuisineCode, it.cuisineName, it.preferenceScore, it.notes)
         }
@@ -128,27 +141,36 @@ class HealthRecordServiceImpl(
             throw BusinessException(400, "metadata 必须是 JSON 对象")
         }
         if (!tree.isObject) throw BusinessException(400, "metadata 必须是 JSON 对象")
+        val interpretation = request.interpretation ?: "unknown"
+        requireAllowed("interpretation", interpretation, OBSERVATION_INTERPRETATIONS)
+        val source = request.source ?: "self_reported"
+        requireAllowed("source", source, OBSERVATION_SOURCES)
         return ClinicalObservation(
             ids.nextId(), user.userId, request.observationCode, request.observationName,
             request.valueNumeric, request.valueText?.takeIf(String::isNotBlank), request.unit,
-            request.referenceLow, request.referenceHigh, request.interpretation ?: "unknown",
-            request.observedAt ?: OffsetDateTime.now(), request.source ?: "self_reported",
+            request.referenceLow, request.referenceHigh, interpretation,
+            request.observedAt ?: OffsetDateTime.now(), source,
             request.reportObjectKey, metadata
         ).also(observationMapper::insert)
     }
 
     override fun listConsents(user: AuthenticatedUser) = consentMapper.selectList(byUser(user.userId, "recorded_at", false))
-    override fun createConsent(user: AuthenticatedUser, request: UserConsentRequest, clientIp: String?, userAgent: String?): UserConsent =
-        UserConsent(ids.nextId(), user.userId, request.consentType, request.policyVersion, request.granted,
-            source = request.source ?: "mobile", clientIp = clientIp, userAgent = userAgent?.take(500)).also(consentMapper::insert)
+    override fun createConsent(user: AuthenticatedUser, request: UserConsentRequest, clientIp: String?, userAgent: String?): UserConsent {
+        val source = request.source ?: "mobile"
+        requireAllowed("source", source, CONSENT_SOURCES)
+        return UserConsent(ids.nextId(), user.userId, request.consentType, request.policyVersion, request.granted,
+            source = source, clientIp = clientIp, userAgent = userAgent?.take(500)).also(consentMapper::insert)
+    }
 
     private fun measurement(request: BodyMeasurementRequest, current: UserBodyMeasurement?, userId: UUID): UserBodyMeasurement {
+        val source = request.source ?: current?.source ?: "manual"
+        requireAllowed("source", source, MEASUREMENT_SOURCES)
         val result = UserBodyMeasurement(
             current?.measurementId ?: ids.nextId(), userId, request.measuredAt ?: current?.measuredAt ?: OffsetDateTime.now(),
             request.heightCm ?: current?.heightCm, request.weightKg ?: current?.weightKg,
             request.bodyFatPercentage ?: current?.bodyFatPercentage, request.waistCm ?: current?.waistCm,
             request.systolicBp ?: current?.systolicBp, request.diastolicBp ?: current?.diastolicBp,
-            request.restingHeartRate ?: current?.restingHeartRate, request.source ?: current?.source ?: "manual",
+            request.restingHeartRate ?: current?.restingHeartRate, source,
             request.sourceReference ?: current?.sourceReference, request.notes ?: current?.notes,
             current?.createdAt ?: OffsetDateTime.now(), current?.updatedAt ?: OffsetDateTime.now()
         )
@@ -160,32 +182,45 @@ class HealthRecordServiceImpl(
     }
 
     private fun goal(request: HealthGoalRequest, current: UserHealthGoal?, userId: UUID): UserHealthGoal {
+        val goalType = requireAllowed("goalType", request.goalType, GOAL_TYPES)
+        val status = request.status ?: current?.status ?: "active"
+        requireAllowed("status", status, GOAL_STATUSES)
         val startedOn = request.startedOn ?: current?.startedOn ?: java.time.LocalDate.now()
         val targetDate = request.targetDate ?: current?.targetDate
         if (targetDate != null && targetDate < startedOn) throw BusinessException(400, "目标日期不能早于开始日期")
         return UserHealthGoal(
-            current?.goalId ?: ids.nextId(), userId, request.goalType, request.targetWeightKg ?: current?.targetWeightKg,
+            current?.goalId ?: ids.nextId(), userId, goalType, request.targetWeightKg ?: current?.targetWeightKg,
             request.targetBodyFatPercentage ?: current?.targetBodyFatPercentage, request.priority ?: current?.priority ?: 1,
-            request.status ?: current?.status ?: "active", startedOn, targetDate,
-            if ((request.status ?: current?.status) in setOf("achieved", "cancelled")) current?.completedAt ?: OffsetDateTime.now() else current?.completedAt,
+            status, startedOn, targetDate,
+            if (status in setOf("achieved", "cancelled")) current?.completedAt ?: OffsetDateTime.now() else current?.completedAt,
             request.notes ?: current?.notes, current?.createdAt ?: OffsetDateTime.now(), current?.updatedAt ?: OffsetDateTime.now()
         )
     }
 
-    private fun allergy(request: AllergyRequest, current: UserAllergy?, userId: UUID) = UserAllergy(
-        current?.allergyId ?: ids.nextId(), userId, request.allergenCode, request.allergenName,
-        request.severity ?: current?.severity, request.reactionDescription ?: current?.reactionDescription,
-        request.diagnosisStatus ?: current?.diagnosisStatus ?: "self_reported", request.recordedOn ?: current?.recordedOn,
-        request.active ?: current?.active ?: true, request.notes ?: current?.notes,
-        current?.createdAt ?: OffsetDateTime.now(), current?.updatedAt ?: OffsetDateTime.now()
-    )
+    private fun allergy(request: AllergyRequest, current: UserAllergy?, userId: UUID): UserAllergy {
+        val severity = request.severity ?: current?.severity
+        severity?.let { requireAllowed("severity", it, ALLERGY_SEVERITIES) }
+        val diagnosisStatus = request.diagnosisStatus ?: current?.diagnosisStatus ?: "self_reported"
+        requireAllowed("diagnosisStatus", diagnosisStatus, ALLERGY_DIAGNOSIS_STATUSES)
+        return UserAllergy(
+            current?.allergyId ?: ids.nextId(), userId, request.allergenCode, request.allergenName,
+            severity, request.reactionDescription ?: current?.reactionDescription,
+            diagnosisStatus, request.recordedOn ?: current?.recordedOn,
+            request.active ?: current?.active ?: true, request.notes ?: current?.notes,
+            current?.createdAt ?: OffsetDateTime.now(), current?.updatedAt ?: OffsetDateTime.now()
+        )
+    }
 
     private fun condition(request: MedicalConditionRequest, current: UserMedicalCondition?, userId: UUID): UserMedicalCondition {
         val diagnosedOn = request.diagnosedOn ?: current?.diagnosedOn
         val resolvedOn = request.resolvedOn ?: current?.resolvedOn
         if (diagnosedOn != null && resolvedOn != null && resolvedOn < diagnosedOn) throw BusinessException(400, "结束日期不能早于诊断日期")
+        val status = request.status ?: current?.status ?: "active"
+        requireAllowed("status", status, CONDITION_STATUSES)
+        val source = request.source ?: current?.source ?: "self_reported"
+        requireAllowed("source", source, CONDITION_SOURCES)
         return UserMedicalCondition(current?.conditionId ?: ids.nextId(), userId, request.conditionCode, request.conditionName,
-            request.status ?: current?.status ?: "active", diagnosedOn, resolvedOn, request.source ?: current?.source ?: "self_reported",
+            status, diagnosedOn, resolvedOn, source,
             request.notes ?: current?.notes, current?.createdAt ?: OffsetDateTime.now(), current?.updatedAt ?: OffsetDateTime.now())
     }
 
@@ -193,14 +228,22 @@ class HealthRecordServiceImpl(
         val startsOn = request.startsOn ?: current?.startsOn
         val endsOn = request.endsOn ?: current?.endsOn
         if (startsOn != null && endsOn != null && endsOn < startsOn) throw BusinessException(400, "结束日期不能早于开始日期")
+        requireAllowed("category", request.category, DIETARY_CATEGORIES)
+        val source = request.source ?: current?.source ?: "self_reported"
+        requireAllowed("source", source, DIETARY_SOURCES)
         return UserDietaryRestriction(current?.restrictionId ?: ids.nextId(), userId, request.restrictionCode, request.restrictionName,
-            request.category, request.source ?: current?.source ?: "self_reported", request.active ?: current?.active ?: true,
+            request.category, source, request.active ?: current?.active ?: true,
             startsOn, endsOn, request.notes ?: current?.notes, current?.createdAt ?: OffsetDateTime.now(), current?.updatedAt ?: OffsetDateTime.now())
     }
 
     private fun <T> byUser(userId: UUID, orderBy: String, ascending: Boolean) = QueryWrapper<T>()
         .eq("user_id", userId)
         .orderBy(true, ascending, orderBy)
+
+    private fun requireAllowed(field: String, value: String, allowed: Set<String>): String {
+        if (value !in allowed) throw BusinessException(400, "$field 值无效")
+        return value
+    }
 
     private fun <T> owned(record: T?, userId: UUID): T = when (record) {
         is UserBodyMeasurement -> record.takeIf { it.userId == userId }

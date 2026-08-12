@@ -7,6 +7,7 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import java.net.URI
 
@@ -62,6 +63,11 @@ class OssConfig {
             .endpointOverride(URI.create(properties.presignedAddr))
             .credentialsProvider(credentialsProvider)
             .region(Region.of(properties.region))
+            // 强制路径风格（http://endpoint/bucket/object），与 s3Client 一致；
+            // 自建 S3（RustFS / MinIO）无泛域名解析，否则预签名 URL 会变成 {bucket}.{endpoint} 无法访问
+            .serviceConfiguration(
+                S3Configuration.builder().pathStyleAccessEnabled(true).build()
+            )
             .build()
     }
 }

@@ -73,7 +73,7 @@ class AuthentikAuthFilter(
                 chain.filter(sanitizedExchange.mutate().request(authenticatedRequest).build())
             }
             .onErrorResume { error ->
-                log.warn("Authentik token rejected for path {}: {}", path, error.javaClass.simpleName)
+                log.warn("Authentik token rejected for path {}: {}: {}", path, error.javaClass.simpleName, error.message)
                 unauthorized(exchange, "Token 无效或已过期")
             }
     }

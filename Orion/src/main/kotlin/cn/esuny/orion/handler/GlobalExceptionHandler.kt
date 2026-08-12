@@ -1,6 +1,8 @@
 package cn.esuny.orion.handler
 
 import cn.esuny.orion.model.result.ApiResponse
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.dao.DuplicateKeyException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -8,6 +10,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.servlet.resource.NoResourceFoundException
 
 /**
  * 全局异常处理器
@@ -45,6 +48,38 @@ class GlobalExceptionHandler {
     fun handleBusinessException(e: BusinessException): ResponseEntity<ApiResponse<Nothing>> {
         log.warn("Business Exception [{}]: {}", e.code, e.message)
         return ResponseEntity.status(e.httpStatus).body(ApiResponse.error(e.code, e.message))
+    }
+
+    /**
+     * 处理数据库唯一约束冲突。客户端请求本身有效，但不能创建重复业务记录。
+     */
+    @ExceptionHandler(DuplicateKeyException::class)
+    fun handleDuplicateKey(e: DuplicateKeyException): ResponseEntity<ApiResponse<Nothing>> {
+        val message = if (e.message?.contains("uq_health_goals_active_type") == true) {
+            "该类型的有效健康目标已存在"
+        } else {
+            "数据已存在，不能重复创建"
+        }
+        log.warn("409 Conflict: {}", message)
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(409, message))
+    }
+
+    /**
+     * 处理数据库检查约束等数据完整性错误，避免把客户端输入错误记录为 500。
+     */
+    @ExceptionHandler(DataIntegrityViolationException::class)
+    fun handleDataIntegrityViolation(e: DataIntegrityViolationException): ResponseEntity<ApiResponse<Nothing>> {
+        log.warn("400 Data Integrity Violation: {}", e.rootCause?.message ?: e.message)
+        return ResponseEntity.badRequest().body(ApiResponse.error(400, "请求数据违反业务约束"))
+    }
+
+    /**
+     * 处理不存在的接口或静态资源请求。
+     */
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun handleNoResourceFound(e: NoResourceFoundException): ResponseEntity<ApiResponse<Nothing>> {
+        log.warn("404 Resource Not Found: {}", e.message)
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(404, "接口或资源不存在"))
     }
 
     /**

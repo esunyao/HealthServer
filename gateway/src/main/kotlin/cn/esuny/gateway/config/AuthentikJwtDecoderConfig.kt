@@ -1,6 +1,7 @@
 package cn.esuny.gateway.config
 
 import cn.esuny.gateway.security.AudienceValidator
+import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator
@@ -32,6 +33,8 @@ private class LazyAuthentikJwtDecoder(
     private val properties: AuthentikProperties
 ) : ReactiveJwtDecoder {
 
+    private val log = LoggerFactory.getLogger(LazyAuthentikJwtDecoder::class.java)
+
     private val initializedDecoder = AtomicReference<ReactiveJwtDecoder>()
 
     override fun decode(token: String): Mono<Jwt> = decoder()
@@ -48,14 +51,15 @@ private class LazyAuthentikJwtDecoder(
 
     private fun createDecoder(): ReactiveJwtDecoder {
         val issuerUri = properties.issuerUri.trim()
-        require(issuerUri.isNotEmpty()) {
-            "AUTHENTIK_ISSUER_URI must be configured with the issuer from Authentik OpenID Discovery."
+        if (issuerUri.isEmpty()) {
+            throw IllegalStateException("AUTHENTIK_ISSUER_URI 未配置（空值）：请在 gateway 环境变量/.env 中设置 Authentik issuer，例如 https://auth.lovedage.com:8093/application/o/diet-health/")
         }
 
         val audiences = properties.configuredAudiences()
-        require(audiences.isNotEmpty()) {
-            "AUTHENTIK_AUDIENCES must include this OIDC application's client ID."
+        if (audiences.isEmpty()) {
+            throw IllegalStateException("AUTHENTIK_AUDIENCES 未配置（空值）：请在 gateway 环境变量/.env 中设置 OIDC client_id")
         }
+        log.info("初始化 Authentik JWT 解码器：issuer={} audiences={}", issuerUri, audiences)
 
         val decoder = ReactiveJwtDecoders.fromIssuerLocation<NimbusReactiveJwtDecoder>(issuerUri)
 

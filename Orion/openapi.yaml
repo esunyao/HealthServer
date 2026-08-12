@@ -7,6 +7,8 @@ info:
 
     客户端只需向 Gateway 发送 Bearer Access Token。Gateway 验签后向 Orion 注入可信身份信息，Orion 使用 Authentik `sub` UUID 自动建档。
     所有接口和字段均带有中文说明，导入 Apifox 后可直接生成接口目录、请求模型和响应模型。
+
+    业务校验失败（包括非法枚举值、日期范围、数值范围和 JSON 格式）返回 400；同一用户已有同类型有效健康目标时返回 409；不存在的接口或资源返回 404。临床观察和同意记录只支持查询与追加，不提供删除或修改接口。
 servers:
   - url: http://localhost:8091
     description: 本地 Gateway
@@ -151,7 +153,7 @@ paths:
     post:
       tags: [健康目标]
       summary: 新增健康目标
-      description: 为当前用户新增健康目标；目标类型、状态和日期组合必须满足业务约束。
+      description: 为当前用户新增健康目标；goalType、status 必须使用文档枚举，目标类型、状态和日期组合必须满足业务约束；同一用户同一类型只能有一个有效目标，重复创建返回 409。
       operationId: createHealthGoal
       requestBody: { $ref: '#/components/requestBodies/HealthGoal' }
       responses:
@@ -159,6 +161,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/ServerError' }
 
   /v1/users/self/health-goals/{id}:
@@ -166,7 +169,7 @@ paths:
     patch:
       tags: [健康目标]
       summary: 修改健康目标
-      description: targetDate 不能早于 startedOn。
+      description: goalType、status 必须使用文档枚举，targetDate 不能早于 startedOn；切换为有效状态时，同一用户同一类型不能与已有有效目标重复，冲突返回 409。
       operationId: updateHealthGoal
       requestBody: { $ref: '#/components/requestBodies/HealthGoal' }
       responses:
@@ -175,6 +178,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/ServerError' }
     delete:
       tags: [健康目标]
@@ -542,7 +546,7 @@ components:
       description: 用户、档案、业务记录或头像不存在
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
     Conflict:
-      description: 业务账户已经注销
+      description: 当前业务状态冲突，例如业务账户已经注销，或同一用户同类型有效健康目标已存在
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
     ServerError:
       description: 服务器内部错误
