@@ -1,0 +1,488 @@
+openapi: 3.1.0
+info:
+  title: NutriMemo 饮食数据服务 API
+  version: 1.0.0
+  description: |
+    NutriMemo 负责饮食手动记录、食物库、餐盘图片留档与每日营养汇总。
+    认证由 Authentik OIDC 和 Gateway 负责：客户端仅向 Gateway 发送 Bearer Access Token；Gateway 验签后注入可信身份，NutriMemo 以 X-Auth-Subject UUID 进行数据隔离。
+    本版本不提供 AI 图像识别、健康评分、风险预警、营养处方、报告或模型任务接口。图片仅作为未来 AI 模块可消费的原始素材。
+servers:
+  - url: http://localhost:8091
+    description: 本地 Gateway（需由 Gateway 路由 /v1/nutri/** 至 NutriMemo）
+tags:
+  - name: 公共食物库
+  - name: 自定义食物
+  - name: 餐次记录
+  - name: 餐盘图片
+  - name: 营养汇总
+security:
+  - bearerAuth: []
+paths:
+  /v1/nutri/foods:
+    get:
+      tags: [公共食物库]
+      summary: 搜索可选食物
+      description: 返回公共基础库以及当前用户未停用的自定义食物；不返回其他用户的自定义食物。
+      operationId: searchFoods
+      parameters:
+        - $ref: '#/components/parameters/Keyword'
+        - $ref: '#/components/parameters/FoodType'
+        - $ref: '#/components/parameters/IncludeCustom'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': { $ref: '#/components/responses/FoodPageResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/foods/{foodId}:
+    get:
+      tags: [公共食物库]
+      summary: 获取食物及每 100g 营养成分
+      operationId: getFood
+      parameters: [{ $ref: '#/components/parameters/FoodId' }]
+      responses:
+        '200': { $ref: '#/components/responses/FoodResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/custom-foods:
+    get:
+      tags: [自定义食物]
+      summary: 查询当前用户自定义食物
+      operationId: listCustomFoods
+      parameters:
+        - $ref: '#/components/parameters/IncludeInactive'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': { $ref: '#/components/responses/FoodPageResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [自定义食物]
+      summary: 创建当前用户自定义食物
+      description: 每 100g 的能量、蛋白质、脂肪、碳水化合物为必填；其余营养素可选。
+      operationId: createCustomFood
+      requestBody: { $ref: '#/components/requestBodies/CustomFoodCreate' }
+      responses:
+        '201': { $ref: '#/components/responses/FoodResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/custom-foods/{foodId}:
+    parameters: [{ $ref: '#/components/parameters/FoodId' }]
+    patch:
+      tags: [自定义食物]
+      summary: 修改当前用户自定义食物
+      description: 仅允许修改创建者自己的自定义食物；修改不回写既有餐次的营养快照。
+      operationId: updateCustomFood
+      requestBody: { $ref: '#/components/requestBodies/CustomFoodUpdate' }
+      responses:
+        '200': { $ref: '#/components/responses/FoodResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [自定义食物]
+      summary: 停用当前用户自定义食物
+      description: 软停用；历史餐次及其快照继续保留。
+      operationId: deactivateCustomFood
+      responses:
+        '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/meals:
+    get:
+      tags: [餐次记录]
+      summary: 查询餐次历史
+      operationId: listMeals
+      parameters:
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+        - $ref: '#/components/parameters/MealType'
+        - $ref: '#/components/parameters/MealStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': { $ref: '#/components/responses/MealPageResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [餐次记录]
+      summary: 创建餐次及食物条目
+      description: 以 X-Idempotency-Key 保证同一用户的重复提交只创建一条餐次。服务端根据 consumedAt 和 timezone 固化 localDate，并计算、固化所有营养快照与当日汇总。
+      operationId: createMeal
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { $ref: '#/components/requestBodies/MealUpsert' }
+      responses:
+        '201': { $ref: '#/components/responses/MealResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/meals/{mealId}:
+    parameters: [{ $ref: '#/components/parameters/MealId' }]
+    get:
+      tags: [餐次记录]
+      summary: 获取餐次详情
+      operationId: getMeal
+      responses:
+        '200': { $ref: '#/components/responses/MealResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    put:
+      tags: [餐次记录]
+      summary: 整体更新餐次
+      description: 以请求条目整体替换当前餐次条目，重新固化快照并重算原/新本地日期的每日汇总；只允许修改自己的非 deleted 餐次。
+      operationId: replaceMeal
+      requestBody: { $ref: '#/components/requestBodies/MealUpsert' }
+      responses:
+        '200': { $ref: '#/components/responses/MealResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [餐次记录]
+      summary: 删除餐次
+      description: 软删除餐次并重算对应每日汇总；已确认图片不再对客户端展示，后续由对象清理任务回收。
+      operationId: deleteMeal
+      responses:
+        '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/meals/{mealId}/images/presign:
+    post:
+      tags: [餐盘图片]
+      summary: 获取餐盘图片预签名上传 URL
+      description: 仅允许向自身餐次签发。对象键由服务端限定为 nutri/{userUuid}/{mealId}/...；客户端以 PUT 直传 OSS。
+      operationId: presignMealImage
+      parameters: [{ $ref: '#/components/parameters/MealId' }]
+      requestBody: { $ref: '#/components/requestBodies/MealImagePresign' }
+      responses:
+        '200': { $ref: '#/components/responses/PresignedUrlResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/meals/{mealId}/images/confirm:
+    post:
+      tags: [餐盘图片]
+      summary: 确认上传并关联餐盘图片
+      description: 服务端验证 objectKey 前缀、所属用户、媒体类型和 OSS 对象存在后才创建 confirmed 图片记录；未经确认的对象不能用于未来 AI 消费。
+      operationId: confirmMealImage
+      parameters: [{ $ref: '#/components/parameters/MealId' }]
+      requestBody: { $ref: '#/components/requestBodies/MealImageConfirm' }
+      responses:
+        '201': { $ref: '#/components/responses/MealImageResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/meals/{mealId}/images/{imageId}:
+    delete:
+      tags: [餐盘图片]
+      summary: 删除餐盘图片
+      operationId: deleteMealImage
+      parameters:
+        - $ref: '#/components/parameters/MealId'
+        - $ref: '#/components/parameters/ImageId'
+      responses:
+        '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/summaries/daily:
+    get:
+      tags: [营养汇总]
+      summary: 获取指定本地日期的营养汇总
+      description: 仅汇总 active 餐次，不包含健康评分、预警或目标达标率。
+      operationId: getDailyNutritionSummary
+      parameters: [{ $ref: '#/components/parameters/LocalDate' }]
+      responses:
+        '200': { $ref: '#/components/responses/DailySummaryResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /v1/nutri/summaries/daily-trend:
+    get:
+      tags: [营养汇总]
+      summary: 获取每日营养趋势
+      operationId: getDailyNutritionTrend
+      parameters:
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+      responses:
+        '200': { $ref: '#/components/responses/DailyTrendResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Authentik OIDC Access Token；不得由客户端传递 X-Auth-Subject 或 X-Gateway-Source。
+  parameters:
+    FoodId: { name: foodId, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+    MealId: { name: mealId, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+    ImageId: { name: imageId, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+    Keyword: { name: q, in: query, required: false, description: 食物名称、别名、品牌或条码关键词, schema: { type: string, minLength: 1, maxLength: 100 } }
+    FoodType: { name: foodType, in: query, required: false, schema: { $ref: '#/components/schemas/FoodType' } }
+    IncludeCustom: { name: includeCustom, in: query, required: false, schema: { type: boolean, default: true } }
+    IncludeInactive: { name: includeInactive, in: query, required: false, schema: { type: boolean, default: false } }
+    MealType: { name: mealType, in: query, required: false, schema: { $ref: '#/components/schemas/MealType' } }
+    MealStatus: { name: status, in: query, required: false, schema: { $ref: '#/components/schemas/MealStatus' } }
+    DateFrom: { name: dateFrom, in: query, required: true, schema: { type: string, format: date } }
+    DateTo: { name: dateTo, in: query, required: true, schema: { type: string, format: date } }
+    LocalDate: { name: localDate, in: query, required: true, schema: { type: string, format: date } }
+    Page: { name: page, in: query, required: false, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: true
+      description: 客户端为一次创建操作生成的 UUID；同一用户和键重复提交返回首次创建结果。
+      schema: { type: string, format: uuid }
+  requestBodies:
+    CustomFoodCreate:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/CustomFoodCreateRequest' } } }
+    CustomFoodUpdate:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/CustomFoodUpdateRequest' } } }
+    MealUpsert:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/MealUpsertRequest' } } }
+    MealImagePresign:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/MealImagePresignRequest' } } }
+    MealImageConfirm:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/MealImageConfirmRequest' } } }
+  responses:
+    FoodResponse: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/FoodApiResponse' } } } }
+    FoodPageResponse: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/FoodPageApiResponse' } } } }
+    MealResponse: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/MealApiResponse' } } } }
+    MealPageResponse: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/MealPageApiResponse' } } } }
+    PresignedUrlResponse: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/PresignedUrlApiResponse' } } } }
+    MealImageResponse: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/MealImageApiResponse' } } } }
+    DailySummaryResponse: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/DailySummaryApiResponse' } } } }
+    DailyTrendResponse: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/DailyTrendApiResponse' } } } }
+    EmptyResponse: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyApiResponse' } } } }
+    BadRequest: { description: 请求参数或状态不合法, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorApiResponse' } } } }
+    Unauthorized: { description: 缺少或无效访问令牌，或未经过可信 Gateway, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorApiResponse' } } } }
+    NotFound: { description: 资源不存在或不属于当前用户, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorApiResponse' } } } }
+    Conflict: { description: 幂等键、重复名称或上传确认状态冲突, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorApiResponse' } } } }
+    ServerError: { description: 服务端错误, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorApiResponse' } } } }
+  schemas:
+    FoodType: { type: string, enum: [ingredient, dish, packaged_food, beverage, supplement], description: 食物分类 }
+    FoodScope: { type: string, enum: [public, personal], description: public 为公共库，personal 为当前用户私有库 }
+    MealType: { type: string, enum: [breakfast, lunch, dinner, snack, other] }
+    MealStatus: { type: string, enum: [active, deleted] }
+    EntrySource: { type: string, enum: [manual, photo_placeholder, import], description: photo_placeholder 不产生 AI 识别结果 }
+    ImageStatus: { type: string, enum: [pending, confirmed, deleted] }
+    NutrientValueInput:
+      type: object
+      required: [nutrientCode, amount]
+      properties:
+        nutrientCode: { type: string, maxLength: 64, example: PROTEIN }
+        amount: { type: number, minimum: 0, maximum: 100000, description: 每 100g 可食部的营养量，单位由标准营养素字典决定 }
+    FoodNutrient:
+      allOf:
+        - $ref: '#/components/schemas/NutrientValueInput'
+        - type: object
+          required: [nutrientName, unit]
+          properties:
+            nutrientName: { type: string, example: 蛋白质 }
+            unit: { type: string, example: g }
+    CustomFoodCreateRequest:
+      type: object
+      required: [name, foodType, nutrients]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        foodType: { $ref: '#/components/schemas/FoodType' }
+        brandName: { type: [string, 'null'], maxLength: 100 }
+        defaultServingG: { type: [number, 'null'], minimum: 0.01, maximum: 10000 }
+        aliases: { type: array, maxItems: 20, items: { type: string, minLength: 1, maxLength: 100 } }
+        nutrients:
+          type: array
+          minItems: 4
+          maxItems: 100
+          description: 必须包含 ENERGY_KCAL、PROTEIN、FAT、CARBOHYDRATE。
+          items: { $ref: '#/components/schemas/NutrientValueInput' }
+    CustomFoodUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/CustomFoodCreateRequest'
+    Food:
+      type: object
+      required: [foodId, scope, name, foodType, active, nutrients, version, createdAt, updatedAt]
+      properties:
+        foodId: { type: integer, format: int64, minimum: 1 }
+        scope: { $ref: '#/components/schemas/FoodScope' }
+        name: { type: string }
+        foodType: { $ref: '#/components/schemas/FoodType' }
+        brandName: { type: [string, 'null'] }
+        defaultServingG: { type: [number, 'null'] }
+        aliases: { type: array, items: { type: string } }
+        active: { type: boolean }
+        nutrients: { type: array, items: { $ref: '#/components/schemas/FoodNutrient' } }
+        version: { type: integer, minimum: 1, description: 食物营养资料版本；历史餐次使用快照而非此值回算 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    MealItemInput:
+      type: object
+      required: [foodId, consumedAmountG]
+      properties:
+        foodId: { type: integer, format: int64, minimum: 1 }
+        consumedAmountG: { type: number, minimum: 0.01, maximum: 100000, description: 实际摄入重量，克 }
+        displayName: { type: [string, 'null'], maxLength: 150, description: 可覆盖展示名，不改变标准食物名称 }
+        notes: { type: [string, 'null'], maxLength: 500 }
+    MealUpsertRequest:
+      type: object
+      required: [mealType, consumedAt, timezone, entrySource, items]
+      properties:
+        mealType: { $ref: '#/components/schemas/MealType' }
+        consumedAt: { type: string, format: date-time, description: 实际用餐时间，含 offset }
+        timezone: { type: string, minLength: 1, maxLength: 64, example: Asia/Shanghai, description: IANA 时区；服务端据此固化 localDate }
+        scenario: { type: [string, 'null'], maxLength: 64, example: home, description: 家庭、食堂、外卖等自由业务标签 }
+        entrySource: { $ref: '#/components/schemas/EntrySource' }
+        notes: { type: [string, 'null'], maxLength: 1000 }
+        items: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/MealItemInput' } }
+    MealItem:
+      type: object
+      required: [itemId, sequenceNo, foodNameSnapshot, consumedAmountG, nutrientSnapshots, createdAt]
+      properties:
+        itemId: { type: integer, format: int64 }
+        sequenceNo: { type: integer, minimum: 1 }
+        foodId: { type: [integer, 'null'], format: int64, description: 来源食物；未来来源删除时可为空，快照仍完整 }
+        foodVersion: { type: [integer, 'null'] }
+        foodNameSnapshot: { type: string }
+        consumedAmountG: { type: number }
+        notes: { type: [string, 'null'] }
+        nutrientSnapshots: { type: array, items: { $ref: '#/components/schemas/FoodNutrient' }, description: 已按实际克数换算的条目营养量 }
+        createdAt: { type: string, format: date-time }
+    MealImage:
+      type: object
+      required: [imageId, objectKey, contentType, status, createdAt]
+      properties:
+        imageId: { type: integer, format: int64 }
+        objectKey: { type: string, description: 不含访问凭据的 OSS 对象键 }
+        contentType: { type: string, example: image/jpeg }
+        capturedAt: { type: [string, 'null'], format: date-time }
+        status: { $ref: '#/components/schemas/ImageStatus' }
+        createdAt: { type: string, format: date-time }
+    Meal:
+      type: object
+      required: [mealId, mealType, consumedAt, timezone, localDate, entrySource, status, items, images, createdAt, updatedAt]
+      properties:
+        mealId: { type: integer, format: int64 }
+        mealType: { $ref: '#/components/schemas/MealType' }
+        consumedAt: { type: string, format: date-time }
+        timezone: { type: string }
+        localDate: { type: string, format: date, description: 由服务端固定，不允许客户端直接写入 }
+        scenario: { type: [string, 'null'] }
+        entrySource: { $ref: '#/components/schemas/EntrySource' }
+        notes: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/MealStatus' }
+        items: { type: array, items: { $ref: '#/components/schemas/MealItem' } }
+        images: { type: array, items: { $ref: '#/components/schemas/MealImage' } }
+        nutrients: { type: array, items: { $ref: '#/components/schemas/FoodNutrient' }, description: 餐次条目快照求和，供列表展示 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    MealImagePresignRequest:
+      type: object
+      required: [fileName, contentType, contentLength]
+      properties:
+        fileName: { type: string, minLength: 1, maxLength: 255 }
+        contentType: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        contentLength: { type: integer, minimum: 1, maximum: 10485760, description: 最大 10 MiB }
+        capturedAt: { type: [string, 'null'], format: date-time }
+    MealImageConfirmRequest:
+      type: object
+      required: [objectKey]
+      properties:
+        objectKey: { type: string, minLength: 1, maxLength: 1024 }
+        capturedAt: { type: [string, 'null'], format: date-time }
+    PresignedUrl:
+      type: object
+      required: [uploadUrl, objectKey, expiresInSeconds, requiredHeaders]
+      properties:
+        uploadUrl: { type: string, format: uri }
+        objectKey: { type: string }
+        expiresInSeconds: { type: integer, minimum: 1 }
+        requiredHeaders: { type: object, additionalProperties: { type: string }, description: 上传 PUT 时必须携带的请求头 }
+    DailyNutritionSummary:
+      type: object
+      required: [localDate, mealCount, nutrients, updatedAt]
+      properties:
+        localDate: { type: string, format: date }
+        mealCount: { type: integer, minimum: 0 }
+        nutrients: { type: array, items: { $ref: '#/components/schemas/FoodNutrient' } }
+        mealBreakdown:
+          type: array
+          items:
+            type: object
+            required: [mealType, mealCount, nutrients]
+            properties:
+              mealType: { $ref: '#/components/schemas/MealType' }
+              mealCount: { type: integer }
+              nutrients: { type: array, items: { $ref: '#/components/schemas/FoodNutrient' } }
+        updatedAt: { type: string, format: date-time }
+    DailyNutritionTrend:
+      type: object
+      required: [dateFrom, dateTo, days]
+      properties:
+        dateFrom: { type: string, format: date }
+        dateTo: { type: string, format: date }
+        days: { type: array, items: { $ref: '#/components/schemas/DailyNutritionSummary' } }
+    PageMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer, format: int64 }
+    ApiResponseBase:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code: { type: integer, example: 200 }
+        message: { type: string, example: success }
+        traceId: { type: string, description: Gateway 透传的链路追踪标识 }
+    ErrorApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: 'null' } }
+    EmptyApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties: { data: { type: 'null' } }
+    FoodApiResponse:
+      allOf: [ { $ref: '#/components/schemas/ApiResponseBase' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/Food' } } } ]
+    FoodPageApiResponse:
+      allOf: [ { $ref: '#/components/schemas/ApiResponseBase' }, { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: '#/components/schemas/Food' } }, page: { $ref: '#/components/schemas/PageMeta' } } } } } ]
+    MealApiResponse:
+      allOf: [ { $ref: '#/components/schemas/ApiResponseBase' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/Meal' } } } ]
+    MealPageApiResponse:
+      allOf: [ { $ref: '#/components/schemas/ApiResponseBase' }, { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: '#/components/schemas/Meal' } }, page: { $ref: '#/components/schemas/PageMeta' } } } } } ]
+    PresignedUrlApiResponse:
+      allOf: [ { $ref: '#/components/schemas/ApiResponseBase' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/PresignedUrl' } } } ]
+    MealImageApiResponse:
+      allOf: [ { $ref: '#/components/schemas/ApiResponseBase' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/MealImage' } } } ]
+    DailySummaryApiResponse:
+      allOf: [ { $ref: '#/components/schemas/ApiResponseBase' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/DailyNutritionSummary' } } } ]
+    DailyTrendApiResponse:
+      allOf: [ { $ref: '#/components/schemas/ApiResponseBase' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/DailyNutritionTrend' } } } ]

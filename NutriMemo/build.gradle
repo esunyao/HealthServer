@@ -1,0 +1,54 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+    id 'org.jetbrains.kotlin.plugin.spring'
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+}
+
+dependencies {
+    // Spring Boot Web (Servlet) — 传统 MVC，用于处理用户请求
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // MyBatis-Plus — ORM 持久化层，Spring Boot 4 专用 starter
+    implementation 'com.baomidou:mybatis-plus-spring-boot4-starter:3.5.17'
+    // MyBatis-Plus 分页插件（需要 jsqlparser）
+    implementation 'com.baomidou:mybatis-plus-jsqlparser:3.5.17'
+
+    // PostgreSQL JDBC 驱动（PgStringArrayTypeHandler 编译期需要 PGobject）
+    implementation 'org.postgresql:postgresql'
+
+    // Nacos 服务注册与发现 — Spring Cloud Alibaba 原生支持
+    implementation 'com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-config'
+    implementation 'com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-discovery'
+
+    // Spring Boot Actuator — 提供 /actuator/health 等运维监控端点
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // 验证 — Bean Validation，配合实体校验
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // AWS S3 SDK（S3 兼容协议，支持 RustFS / MinIO / 阿里云 OSS）
+    implementation 'software.amazon.awssdk:s3:2.31.6'
+
+    // Flyway — 管理 Orion 数据库结构迁移
+    implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+
+    // 测试依赖
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.jetbrains.kotlin:kotlin-test'
+    testImplementation 'io.mockk:mockk:1.13.16'
+}
+
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll '-Xjsr305=strict', '-Xannotation-default-target=param-property'
+    }
+}
+
+// Source - https://stackoverflow.com/a/69099942
+// Posted by Issa Khodadadi
+// Retrieved 2026-07-26, License - CC BY-SA 4.0
+
+tasks.register("prepareKotlinBuildScriptModel"){}

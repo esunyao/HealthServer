@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: NutriMemo
+
+  config:
+    import:
+      - "optional:nacos:NutriMemo_Application.yaml?group=NUTRIMEMO_GROUP&refreshEnabled=true"
+
+  datasource:
+    url: ${DB_URL:}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 3
+      connection-timeout: 20000
+
+  flyway:
+    enabled: false
+
+  cloud:
+    nacos:
+      serverAddr: ${NACOS_SERVER_ADDR:}
+      username: ${NACOS_USERNAME:}
+      password: ${NACOS_PASSWORD:}
+      discovery:
+        enabled: true
+        group: HEALTH_GROUP
+
+nutri:
+  oss:
+    endpoint: ${NUTRI_OSS_ENDPOINT:}
+    presigned-addr: ${NUTRI_OSS_ADDR:}
+    access-key: ${NUTRI_OSS_ACCESS_KEY:}
+    secret-key: ${NUTRI_OSS_SECRET_KEY:}
+    bucket: ${NUTRI_OSS_BUCKET:}
+    region: ${NUTRI_OSS_REGION:us-east-1}
+    presigned-expiration: 5m
+    max-file-size: 10485760
+    allowed-content-types: [image/jpeg, image/png, image/webp]
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    cn.esuny.nutrimemo: INFO
