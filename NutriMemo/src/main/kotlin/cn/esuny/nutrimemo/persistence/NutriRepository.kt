@@ -8,9 +8,11 @@ import cn.esuny.nutrimemo.model.MealRecord
 import cn.esuny.nutrimemo.model.NutrientDefinition
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
+import org.springframework.jdbc.core.SqlParameterValue
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.sql.ResultSet
+import java.sql.Types
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.UUID
@@ -20,7 +22,7 @@ class NutriRepository(private val jdbc: JdbcTemplate) {
     private val foodMapper = RowMapper { rs: ResultSet, _: Int -> FoodRecord(rs.getLong("food_id"), rs.getObject("owner_user_id", UUID::class.java), rs.getString("scope"), rs.getString("name"), rs.getString("food_type"), rs.getString("brand_name"), rs.getBigDecimal("default_serving_g"), rs.getInt("version"), rs.getBoolean("active"), rs.getObject("created_at", OffsetDateTime::class.java), rs.getObject("updated_at", OffsetDateTime::class.java)) }
     private val nutrientMapper = RowMapper { rs: ResultSet, _: Int -> NutrientDefinition(rs.getLong("nutrient_id"), rs.getString("nutrient_code"), rs.getString("nutrient_name"), rs.getString("unit"), rs.getBoolean("active")) }
     private val mealMapper = RowMapper { rs: ResultSet, _: Int -> MealRecord(rs.getLong("meal_id"), rs.getObject("user_id", UUID::class.java), rs.getString("meal_type"), rs.getObject("consumed_at", OffsetDateTime::class.java), rs.getString("timezone"), rs.getObject("local_date", LocalDate::class.java), rs.getString("scenario"), rs.getString("entry_source"), rs.getString("notes"), rs.getString("status"), rs.getObject("idempotency_key", UUID::class.java), rs.getObject("created_at", OffsetDateTime::class.java), rs.getObject("updated_at", OffsetDateTime::class.java)) }
-    private val itemMapper = RowMapper { rs: ResultSet, _: Int -> MealItemRecord(rs.getLong("item_id"), rs.getLong("meal_id"), rs.getInt("sequence_no"), rs.getObject("food_id", Long::class.java), rs.getObject("food_version", Int::class.java), rs.getString("food_name_snapshot"), rs.getBigDecimal("consumed_amount_g"), rs.getString("notes"), rs.getObject("created_at", OffsetDateTime::class.java)) }
+    private val itemMapper = RowMapper { rs: ResultSet, _: Int -> MealItemRecord(rs.getLong("item_id"), rs.getLong("meal_id"), rs.getInt("sequence_no"), rs.getObject("food_id", Long::class.javaObjectType), rs.getObject("food_version", Int::class.javaObjectType), rs.getString("food_name_snapshot"), rs.getBigDecimal("consumed_amount_g"), rs.getString("notes"), rs.getObject("created_at", OffsetDateTime::class.java)) }
     private val imageMapper = RowMapper { rs: ResultSet, _: Int -> MealImageRecord(rs.getLong("image_id"), rs.getLong("meal_id"), rs.getObject("user_id", UUID::class.java), rs.getString("bucket"), rs.getString("object_key"), rs.getString("content_type"), rs.getLong("content_length"), rs.getObject("captured_at", OffsetDateTime::class.java), rs.getString("status"), rs.getObject("confirmed_at", OffsetDateTime::class.java), rs.getObject("created_at", OffsetDateTime::class.java)) }
 
     fun nutrientsByCodes(codes: Collection<String>) = if (codes.isEmpty()) emptyList() else jdbc.query("SELECT nutrient_id,nutrient_code,nutrient_name,unit,active FROM nutri.nutrient_definitions WHERE nutrient_code IN (${codes.joinToString(",") { "?" }})", nutrientMapper, *codes.toTypedArray())
@@ -28,20 +30,34 @@ class NutriRepository(private val jdbc: JdbcTemplate) {
     fun aliases(foodId: Long): List<String> = jdbc.queryForList("SELECT alias_value FROM nutri.food_aliases WHERE food_id=? ORDER BY alias_id", String::class.java, foodId).filterNotNull()
     fun foodNutrients(foodId: Long): List<Triple<NutrientDefinition, BigDecimal, String>> = jdbc.query("SELECT n.nutrient_id,n.nutrient_code,n.nutrient_name,n.unit,n.active,v.amount_per_100g,v.data_source FROM nutri.food_nutrient_values v JOIN nutri.nutrient_definitions n ON n.nutrient_id=v.nutrient_id WHERE v.food_id=? ORDER BY n.display_order", { rs, _ -> Triple(NutrientDefinition(rs.getLong(1),rs.getString(2),rs.getString(3),rs.getString(4),rs.getBoolean(5)),rs.getBigDecimal(6),rs.getString(7)) }, foodId)
     fun searchFoods(userId: UUID, q: String?, type: String?, includeCustom: Boolean, offset: Int, limit: Int): List<FoodRecord> {
-        val sql="SELECT * FROM nutri.foods f WHERE f.active AND (f.scope='public' OR (? AND f.owner_user_id=?)) AND (? IS NULL OR f.food_type=?) AND (? IS NULL OR LOWER(f.name) LIKE ? OR EXISTS(SELECT 1 FROM nutri.food_aliases a WHERE a.food_id=f.food_id AND a.normalized_value LIKE ?)) ORDER BY f.scope, f.name OFFSET ? LIMIT ?"
-        val term=q?.trim()?.lowercase()?.takeIf{it.isNotBlank()}?.let{"%$it%"}
-        return jdbc.query(sql,foodMapper,includeCustom,userId,type,type,term,term,term,offset,limit)
+        val term = searchTerm(q)
+        return jdbc.query(
+            "SELECT * FROM nutri.foods f WHERE f.active AND (f.scope='public' OR (? AND f.owner_user_id=?)) " +
+                "AND (CAST(? AS VARCHAR) IS NULL OR f.food_type=CAST(? AS VARCHAR)) " +
+                "AND (CAST(? AS VARCHAR) IS NULL OR LOWER(f.name) LIKE CAST(? AS VARCHAR) OR " +
+                "EXISTS(SELECT 1 FROM nutri.food_aliases a WHERE a.food_id=f.food_id AND a.normalized_value LIKE CAST(? AS VARCHAR))) " +
+                "ORDER BY f.scope, f.name OFFSET ? LIMIT ?",
+            foodMapper,
+            boolean(includeCustom), uuid(userId), varchar(type), varchar(type), varchar(term), varchar(term), varchar(term), integer(offset), integer(limit)
+        )
     }
     fun countFoods(userId: UUID, q: String?, type: String?, includeCustom: Boolean): Long {
-        val term=q?.trim()?.lowercase()?.takeIf{it.isNotBlank()}?.let{"%$it%"}
-        return jdbc.queryForObject("SELECT COUNT(*) FROM nutri.foods f WHERE f.active AND (f.scope='public' OR (? AND f.owner_user_id=?)) AND (? IS NULL OR f.food_type=?) AND (? IS NULL OR LOWER(f.name) LIKE ? OR EXISTS(SELECT 1 FROM nutri.food_aliases a WHERE a.food_id=f.food_id AND a.normalized_value LIKE ?))",Long::class.java,includeCustom,userId,type,type,term,term,term) ?: 0
+        val term = searchTerm(q)
+        return jdbc.queryForObject(
+            "SELECT COUNT(*) FROM nutri.foods f WHERE f.active AND (f.scope='public' OR (? AND f.owner_user_id=?)) " +
+                "AND (CAST(? AS VARCHAR) IS NULL OR f.food_type=CAST(? AS VARCHAR)) " +
+                "AND (CAST(? AS VARCHAR) IS NULL OR LOWER(f.name) LIKE CAST(? AS VARCHAR) OR " +
+                "EXISTS(SELECT 1 FROM nutri.food_aliases a WHERE a.food_id=f.food_id AND a.normalized_value LIKE CAST(? AS VARCHAR)))",
+            Long::class.javaObjectType,
+            boolean(includeCustom), uuid(userId), varchar(type), varchar(type), varchar(term), varchar(term), varchar(term)
+        ) ?: 0
     }
     fun customFoods(userId: UUID, includeInactive: Boolean, offset: Int, limit: Int): List<FoodRecord> = jdbc.query(
         "SELECT * FROM nutri.foods WHERE owner_user_id=? AND scope='personal' AND (? OR active) ORDER BY active DESC,name OFFSET ? LIMIT ?",
         foodMapper, userId, includeInactive, offset, limit
     )
     fun countCustomFoods(userId: UUID, includeInactive: Boolean): Long = jdbc.queryForObject(
-        "SELECT COUNT(*) FROM nutri.foods WHERE owner_user_id=? AND scope='personal' AND (? OR active)", Long::class.java, userId, includeInactive
+        "SELECT COUNT(*) FROM nutri.foods WHERE owner_user_id=? AND scope='personal' AND (? OR active)", Long::class.javaObjectType, userId, includeInactive
     ) ?: 0
     fun insertFood(food: FoodRecord) = jdbc.update("INSERT INTO nutri.foods(food_id,owner_user_id,scope,name,food_type,brand_name,default_serving_g,version,active) VALUES(?,?,?,?,?,?,?,?,?)",food.foodId,food.ownerUserId,food.scope,food.name,food.foodType,food.brandName,food.defaultServingG,food.version,food.active)
     fun updateFood(food: FoodRecord) = jdbc.update("UPDATE nutri.foods SET name=?,food_type=?,brand_name=?,default_serving_g=?,version=version+1 WHERE food_id=? AND owner_user_id=? AND scope='personal' AND active",food.name,food.foodType,food.brandName,food.defaultServingG,food.foodId,food.ownerUserId)
@@ -62,19 +78,36 @@ class NutriRepository(private val jdbc: JdbcTemplate) {
     fun imageByKey(key:String,mealId:Long,userId:UUID)=jdbc.query("SELECT * FROM nutri.meal_images WHERE object_key=? AND meal_id=? AND user_id=?",imageMapper,key,mealId,userId).firstOrNull()
     fun confirmImage(id:Long,capturedAt:OffsetDateTime?)=jdbc.update("UPDATE nutri.meal_images SET status='confirmed',confirmed_at=NOW(),captured_at=COALESCE(?,captured_at) WHERE image_id=? AND status='pending'",capturedAt,id)
     fun deleteImage(id:Long)=jdbc.update("UPDATE nutri.meal_images SET status='deleted',deleted_at=NOW() WHERE image_id=? AND status <> 'deleted'",id)
-    fun listMeals(user:UUID,from:LocalDate,to:LocalDate,type:String?,offset:Int,limit:Int)=jdbc.query("SELECT * FROM nutri.meal_records WHERE user_id=? AND status='active' AND local_date BETWEEN ? AND ? AND (? IS NULL OR meal_type=?) ORDER BY consumed_at DESC OFFSET ? LIMIT ?",mealMapper,user,from,to,type,type,offset,limit)
-    fun countMeals(user:UUID,from:LocalDate,to:LocalDate,type:String?)=jdbc.queryForObject("SELECT COUNT(*) FROM nutri.meal_records WHERE user_id=? AND status='active' AND local_date BETWEEN ? AND ? AND (? IS NULL OR meal_type=?)",Long::class.java,user,from,to,type,type)?:0
+    fun listMeals(user: UUID, from: LocalDate, to: LocalDate, type: String?, offset: Int, limit: Int) = jdbc.query(
+        "SELECT * FROM nutri.meal_records WHERE user_id=? AND status='active' AND local_date BETWEEN ? AND ? " +
+            "AND (CAST(? AS VARCHAR) IS NULL OR meal_type=CAST(? AS VARCHAR)) ORDER BY consumed_at DESC OFFSET ? LIMIT ?",
+        mealMapper,
+        uuid(user), date(from), date(to), varchar(type), varchar(type), integer(offset), integer(limit)
+    )
+    fun countMeals(user: UUID, from: LocalDate, to: LocalDate, type: String?) = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM nutri.meal_records WHERE user_id=? AND status='active' AND local_date BETWEEN ? AND ? " +
+            "AND (CAST(? AS VARCHAR) IS NULL OR meal_type=CAST(? AS VARCHAR))",
+        Long::class.javaObjectType,
+        uuid(user), date(from), date(to), varchar(type), varchar(type)
+    ) ?: 0
     fun summaryRows(user:UUID,date:LocalDate)=jdbc.query("SELECT s.meal_count,s.updated_at,v.nutrient_code_snapshot,v.nutrient_name_snapshot,v.unit_snapshot,v.total_amount FROM nutri.daily_nutrition_summaries s LEFT JOIN nutri.daily_nutrition_values v ON v.summary_id=s.summary_id WHERE s.user_id=? AND s.local_date=? ORDER BY v.nutrient_code_snapshot",{rs,_->arrayOf(rs.getInt(1),rs.getObject(2,OffsetDateTime::class.java),rs.getString(3),rs.getString(4),rs.getString(5),rs.getBigDecimal(6))},user,date)
     fun mealBreakdownRows(user: UUID, date: LocalDate) = jdbc.query(
         "SELECT m.meal_type, COUNT(DISTINCT m.meal_id), s.nutrient_code_snapshot,s.nutrient_name_snapshot,s.unit_snapshot,SUM(s.amount) FROM nutri.meal_records m JOIN nutri.meal_items i ON i.meal_id=m.meal_id JOIN nutri.meal_item_nutrient_snapshots s ON s.item_id=i.item_id WHERE m.user_id=? AND m.local_date=? AND m.status='active' GROUP BY m.meal_type,s.nutrient_code_snapshot,s.nutrient_name_snapshot,s.unit_snapshot ORDER BY m.meal_type,s.nutrient_code_snapshot",
         {rs,_->arrayOf(rs.getString(1),rs.getInt(2),rs.getString(3),rs.getString(4),rs.getString(5),rs.getBigDecimal(6))}, user, date
     )
     fun recalculateDaily(user:UUID,date:LocalDate,summaryId:Long) {
-        val count=jdbc.queryForObject("SELECT COUNT(*) FROM nutri.meal_records WHERE user_id=? AND local_date=? AND status='active'",Int::class.java,user,date)?:0
+        val count=jdbc.queryForObject("SELECT COUNT(*) FROM nutri.meal_records WHERE user_id=? AND local_date=? AND status='active'",Int::class.javaObjectType,user,date)?:0
         if(count==0){jdbc.update("DELETE FROM nutri.daily_nutrition_summaries WHERE user_id=? AND local_date=?",user,date);return}
         jdbc.update("INSERT INTO nutri.daily_nutrition_summaries(summary_id,user_id,local_date,meal_count,last_recalculated_at) VALUES(?,?,?,?,NOW()) ON CONFLICT(user_id,local_date) DO UPDATE SET meal_count=EXCLUDED.meal_count,last_recalculated_at=NOW()",summaryId,user,date,count)
-        val id=jdbc.queryForObject("SELECT summary_id FROM nutri.daily_nutrition_summaries WHERE user_id=? AND local_date=?",Long::class.java,user,date)!!
+        val id=jdbc.queryForObject("SELECT summary_id FROM nutri.daily_nutrition_summaries WHERE user_id=? AND local_date=?",Long::class.javaObjectType,user,date)!!
         jdbc.update("DELETE FROM nutri.daily_nutrition_values WHERE summary_id=?",id)
         jdbc.update("INSERT INTO nutri.daily_nutrition_values(summary_id,nutrient_id,nutrient_code_snapshot,nutrient_name_snapshot,unit_snapshot,total_amount) SELECT ?,x.nutrient_id,x.nutrient_code_snapshot,x.nutrient_name_snapshot,x.unit_snapshot,SUM(x.amount) FROM nutri.meal_item_nutrient_snapshots x JOIN nutri.meal_items i ON i.item_id=x.item_id JOIN nutri.meal_records m ON m.meal_id=i.meal_id WHERE m.user_id=? AND m.local_date=? AND m.status='active' GROUP BY x.nutrient_id,x.nutrient_code_snapshot,x.nutrient_name_snapshot,x.unit_snapshot",id,user,date)
     }
+
+    private fun searchTerm(q: String?) = q?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { "%$it%" }
+    private fun boolean(value: Boolean) = SqlParameterValue(Types.BOOLEAN, value)
+    private fun uuid(value: UUID) = SqlParameterValue(Types.OTHER, value)
+    private fun varchar(value: String?) = SqlParameterValue(Types.VARCHAR, value)
+    private fun date(value: LocalDate) = SqlParameterValue(Types.DATE, value)
+    private fun integer(value: Int) = SqlParameterValue(Types.INTEGER, value)
 }

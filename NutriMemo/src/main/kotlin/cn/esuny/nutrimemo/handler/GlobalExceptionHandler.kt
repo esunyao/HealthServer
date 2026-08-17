@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import java.sql.SQLException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -32,8 +33,13 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException::class)
     fun integrity(e: DataIntegrityViolationException): ResponseEntity<ApiResponse<Nothing>> {
-        log.warn("Data integrity violation: {}", e.rootCause?.message ?: e.message)
-        return respond(HttpStatus.BAD_REQUEST, 400, "请求数据违反业务约束")
+        val sqlState = findSqlState(e)
+        if (sqlState?.startsWith("23") == true) {
+            log.warn("Data integrity violation [sqlState={}]: {}", sqlState, e.rootCause?.message ?: e.message)
+            return respond(HttpStatus.BAD_REQUEST, 400, "请求数据违反业务约束")
+        }
+        log.error("Database operation failed [sqlState={}]", sqlState, e)
+        return respond(HttpStatus.INTERNAL_SERVER_ERROR, 500, "服务器内部错误，请联系管理员")
     }
 
     @ExceptionHandler(NoResourceFoundException::class)
@@ -47,4 +53,13 @@ class GlobalExceptionHandler {
 
     private fun respond(status: HttpStatus, code: Int, message: String): ResponseEntity<ApiResponse<Nothing>> =
         ResponseEntity.status(status).body(ApiResponse.error(code, message))
+
+    private fun findSqlState(error: Throwable): String? {
+        var current: Throwable? = error
+        while (current != null) {
+            if (current is SQLException) return current.sqlState
+            current = current.cause
+        }
+        return null
+    }
 }
