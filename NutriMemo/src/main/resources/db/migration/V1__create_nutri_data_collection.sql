@@ -74,8 +74,7 @@ CREATE TABLE nutri.integration_outbox (
     published_at TIMESTAMPTZ,
     last_error VARCHAR(1000),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_outbox_capture_event UNIQUE (aggregate_id, event_type)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_outbox_delivery ON nutri.integration_outbox(status, next_attempt_at) WHERE status IN ('pending', 'failed');
 

@@ -12,7 +12,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import java.net.URI
 
 @Configuration
-@EnableConfigurationProperties(OssProperties::class)
+@EnableConfigurationProperties(OssProperties::class, CaptureProperties::class)
 class OssConfig {
     private fun credentials(properties: OssProperties) = StaticCredentialsProvider.create(
         AwsBasicCredentials.create(properties.accessKey, properties.secretKey)

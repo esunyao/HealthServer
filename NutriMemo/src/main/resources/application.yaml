@@ -32,6 +32,9 @@ spring:
         group: HEALTH_GROUP
 
 nutri:
+  capture:
+    session-ttl: 24h
+    cleanup-interval: 15m
   oss:
     endpoint: ${NUTRI_OSS_ENDPOINT:}
     presigned-addr: ${NUTRI_OSS_ADDR:}
