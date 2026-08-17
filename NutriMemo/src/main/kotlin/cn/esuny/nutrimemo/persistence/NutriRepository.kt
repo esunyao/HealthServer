@@ -10,6 +10,30 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.UUID
 
+internal data class MealSearchFilter(val whereClause: String, val parameters: List<Any>)
+
+/**
+ * 只为实际提供的筛选值增加占位符，避免 PostgreSQL 对 `? IS NULL` 的 null 参数无法推断类型。
+ */
+internal fun mealSearchFilter(userId: UUID, from: LocalDate, to: LocalDate, type: String?, keyword: String?): MealSearchFilter {
+    val conditions = mutableListOf(
+        "m.user_id=?",
+        "m.status='active'",
+        "m.local_date BETWEEN ? AND ?",
+    )
+    val parameters = mutableListOf<Any>(userId, from, to)
+    type?.let {
+        conditions += "m.meal_type=?"
+        parameters += it
+    }
+    keyword?.let {
+        conditions += "(m.notes ILIKE ? OR EXISTS(SELECT 1 FROM nutri.meal_items i WHERE i.meal_id=m.meal_id AND i.display_name ILIKE ?))"
+        parameters += it
+        parameters += it
+    }
+    return MealSearchFilter(conditions.joinToString(" AND "), parameters)
+}
+
 @Repository
 class NutriRepository(private val jdbc: JdbcTemplate) {
     private val nutrientMapper = RowMapper { rs: ResultSet, _: Int -> NutrientDefinition(rs.getLong("nutrient_id"), rs.getString("nutrient_code"), rs.getString("nutrient_name"), rs.getString("unit"), rs.getBoolean("active")) }
@@ -41,8 +65,14 @@ class NutriRepository(private val jdbc: JdbcTemplate) {
     fun insertOutbox(eventId: UUID, sessionId: UUID) = jdbc.update("INSERT INTO nutri.integration_outbox(event_id,aggregate_id,event_type,payload) VALUES(?,?, 'capture.ready.v1', jsonb_build_object('captureSessionId', CAST(? AS text)))", eventId, sessionId, sessionId)
 
     fun meal(id: Long, userId: UUID) = jdbc.query("SELECT * FROM nutri.meal_records WHERE meal_id=? AND user_id=?", mealMapper, id, userId).firstOrNull()
-    fun listMeals(userId: UUID, from: LocalDate, to: LocalDate, type: String?, keyword: String?, offset: Int, limit: Int) = jdbc.query("SELECT m.* FROM nutri.meal_records m WHERE m.user_id=? AND m.status='active' AND m.local_date BETWEEN ? AND ? AND (? IS NULL OR m.meal_type=?) AND (? IS NULL OR m.notes ILIKE ? OR EXISTS(SELECT 1 FROM nutri.meal_items i WHERE i.meal_id=m.meal_id AND i.display_name ILIKE ?)) ORDER BY m.consumed_at DESC OFFSET ? LIMIT ?", mealMapper, userId, from, to, type, type, keyword, keyword, keyword, offset, limit)
-    fun countMeals(userId: UUID, from: LocalDate, to: LocalDate, type: String?, keyword: String?) = jdbc.queryForObject("SELECT COUNT(*) FROM nutri.meal_records m WHERE m.user_id=? AND m.status='active' AND m.local_date BETWEEN ? AND ? AND (? IS NULL OR m.meal_type=?) AND (? IS NULL OR m.notes ILIKE ? OR EXISTS(SELECT 1 FROM nutri.meal_items i WHERE i.meal_id=m.meal_id AND i.display_name ILIKE ?))", Long::class.javaObjectType, userId, from, to, type, type, keyword, keyword, keyword) ?: 0
+    fun listMeals(userId: UUID, from: LocalDate, to: LocalDate, type: String?, keyword: String?, offset: Int, limit: Int): List<MealRecord> {
+        val filter = mealSearchFilter(userId, from, to, type, keyword)
+        return jdbc.query("SELECT m.* FROM nutri.meal_records m WHERE ${filter.whereClause} ORDER BY m.consumed_at DESC OFFSET ? LIMIT ?", mealMapper, *(filter.parameters + listOf(offset, limit)).toTypedArray())
+    }
+    fun countMeals(userId: UUID, from: LocalDate, to: LocalDate, type: String?, keyword: String?): Long {
+        val filter = mealSearchFilter(userId, from, to, type, keyword)
+        return jdbc.queryForObject("SELECT COUNT(*) FROM nutri.meal_records m WHERE ${filter.whereClause}", Long::class.javaObjectType, *filter.parameters.toTypedArray()) ?: 0
+    }
     fun updateMeal(value: MealRecord) = jdbc.update("UPDATE nutri.meal_records SET meal_type=?,consumed_at=?,timezone=?,local_date=?,notes=? WHERE meal_id=? AND user_id=? AND status='active'", value.mealType, value.consumedAt, value.timezone, value.localDate, value.notes, value.mealId, value.userId)
     fun deleteMeal(id: Long, userId: UUID) = jdbc.update("UPDATE nutri.meal_records SET status='deleted',deleted_at=NOW() WHERE meal_id=? AND user_id=? AND status='active'", id, userId)
     fun items(mealId: Long) = jdbc.query("SELECT * FROM nutri.meal_items WHERE meal_id=? ORDER BY sequence_no", itemMapper, mealId)
