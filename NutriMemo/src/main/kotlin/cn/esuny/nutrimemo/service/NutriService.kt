@@ -61,7 +61,7 @@ class NutriService(
         else repository.reuseDeletedImage(imageId, key, request.contentType, request.contentLength, request.capturedAt)
         if (session.status == "created") repository.updateSessionStatus(sessionId, user.userId, "uploading")
         val signed = s3Presigner.presignPutObject(PutObjectPresignRequest.builder().signatureDuration(oss.presignedExpiration).putObjectRequest(PutObjectRequest.builder().bucket(oss.bucket).key(key).contentType(request.contentType).contentLength(request.contentLength).build()).build())
-        return PresignedUrlView(signed.url().toString(), key, oss.presignedExpiration.seconds, mapOf("Content-Type" to request.contentType))
+        return PresignedUrlView(imageId.toString(), signed.url().toString(), key, oss.presignedExpiration.seconds, mapOf("Content-Type" to request.contentType))
     }
 
     @Transactional
@@ -113,7 +113,7 @@ class NutriService(
     fun meals(user: AuthenticatedUser, from: LocalDate, to: LocalDate, type: String?, q: String?, page: Int, pageSize: Int): PageResult<MealHistoryItemView> {
         validRange(from, to); type?.let { validMealType(it) }; validPage(page, pageSize)
         val keyword = q?.trim()?.takeIf { it.isNotEmpty() }?.let { "%$it%" }
-        val meals = repository.listMeals(user.userId, from, to, type, keyword, (page - 1) * pageSize, pageSize).map { meal -> MealHistoryItemView(meal.mealId, meal.mealType, meal.consumedAt, meal.localDate, meal.notes, repository.mealNutrients(meal.mealId)) }
+        val meals = repository.listMeals(user.userId, from, to, type, keyword, (page - 1) * pageSize, pageSize).map { meal -> MealHistoryItemView(meal.mealId.toString(), meal.mealType, meal.consumedAt, meal.localDate, meal.notes, repository.mealNutrients(meal.mealId)) }
         return PageResult(meals, page, pageSize, repository.countMeals(user.userId, from, to, type, keyword))
     }
 
@@ -174,8 +174,8 @@ class NutriService(
         return session
     }
     private fun captureView(value: CaptureSessionRecord) = CaptureSessionView(value.captureSessionId, value.status, value.timezone, value.maxImageCount, value.expiresAt, value.analysisRequestedAt, repository.images(value.captureSessionId).map(::imageView), value.createdAt, value.updatedAt)
-    private fun imageView(value: CaptureImageRecord) = CaptureImageView(value.imageId, value.slotNo, value.objectKey, value.contentType, value.contentLength, value.capturedAt, value.status, value.createdAt)
-    private fun mealView(value: MealRecord): MealView { val items = repository.items(value.mealId).map { item -> MealItemView(item.itemId, item.sequenceNo, item.displayName, item.estimatedWeightG, item.confidence, item.dataSource, item.userCorrected, item.notes, repository.itemNutrients(item.itemId)) }; return MealView(value.mealId, value.captureSessionId, value.mealType, value.consumedAt, value.timezone, value.localDate, value.notes, items, repository.mealNutrients(value.mealId), value.createdAt, value.updatedAt) }
+    private fun imageView(value: CaptureImageRecord) = CaptureImageView(value.imageId.toString(), value.slotNo, value.objectKey, value.contentType, value.contentLength, value.capturedAt, value.status, value.createdAt)
+    private fun mealView(value: MealRecord): MealView { val items = repository.items(value.mealId).map { item -> MealItemView(item.itemId.toString(), item.sequenceNo, item.displayName, item.estimatedWeightG, item.confidence, item.dataSource, item.userCorrected, item.notes, repository.itemNutrients(item.itemId)) }; return MealView(value.mealId.toString(), value.captureSessionId, value.mealType, value.consumedAt, value.timezone, value.localDate, value.notes, items, repository.mealNutrients(value.mealId), value.createdAt, value.updatedAt) }
     private fun daily(userId: UUID, date: LocalDate): DailySummaryView { val rows = repository.summaryRows(userId, date); if (rows.isEmpty()) return DailySummaryView(date, 0, emptyList(), emptyList(), OffsetDateTime.now()); val nutrients = rows.filter { it[2] != null }.map { NutrientValue(it[2] as String, it[3] as String, it[4] as String, it[5] as BigDecimal) }; val breakdown = repository.breakdownRows(userId, date).groupBy { it[0] as String }.map { (type, values) -> DailyMealBreakdown(type, values.first()[1] as Int, values.map { NutrientValue(it[2] as String, it[3] as String, it[4] as String, it[5] as BigDecimal) }) }; return DailySummaryView(date, rows.first()[0] as Int, nutrients, breakdown, rows.first()[1] as OffsetDateTime) }
     private fun deleteObject(image: CaptureImageRecord) { try { s3Client.deleteObject(DeleteObjectRequest.builder().bucket(image.bucket).key(image.objectKey).build()) } catch (_: Exception) { } }
     private fun validateTimezone(value: String) { try { ZoneId.of(value) } catch (_: Exception) { bad("timezone 必须是有效 IANA 时区") } }

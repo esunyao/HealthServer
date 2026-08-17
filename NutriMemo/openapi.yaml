@@ -122,8 +122,8 @@ components:
   securitySchemes: { bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT } }
   parameters:
     CaptureSessionId: { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
-    ImageId: { name: imageId, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
-    MealId: { name: mealId, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+    ImageId: { name: imageId, in: path, required: true, schema: { type: string, description: 雪花 ID，以字符串传输避免 JavaScript 精度丢失 } }
+    MealId: { name: mealId, in: path, required: true, schema: { type: string, description: 雪花 ID，以字符串传输避免 JavaScript 精度丢失 } }
     IdempotencyKey: { name: X-Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }
     DateFrom: { name: dateFrom, in: query, required: true, schema: { type: string, format: date } }
     DateTo: { name: dateTo, in: query, required: true, schema: { type: string, format: date } }
@@ -137,14 +137,23 @@ components:
     CaptureSessionCreateRequest: { type: object, required: [timezone], properties: { timezone: { type: string, example: Asia/Shanghai } } }
     CaptureImagePresignRequest: { type: object, required: [fileName, contentType, contentLength], properties: { fileName: { type: string }, contentType: { type: string, enum: [image/jpeg, image/png, image/webp] }, contentLength: { type: integer, maximum: 10485760 }, capturedAt: { type: [string, 'null'], format: date-time } } }
     NutrientInput: { type: object, required: [nutrientCode, amount], properties: { nutrientCode: { type: string }, amount: { type: number, minimum: 0 } } }
-    MealCorrectionItem: { type: object, required: [displayName, nutrients], properties: { itemId: { type: [integer, 'null'], format: int64 }, displayName: { type: string }, estimatedWeightG: { type: [number, 'null'] }, notes: { type: [string, 'null'] }, nutrients: { type: array, items: { $ref: '#/components/schemas/NutrientInput' } } } }
+    MealCorrectionItem: { type: object, required: [displayName, nutrients], properties: { itemId: { type: [string, 'null'], description: 雪花 ID，以字符串传输避免 JavaScript 精度丢失 }, displayName: { type: string }, estimatedWeightG: { type: [number, 'null'] }, notes: { type: [string, 'null'] }, nutrients: { type: array, items: { $ref: '#/components/schemas/NutrientInput' } } } }
     MealCorrectionRequest: { type: object, required: [mealType, consumedAt, timezone, items], properties: { mealType: { $ref: '#/components/schemas/MealType' }, consumedAt: { type: string, format: date-time }, timezone: { type: string }, notes: { type: [string, 'null'] }, items: { type: array, items: { $ref: '#/components/schemas/MealCorrectionItem' } } } }
+    PresignedUrl:
+      type: object
+      required: [imageId, uploadUrl, objectKey, expiresInSeconds, requiredHeaders]
+      properties:
+        imageId: { type: string, description: 图片雪花 ID；客户端必须按字符串保存并用于确认路径 }
+        uploadUrl: { type: string, format: uri }
+        objectKey: { type: string }
+        expiresInSeconds: { type: integer }
+        requiredHeaders: { type: object, additionalProperties: { type: string } }
     ApiResponse: { type: object, required: [code, message, traceId], properties: { code: { type: integer }, message: { type: string }, traceId: { type: string }, data: {} } }
   responses:
     CapturePolicy: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
     CaptureSession: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
     CaptureImage: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
-    PresignedUrl: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+    PresignedUrl: { description: 成功, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/PresignedUrl' } } }] } } } }
     Meal: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
     MealPage: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
     DailySummary: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
