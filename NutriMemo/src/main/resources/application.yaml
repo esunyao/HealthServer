@@ -35,6 +35,7 @@ nutri:
   capture:
     session-ttl: 24h
     cleanup-interval: 15m
+    max-draft-sessions: 5
   oss:
     endpoint: ${NUTRI_OSS_ENDPOINT:}
     presigned-addr: ${NUTRI_OSS_ADDR:}

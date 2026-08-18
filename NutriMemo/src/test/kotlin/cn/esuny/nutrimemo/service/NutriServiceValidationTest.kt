@@ -33,5 +33,7 @@ class NutriServiceValidationTest {
         val policy = service.capturePolicy()
         assertEquals(10, policy.maxImageCount)
         assertEquals(86_400, policy.sessionExpiresInSeconds)
+        assertEquals(5, policy.maxDraftSessionCount)
+        assertEquals(86_400, policy.draftExpiresInSeconds)
     }
 }

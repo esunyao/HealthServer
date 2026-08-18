@@ -12,9 +12,11 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -33,12 +35,14 @@ class NutriService(
     private val oss: OssProperties,
     private val capture: CaptureProperties
 ) {
-    fun capturePolicy() = CapturePolicyView(10, oss.maxFileSize, oss.allowedContentTypes, capture.sessionTtl.seconds)
+    fun capturePolicy() = CapturePolicyView(10, oss.maxFileSize, oss.allowedContentTypes, capture.sessionTtl.seconds, capture.maxDraftSessions, capture.sessionTtl.seconds)
 
     @Transactional
     fun createCaptureSession(user: AuthenticatedUser, requestId: UUID, request: CaptureSessionCreateRequest): CaptureSessionView {
         validateTimezone(request.timezone)
         repository.sessionByRequest(user.userId, requestId)?.let { return captureView(it) }
+        repository.lockUserDrafts(user.userId)
+        if (repository.activeDraftCount(user.userId, OffsetDateTime.now()) >= capture.maxDraftSessions) conflict("未提交草稿已达上限，请先提交或取消一份草稿")
         val now = OffsetDateTime.now()
         val record = CaptureSessionRecord(UUID.randomUUID(), user.userId, requestId, "created", request.timezone.trim(), 10, now.plus(capture.sessionTtl), null, now, now)
         repository.insertSession(record)
@@ -46,6 +50,22 @@ class NutriService(
     }
 
     fun captureSession(user: AuthenticatedUser, id: UUID) = captureView(repository.session(id, user.userId) ?: notFound())
+
+    fun captureDrafts(user: AuthenticatedUser): CaptureDraftPage {
+        val drafts = repository.draftSessions(user.userId, OffsetDateTime.now()).map { session ->
+            CaptureDraftSummaryView(
+                session.captureSessionId,
+                session.status,
+                repository.confirmedImageCount(session.captureSessionId),
+                session.maxImageCount,
+                session.expiresAt,
+                session.createdAt,
+                session.updatedAt,
+                repository.images(session.captureSessionId).filter { it.status == "confirmed" }.map(::imageView),
+            )
+        }
+        return CaptureDraftPage(drafts, drafts.size)
+    }
 
     @Transactional
     fun presignCaptureImage(user: AuthenticatedUser, sessionId: UUID, request: CaptureImagePresignRequest): PresignedUrlView {
@@ -83,23 +103,37 @@ class NutriService(
     }
 
     @Transactional
-    fun submitCapture(user: AuthenticatedUser, sessionId: UUID): CaptureSessionView {
-        val session = mutableSession(user, sessionId)
+    fun submitCapture(user: AuthenticatedUser, sessionId: UUID, request: CaptureSubmitRequest): CaptureSubmissionView {
+        val session = repository.sessionForUpdate(sessionId, user.userId) ?: notFound()
+        if (session.expiresAt.isBefore(OffsetDateTime.now())) conflict("采集会话已过期")
+        if (session.status !in setOf("created", "uploading")) {
+            val existing = repository.mealByCaptureSession(sessionId, user.userId)
+            if (existing != null) return CaptureSubmissionView(captureView(session), mealView(existing))
+            conflict("当前会话不能提交识别")
+        }
         if (repository.confirmedImageCount(sessionId) == 0) bad("请至少确认一张图片后再开始识别")
-        if (session.status !in setOf("created", "uploading")) conflict("当前会话不能提交识别")
+        validMealType(request.mealType)
+        val consumedAt = repository.earliestConfirmedImageTime(sessionId) ?: session.createdAt
+        val notes = request.notes?.trim()?.ifBlank { null }
+        val mealId = ids.nextId()
+        val meal = MealRecord(mealId, session.captureSessionId, user.userId, request.mealType, consumedAt, session.timezone, consumedAt.atZoneSameInstant(ZoneId.of(session.timezone)).toLocalDate(), notes, "queued", "active", OffsetDateTime.now(), OffsetDateTime.now())
+        repository.insertMeal(meal)
         repository.updateSessionStatus(sessionId, user.userId, "ready_for_analysis", true)
-        repository.insertOutbox(UUID.randomUUID(), sessionId)
-        return captureView(repository.session(sessionId, user.userId)!!)
+        repository.insertOutbox(UUID.randomUUID(), sessionId, mealId)
+        repository.recalculateDaily(user.userId, meal.localDate, ids.nextId())
+        return CaptureSubmissionView(captureView(repository.session(sessionId, user.userId)!!), mealView(repository.meal(mealId, user.userId)!!))
     }
 
     @Transactional
-    fun retryCapture(user: AuthenticatedUser, sessionId: UUID): CaptureSessionView {
+    fun retryCapture(user: AuthenticatedUser, sessionId: UUID): CaptureSubmissionView {
         val session = repository.sessionForUpdate(sessionId, user.userId) ?: notFound()
         if (session.status != "failed") conflict("仅识别失败的会话可以重试")
         if (repository.confirmedImageCount(sessionId) == 0) bad("会话没有可用于重试的已确认图片")
+        val meal = repository.mealByCaptureSession(sessionId, user.userId) ?: notFound()
+        repository.updateMealAnalysisStatus(meal.mealId, user.userId, "queued")
         repository.updateSessionStatus(sessionId, user.userId, "ready_for_analysis", true)
-        repository.insertOutbox(UUID.randomUUID(), sessionId)
-        return captureView(repository.session(sessionId, user.userId)!!)
+        repository.insertOutbox(UUID.randomUUID(), sessionId, meal.mealId)
+        return CaptureSubmissionView(captureView(repository.session(sessionId, user.userId)!!), mealView(repository.meal(meal.mealId, user.userId)!!))
     }
 
     @Transactional
@@ -113,11 +147,28 @@ class NutriService(
     fun meals(user: AuthenticatedUser, from: LocalDate, to: LocalDate, type: String?, q: String?, page: Int, pageSize: Int): PageResult<MealHistoryItemView> {
         validRange(from, to); type?.let { validMealType(it) }; validPage(page, pageSize)
         val keyword = q?.trim()?.takeIf { it.isNotEmpty() }?.let { "%$it%" }
-        val meals = repository.listMeals(user.userId, from, to, type, keyword, (page - 1) * pageSize, pageSize).map { meal -> MealHistoryItemView(meal.mealId.toString(), meal.mealType, meal.consumedAt, meal.localDate, meal.notes, repository.mealNutrients(meal.mealId)) }
+        val meals = repository.listMeals(user.userId, from, to, type, keyword, (page - 1) * pageSize, pageSize).map { meal -> MealHistoryItemView(meal.mealId.toString(), meal.mealType, meal.consumedAt, meal.localDate, meal.notes, meal.analysisStatus, repository.mealNutrients(meal.mealId)) }
         return PageResult(meals, page, pageSize, repository.countMeals(user.userId, from, to, type, keyword))
     }
 
-    fun meal(user: AuthenticatedUser, id: Long) = mealView(repository.meal(id, user.userId) ?: notFound())
+    fun meal(user: AuthenticatedUser, id: Long) = mealView(repository.meal(id, user.userId)?.takeIf { it.status == "active" } ?: notFound())
+
+    @Transactional
+    fun patchMeal(user: AuthenticatedUser, id: Long, request: MealMetadataPatchRequest): MealView {
+        val current = repository.meal(id, user.userId)?.takeIf { it.status == "active" } ?: notFound()
+        val mealType = request.mealType ?: current.mealType
+        val consumedAt = request.consumedAt ?: current.consumedAt
+        val timezone = request.timezone?.trim()?.ifBlank { current.timezone } ?: current.timezone
+        validMealType(mealType)
+        validateTimezone(timezone)
+        if (consumedAt.isAfter(OffsetDateTime.now().plusMinutes(5))) bad("用餐时间不能晚于当前时间")
+        val localDate = consumedAt.atZoneSameInstant(ZoneId.of(timezone)).toLocalDate()
+        val updated = current.copy(mealType = mealType, consumedAt = consumedAt, timezone = timezone, localDate = localDate, notes = request.notes?.trim()?.ifBlank { null })
+        repository.updateMeal(updated)
+        repository.recalculateDaily(user.userId, current.localDate, ids.nextId())
+        if (localDate != current.localDate) repository.recalculateDaily(user.userId, localDate, ids.nextId())
+        return meal(user, id)
+    }
 
     @Transactional
     fun replaceMeal(user: AuthenticatedUser, id: Long, request: MealCorrectionRequest): MealView {
@@ -135,7 +186,7 @@ class NutriService(
         val definitions = repository.nutrientsByCodes(codes).associateBy { it.nutrientCode }
         if (definitions.size != codes.toSet().size || definitions.values.any { !it.active }) bad("包含不存在或已停用的营养素编码")
         val localDate = request.consumedAt.atZoneSameInstant(ZoneId.of(request.timezone)).toLocalDate()
-        val updated = current.copy(mealType = request.mealType, consumedAt = request.consumedAt, timezone = request.timezone.trim(), localDate = localDate, notes = request.notes?.trim()?.ifBlank { null })
+        val updated = current.copy(mealType = request.mealType, consumedAt = request.consumedAt, timezone = request.timezone.trim(), localDate = localDate, notes = request.notes?.trim()?.ifBlank { null }, analysisStatus = if (request.items.isNotEmpty()) "completed" else current.analysisStatus)
         repository.updateMeal(updated)
         val items = request.items.mapIndexed { index, item -> MealItemRecord(item.itemId ?: ids.nextId(), id, index + 1, item.displayName.trim(), item.estimatedWeightG, null, "manual", true, item.notes?.trim()?.ifBlank { null }) }
         val values = items.zip(request.items).associate { (item, input) -> item.itemId to input.nutrients.map { nutrient -> definitions.getValue(nutrient.nutrientCode.trim().uppercase()) to nutrient.amount } }
@@ -174,8 +225,19 @@ class NutriService(
         return session
     }
     private fun captureView(value: CaptureSessionRecord) = CaptureSessionView(value.captureSessionId, value.status, value.timezone, value.maxImageCount, value.expiresAt, value.analysisRequestedAt, repository.images(value.captureSessionId).map(::imageView), value.createdAt, value.updatedAt)
-    private fun imageView(value: CaptureImageRecord) = CaptureImageView(value.imageId.toString(), value.slotNo, value.objectKey, value.contentType, value.contentLength, value.capturedAt, value.status, value.createdAt)
-    private fun mealView(value: MealRecord): MealView { val items = repository.items(value.mealId).map { item -> MealItemView(item.itemId.toString(), item.sequenceNo, item.displayName, item.estimatedWeightG, item.confidence, item.dataSource, item.userCorrected, item.notes, repository.itemNutrients(item.itemId)) }; return MealView(value.mealId.toString(), value.captureSessionId, value.mealType, value.consumedAt, value.timezone, value.localDate, value.notes, items, repository.mealNutrients(value.mealId), value.createdAt, value.updatedAt) }
+    private fun imageView(value: CaptureImageRecord): CaptureImageView {
+        val preview = if (value.status == "confirmed") {
+            try {
+                val signed = s3Presigner.presignGetObject(GetObjectPresignRequest.builder()
+                    .signatureDuration(oss.presignedExpiration)
+                    .getObjectRequest(GetObjectRequest.builder().bucket(value.bucket).key(value.objectKey).build())
+                    .build())
+                signed.url().toString() to oss.presignedExpiration.seconds
+            } catch (_: Exception) { null to null }
+        } else null to null
+        return CaptureImageView(value.imageId.toString(), value.slotNo, value.objectKey, value.contentType, value.contentLength, value.capturedAt, value.status, value.createdAt, preview.first, preview.second)
+    }
+    private fun mealView(value: MealRecord): MealView { val items = repository.items(value.mealId).map { item -> MealItemView(item.itemId.toString(), item.sequenceNo, item.displayName, item.estimatedWeightG, item.confidence, item.dataSource, item.userCorrected, item.notes, repository.itemNutrients(item.itemId)) }; return MealView(value.mealId.toString(), value.captureSessionId, value.mealType, value.consumedAt, value.timezone, value.localDate, value.notes, value.analysisStatus, items, repository.mealNutrients(value.mealId), value.createdAt, value.updatedAt) }
     private fun daily(userId: UUID, date: LocalDate): DailySummaryView { val rows = repository.summaryRows(userId, date); if (rows.isEmpty()) return DailySummaryView(date, 0, emptyList(), emptyList(), OffsetDateTime.now()); val nutrients = rows.filter { it[2] != null }.map { NutrientValue(it[2] as String, it[3] as String, it[4] as String, it[5] as BigDecimal) }; val breakdown = repository.breakdownRows(userId, date).groupBy { it[0] as String }.map { (type, values) -> DailyMealBreakdown(type, values.first()[1] as Int, values.map { NutrientValue(it[2] as String, it[3] as String, it[4] as String, it[5] as BigDecimal) }) }; return DailySummaryView(date, rows.first()[0] as Int, nutrients, breakdown, rows.first()[1] as OffsetDateTime) }
     private fun deleteObject(image: CaptureImageRecord) { try { s3Client.deleteObject(DeleteObjectRequest.builder().bucket(image.bucket).key(image.objectKey).build()) } catch (_: Exception) { } }
     private fun validateTimezone(value: String) { try { ZoneId.of(value) } catch (_: Exception) { bad("timezone 必须是有效 IANA 时区") } }

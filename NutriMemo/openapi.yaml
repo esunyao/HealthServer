@@ -31,6 +31,12 @@ paths:
         '201': { $ref: '#/components/responses/CaptureSession' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/nutri/capture-sessions/drafts:
+    get:
+      tags: [拍照采集]
+      summary: 获取当前用户未提交的拍照草稿
+      operationId: listCaptureDrafts
+      responses: { '200': { $ref: '#/components/responses/CaptureDraftPage' } }
   /v1/nutri/capture-sessions/{sessionId}:
     parameters: [{ $ref: '#/components/parameters/CaptureSessionId' }]
     get:
@@ -40,7 +46,7 @@ paths:
       responses: { '200': { $ref: '#/components/responses/CaptureSession' }, '404': { $ref: '#/components/responses/NotFound' } }
     delete:
       tags: [拍照采集]
-      summary: 取消未提交或失败的会话
+      summary: 取消尚未提交识别的会话
       operationId: cancelCaptureSession
       responses: { '200': { $ref: '#/components/responses/Empty' }, '409': { $ref: '#/components/responses/Conflict' } }
   /v1/nutri/capture-sessions/{sessionId}/images/presign:
@@ -68,17 +74,18 @@ paths:
   /v1/nutri/capture-sessions/{sessionId}/submit:
     post:
       tags: [拍照采集]
-      summary: 将至少一张已确认图片提交为待识别事件
+      summary: 将至少一张已确认图片先入库为餐食并提交待识别事件
       operationId: submitCaptureSession
       parameters: [{ $ref: '#/components/parameters/CaptureSessionId' }]
-      responses: { '202': { $ref: '#/components/responses/CaptureSession' }, '409': { $ref: '#/components/responses/Conflict' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CaptureSubmitRequest' } } } }
+      responses: { '202': { $ref: '#/components/responses/CaptureSubmission' }, '409': { $ref: '#/components/responses/Conflict' } }
   /v1/nutri/capture-sessions/{sessionId}/retry:
     post:
       tags: [拍照采集]
       summary: 复用失败会话的已确认图片重新排队
       operationId: retryCaptureSession
       parameters: [{ $ref: '#/components/parameters/CaptureSessionId' }]
-      responses: { '202': { $ref: '#/components/responses/CaptureSession' }, '409': { $ref: '#/components/responses/Conflict' } }
+      responses: { '202': { $ref: '#/components/responses/CaptureSubmission' }, '409': { $ref: '#/components/responses/Conflict' } }
   /v1/nutri/meals:
     get:
       tags: [餐次历史]
@@ -93,6 +100,12 @@ paths:
       summary: 获取单餐完整营养报告
       operationId: getMeal
       responses: { '200': { $ref: '#/components/responses/Meal' }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      tags: [餐次历史]
+      summary: 修改餐次元数据而不覆盖 AI 餐食项
+      operationId: patchMeal
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MealMetadataPatchRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Meal' }, '400': { $ref: '#/components/responses/BadRequest' } }
     put:
       tags: [餐次历史]
       summary: 整餐替换人工修正并重算汇总
@@ -135,10 +148,54 @@ components:
   schemas:
     MealType: { type: string, enum: [breakfast, lunch, dinner, snack, other] }
     CaptureSessionCreateRequest: { type: object, required: [timezone], properties: { timezone: { type: string, example: Asia/Shanghai } } }
+    CaptureSubmitRequest: { type: object, required: [mealType], properties: { mealType: { $ref: '#/components/schemas/MealType' }, notes: { type: [string, 'null'], maxLength: 1000 } } }
+    CapturePolicyView:
+      type: object
+      required: [maxImageCount, maxFileSizeBytes, allowedContentTypes, sessionExpiresInSeconds, maxDraftSessionCount, draftExpiresInSeconds]
+      properties:
+        maxImageCount: { type: integer, minimum: 1, maximum: 10 }
+        maxFileSizeBytes: { type: integer }
+        allowedContentTypes: { type: array, items: { type: string } }
+        sessionExpiresInSeconds: { type: integer }
+        maxDraftSessionCount: { type: integer, minimum: 1 }
+        draftExpiresInSeconds: { type: integer }
+    CaptureImage:
+      type: object
+      required: [imageId, slotNo, objectKey, contentType, contentLength, status, createdAt]
+      properties:
+        imageId: { type: string, description: 图片雪花 ID，以字符串传输 }
+        slotNo: { type: integer }
+        objectKey: { type: string }
+        contentType: { type: string }
+        contentLength: { type: integer }
+        capturedAt: { type: [string, 'null'], format: date-time }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        previewUrl: { type: [string, 'null'], format: uri, description: 仅当前用户可访问的短期预览地址 }
+        previewExpiresInSeconds: { type: [integer, 'null'] }
+    CaptureDraftSummary:
+      type: object
+      required: [captureSessionId, status, confirmedImageCount, maxImageCount, expiresAt, createdAt, updatedAt, images]
+      properties:
+        captureSessionId: { type: string, format: uuid }
+        status: { type: string, enum: [created, uploading] }
+        confirmedImageCount: { type: integer, minimum: 0 }
+        maxImageCount: { type: integer }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        images: { type: array, items: { $ref: '#/components/schemas/CaptureImage' } }
+    CaptureDraftPage:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CaptureDraftSummary' } }
+        total: { type: integer }
     CaptureImagePresignRequest: { type: object, required: [fileName, contentType, contentLength], properties: { fileName: { type: string }, contentType: { type: string, enum: [image/jpeg, image/png, image/webp] }, contentLength: { type: integer, maximum: 10485760 }, capturedAt: { type: [string, 'null'], format: date-time } } }
     NutrientInput: { type: object, required: [nutrientCode, amount], properties: { nutrientCode: { type: string }, amount: { type: number, minimum: 0 } } }
     MealCorrectionItem: { type: object, required: [displayName, nutrients], properties: { itemId: { type: [string, 'null'], description: 雪花 ID，以字符串传输避免 JavaScript 精度丢失 }, displayName: { type: string }, estimatedWeightG: { type: [number, 'null'] }, notes: { type: [string, 'null'] }, nutrients: { type: array, items: { $ref: '#/components/schemas/NutrientInput' } } } }
-    MealCorrectionRequest: { type: object, required: [mealType, consumedAt, timezone, items], properties: { mealType: { $ref: '#/components/schemas/MealType' }, consumedAt: { type: string, format: date-time }, timezone: { type: string }, notes: { type: [string, 'null'] }, items: { type: array, items: { $ref: '#/components/schemas/MealCorrectionItem' } } } }
+    MealMetadataPatchRequest: { type: object, properties: { mealType: { $ref: '#/components/schemas/MealType' }, consumedAt: { type: string, format: date-time }, timezone: { type: string }, notes: { type: [string, 'null'] } } }
+    MealCorrectionRequest: { type: object, required: [mealType, consumedAt, timezone], properties: { mealType: { $ref: '#/components/schemas/MealType' }, consumedAt: { type: string, format: date-time }, timezone: { type: string }, notes: { type: [string, 'null'] }, items: { type: array, items: { $ref: '#/components/schemas/MealCorrectionItem' } } } }
     PresignedUrl:
       type: object
       required: [imageId, uploadUrl, objectKey, expiresInSeconds, requiredHeaders]
@@ -150,9 +207,11 @@ components:
         requiredHeaders: { type: object, additionalProperties: { type: string } }
     ApiResponse: { type: object, required: [code, message, traceId], properties: { code: { type: integer }, message: { type: string }, traceId: { type: string }, data: {} } }
   responses:
-    CapturePolicy: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+    CapturePolicy: { description: 成功, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/CapturePolicyView' } } }] } } } }
     CaptureSession: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
-    CaptureImage: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+    CaptureDraftPage: { description: 成功, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/CaptureDraftPage' } } }] } } } }
+    CaptureSubmission: { description: 餐食已入库并排队, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+    CaptureImage: { description: 成功, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/CaptureImage' } } }] } } } }
     PresignedUrl: { description: 成功, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/PresignedUrl' } } }] } } } }
     Meal: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
     MealPage: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }

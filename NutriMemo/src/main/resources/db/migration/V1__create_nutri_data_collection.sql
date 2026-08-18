@@ -38,7 +38,7 @@ CREATE TABLE nutri.meal_capture_sessions (
     CONSTRAINT uq_capture_sessions_user_request UNIQUE (user_id, client_request_id)
 );
 CREATE INDEX idx_capture_sessions_user_status ON nutri.meal_capture_sessions(user_id, status, created_at DESC);
-CREATE INDEX idx_capture_sessions_expiry ON nutri.meal_capture_sessions(expires_at) WHERE status IN ('created', 'uploading', 'ready_for_analysis', 'analysing');
+CREATE INDEX idx_capture_sessions_expiry ON nutri.meal_capture_sessions(expires_at) WHERE status IN ('created', 'uploading');
 
 CREATE TABLE nutri.meal_capture_images (
     image_id BIGINT PRIMARY KEY CHECK (image_id > 0),
@@ -101,6 +101,7 @@ CREATE TABLE nutri.meal_records (
     local_date DATE NOT NULL,
     entry_source VARCHAR(24) NOT NULL DEFAULT 'ai_photo' CHECK (entry_source IN ('ai_photo')),
     notes VARCHAR(1000),
+    analysis_status VARCHAR(16) NOT NULL DEFAULT 'queued' CHECK (analysis_status IN ('queued', 'analysing', 'completed', 'failed')),
     status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'deleted')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

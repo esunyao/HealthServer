@@ -14,6 +14,10 @@ import java.time.OffsetDateTime
 import java.util.UUID
 
 data class CaptureSessionCreateRequest(@field:NotBlank @field:Size(max = 64) val timezone: String)
+data class CaptureSubmitRequest(
+    @field:NotBlank val mealType: String,
+    @field:Size(max = 1000) val notes: String? = null,
+)
 data class CaptureImagePresignRequest(
     @field:NotBlank @field:Size(max = 255) val fileName: String,
     @field:Pattern(regexp = "image/(jpeg|png|webp)") val contentType: String,
@@ -33,17 +37,44 @@ data class MealCorrectionRequest(
     @field:NotNull val consumedAt: OffsetDateTime,
     @field:NotBlank @field:Size(max = 64) val timezone: String,
     @field:Size(max = 1000) val notes: String? = null,
-    @field:NotEmpty @field:Size(max = 100) val items: List<@Valid MealCorrectionItemInput>
+    @field:Size(max = 100) val items: List<@Valid MealCorrectionItemInput> = emptyList(),
+)
+data class MealMetadataPatchRequest(
+    val mealType: String? = null,
+    val consumedAt: OffsetDateTime? = null,
+    @field:Size(max = 64) val timezone: String? = null,
+    @field:Size(max = 1000) val notes: String? = null,
 )
 
 data class NutrientValue(val nutrientCode: String, val nutrientName: String, val unit: String, val amount: BigDecimal)
 data class PresignedUrlView(val imageId: String, val uploadUrl: String, val objectKey: String, val expiresInSeconds: Long, val requiredHeaders: Map<String, String>)
-data class CapturePolicyView(val maxImageCount: Int, val maxFileSizeBytes: Long, val allowedContentTypes: List<String>, val sessionExpiresInSeconds: Long)
-data class CaptureImageView(val imageId: String, val slotNo: Int, val objectKey: String, val contentType: String, val contentLength: Long, val capturedAt: OffsetDateTime?, val status: String, val createdAt: OffsetDateTime)
+data class CapturePolicyView(
+    val maxImageCount: Int,
+    val maxFileSizeBytes: Long,
+    val allowedContentTypes: List<String>,
+    val sessionExpiresInSeconds: Long,
+    val maxDraftSessionCount: Int = 5,
+    val draftExpiresInSeconds: Long = sessionExpiresInSeconds,
+)
+data class CaptureImageView(
+    val imageId: String,
+    val slotNo: Int,
+    val objectKey: String,
+    val contentType: String,
+    val contentLength: Long,
+    val capturedAt: OffsetDateTime?,
+    val status: String,
+    val createdAt: OffsetDateTime,
+    val previewUrl: String? = null,
+    val previewExpiresInSeconds: Long? = null,
+)
 data class CaptureSessionView(val captureSessionId: UUID, val status: String, val timezone: String, val maxImageCount: Int, val expiresAt: OffsetDateTime, val analysisRequestedAt: OffsetDateTime?, val images: List<CaptureImageView>, val createdAt: OffsetDateTime, val updatedAt: OffsetDateTime)
+data class CaptureDraftSummaryView(val captureSessionId: UUID, val status: String, val confirmedImageCount: Int, val maxImageCount: Int, val expiresAt: OffsetDateTime, val createdAt: OffsetDateTime, val updatedAt: OffsetDateTime, val images: List<CaptureImageView>)
+data class CaptureDraftPage(val items: List<CaptureDraftSummaryView>, val total: Int)
 data class MealItemView(val itemId: String, val sequenceNo: Int, val displayName: String, val estimatedWeightG: BigDecimal?, val confidence: BigDecimal?, val dataSource: String, val userCorrected: Boolean, val notes: String?, val nutrients: List<NutrientValue>)
-data class MealView(val mealId: String, val captureSessionId: UUID, val mealType: String, val consumedAt: OffsetDateTime, val timezone: String, val localDate: LocalDate, val notes: String?, val items: List<MealItemView>, val nutrients: List<NutrientValue>, val createdAt: OffsetDateTime, val updatedAt: OffsetDateTime)
-data class MealHistoryItemView(val mealId: String, val mealType: String, val consumedAt: OffsetDateTime, val localDate: LocalDate, val notes: String?, val nutrients: List<NutrientValue>)
+data class MealView(val mealId: String, val captureSessionId: UUID, val mealType: String, val consumedAt: OffsetDateTime, val timezone: String, val localDate: LocalDate, val notes: String?, val analysisStatus: String, val items: List<MealItemView>, val nutrients: List<NutrientValue>, val createdAt: OffsetDateTime, val updatedAt: OffsetDateTime)
+data class MealHistoryItemView(val mealId: String, val mealType: String, val consumedAt: OffsetDateTime, val localDate: LocalDate, val notes: String?, val analysisStatus: String, val nutrients: List<NutrientValue>)
+data class CaptureSubmissionView(val captureSession: CaptureSessionView, val meal: MealView)
 data class PageResult<T>(val items: List<T>, val page: Int, val pageSize: Int, val total: Long)
 data class DailyMealBreakdown(val mealType: String, val mealCount: Int, val nutrients: List<NutrientValue>)
 data class DailySummaryView(val localDate: LocalDate, val mealCount: Int, val nutrients: List<NutrientValue>, val mealBreakdown: List<DailyMealBreakdown>, val updatedAt: OffsetDateTime)
@@ -52,5 +83,5 @@ data class DailyTrendView(val dateFrom: LocalDate, val dateTo: LocalDate, val da
 data class NutrientDefinition(val nutrientId: Long, val nutrientCode: String, val nutrientName: String, val unit: String, val active: Boolean)
 data class CaptureSessionRecord(val captureSessionId: UUID, val userId: UUID, val clientRequestId: UUID, val status: String, val timezone: String, val maxImageCount: Int, val expiresAt: OffsetDateTime, val analysisRequestedAt: OffsetDateTime?, val createdAt: OffsetDateTime, val updatedAt: OffsetDateTime)
 data class CaptureImageRecord(val imageId: Long, val captureSessionId: UUID, val slotNo: Int, val bucket: String, val objectKey: String, val contentType: String, val contentLength: Long, val capturedAt: OffsetDateTime?, val status: String, val confirmedAt: OffsetDateTime?, val createdAt: OffsetDateTime)
-data class MealRecord(val mealId: Long, val captureSessionId: UUID, val userId: UUID, val mealType: String, val consumedAt: OffsetDateTime, val timezone: String, val localDate: LocalDate, val notes: String?, val status: String, val createdAt: OffsetDateTime, val updatedAt: OffsetDateTime)
+data class MealRecord(val mealId: Long, val captureSessionId: UUID, val userId: UUID, val mealType: String, val consumedAt: OffsetDateTime, val timezone: String, val localDate: LocalDate, val notes: String?, val analysisStatus: String, val status: String, val createdAt: OffsetDateTime, val updatedAt: OffsetDateTime)
 data class MealItemRecord(val itemId: Long, val mealId: Long, val sequenceNo: Int, val displayName: String, val estimatedWeightG: BigDecimal?, val confidence: BigDecimal?, val dataSource: String, val userCorrected: Boolean, val notes: String?)
