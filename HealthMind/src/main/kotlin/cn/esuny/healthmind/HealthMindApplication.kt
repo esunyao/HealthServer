@@ -1,11 +1,11 @@
-package cn.esuny.nutrimind
+package cn.esuny.healthmind
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 
 @SpringBootApplication
-class NutriMindApplication
+class HealthMindApplication
 
 fun main(args: Array<String>) {
-    runApplication<NutriMindApplication>(*args)
+    runApplication<HealthMindApplication>(*args)
 }

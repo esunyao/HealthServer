@@ -1,10 +1,10 @@
-package cn.esuny.nutrimind
+package cn.esuny.healthmind
 
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 
 @SpringBootTest
-class NutriMindApplicationTests {
+class HealthMindApplicationTests {
 
     @Test
     fun contextLoads() {

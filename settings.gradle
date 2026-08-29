@@ -2,3 +2,4 @@ rootProject.name = 'HealthServer'
 include('gateway')
 include('orion')
 include('nutrimemo')
+include('healthmind')
