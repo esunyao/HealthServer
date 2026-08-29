@@ -67,9 +67,27 @@ class NutriRepository(private val jdbc: JdbcTemplate) {
         jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?::text, 0))", { _, _ -> Unit }, userId.toString())
     }
 
-    fun insertOutbox(eventId: UUID, sessionId: UUID, mealId: Long) = jdbc.update("INSERT INTO nutri.integration_outbox(event_id,aggregate_id,event_type,payload) VALUES(?,?, 'capture.ready.v1', jsonb_build_object('captureSessionId', CAST(? AS text), 'mealId', CAST(? AS text)))", eventId, sessionId, sessionId, mealId)
+    fun insertOutbox(eventId: UUID, sessionId: UUID, mealId: Long, userId: UUID, traceId: String) = jdbc.update(
+        """
+        INSERT INTO nutri.integration_outbox(event_id,aggregate_id,event_type,payload)
+        VALUES(?,?, 'nutrition.capture.ready.v1', jsonb_build_object(
+            'event_id', CAST(? AS text),
+            'event_type', 'nutrition.capture.ready.v1',
+            'occurred_at', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'producer', 'NutriMemo',
+            'trace_id', ?,
+            'subject_id', CAST(? AS text),
+            'aggregate_type', 'meal',
+            'aggregate_id', CAST(? AS text),
+            'schema_version', '1.0',
+            'payload', jsonb_build_object('capture_session_id', CAST(? AS text), 'meal_id', ?)
+        ))
+        """.trimIndent(),
+        eventId, sessionId, eventId, traceId, userId, mealId, sessionId, mealId,
+    )
 
     fun meal(id: Long, userId: UUID) = jdbc.query("SELECT * FROM nutri.meal_records WHERE meal_id=? AND user_id=?", mealMapper, id, userId).firstOrNull()
+    fun mealForUpdate(id: Long, userId: UUID) = jdbc.query("SELECT * FROM nutri.meal_records WHERE meal_id=? AND user_id=? FOR UPDATE", mealMapper, id, userId).firstOrNull()
     fun mealByCaptureSession(sessionId: UUID, userId: UUID) = jdbc.query("SELECT * FROM nutri.meal_records WHERE capture_session_id=? AND user_id=?", mealMapper, sessionId, userId).firstOrNull()
     fun earliestConfirmedImageTime(sessionId: UUID) = jdbc.queryForObject("SELECT MIN(captured_at) FROM nutri.meal_capture_images WHERE capture_session_id=? AND status='confirmed' AND captured_at IS NOT NULL", OffsetDateTime::class.java, sessionId)
     fun insertMeal(value: MealRecord) = jdbc.update("INSERT INTO nutri.meal_records(meal_id,capture_session_id,user_id,meal_type,consumed_at,timezone,local_date,notes,analysis_status,status) VALUES(?,?,?,?,?,?,?,?,'queued','active')", value.mealId, value.captureSessionId, value.userId, value.mealType, value.consumedAt, value.timezone, value.localDate, value.notes)
@@ -92,6 +110,23 @@ class NutriRepository(private val jdbc: JdbcTemplate) {
         items.forEach { item ->
             jdbc.update("INSERT INTO nutri.meal_items(item_id,meal_id,sequence_no,display_name,estimated_weight_g,confidence,data_source,user_corrected,notes) VALUES(?,?,?,?,?,NULL,'manual',true,?)", item.itemId, mealId, item.sequenceNo, item.displayName, item.estimatedWeightG, item.notes)
             values.getValue(item.itemId).forEach { (nutrient, amount) -> jdbc.update("INSERT INTO nutri.meal_item_nutrient_values(item_id,nutrient_id,nutrient_code_snapshot,nutrient_name_snapshot,unit_snapshot,amount,data_source,user_corrected) VALUES(?,?,?,?,?,?,'manual',true)", item.itemId, nutrient.nutrientId, nutrient.nutrientCode, nutrient.nutrientName, nutrient.unit, amount) }
+        }
+        jdbc.update("DELETE FROM nutri.meal_nutrition_values WHERE meal_id=?", mealId)
+        jdbc.update("INSERT INTO nutri.meal_nutrition_values(meal_id,nutrient_id,nutrient_code_snapshot,nutrient_name_snapshot,unit_snapshot,total_amount) SELECT ?,v.nutrient_id,v.nutrient_code_snapshot,v.nutrient_name_snapshot,v.unit_snapshot,SUM(v.amount) FROM nutri.meal_item_nutrient_values v JOIN nutri.meal_items i ON i.item_id=v.item_id WHERE i.meal_id=? GROUP BY v.nutrient_id,v.nutrient_code_snapshot,v.nutrient_name_snapshot,v.unit_snapshot", mealId, mealId)
+    }
+    fun replaceAiItems(mealId: Long, items: List<MealItemRecord>, values: Map<Long, List<Pair<NutrientDefinition, BigDecimal>>>) {
+        jdbc.update("DELETE FROM nutri.meal_items WHERE meal_id=?", mealId)
+        items.forEach { item ->
+            jdbc.update(
+                "INSERT INTO nutri.meal_items(item_id,meal_id,sequence_no,display_name,estimated_weight_g,confidence,data_source,user_corrected,notes) VALUES(?,?,?,?,?,?,'ai',false,NULL)",
+                item.itemId, mealId, item.sequenceNo, item.displayName, item.estimatedWeightG, item.confidence,
+            )
+            values.getValue(item.itemId).forEach { (nutrient, amount) ->
+                jdbc.update(
+                    "INSERT INTO nutri.meal_item_nutrient_values(item_id,nutrient_id,nutrient_code_snapshot,nutrient_name_snapshot,unit_snapshot,amount,data_source,user_corrected) VALUES(?,?,?,?,?,?,'ai',false)",
+                    item.itemId, nutrient.nutrientId, nutrient.nutrientCode, nutrient.nutrientName, nutrient.unit, amount,
+                )
+            }
         }
         jdbc.update("DELETE FROM nutri.meal_nutrition_values WHERE meal_id=?", mealId)
         jdbc.update("INSERT INTO nutri.meal_nutrition_values(meal_id,nutrient_id,nutrient_code_snapshot,nutrient_name_snapshot,unit_snapshot,total_amount) SELECT ?,v.nutrient_id,v.nutrient_code_snapshot,v.nutrient_name_snapshot,v.unit_snapshot,SUM(v.amount) FROM nutri.meal_item_nutrient_values v JOIN nutri.meal_items i ON i.item_id=v.item_id WHERE i.meal_id=? GROUP BY v.nutrient_id,v.nutrient_code_snapshot,v.nutrient_name_snapshot,v.unit_snapshot", mealId, mealId)

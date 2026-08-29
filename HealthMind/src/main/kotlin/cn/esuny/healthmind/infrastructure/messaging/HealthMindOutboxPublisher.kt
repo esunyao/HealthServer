@@ -4,7 +4,8 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
+import cn.esuny.healthmind.infrastructure.config.HealthMindProperties
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -12,20 +13,22 @@ import java.util.concurrent.TimeUnit
 class HealthMindOutboxPublisher(
     private val jdbc: NamedParameterJdbcTemplate,
     private val kafka: KafkaTemplate<String, String>,
+    private val transactions: TransactionTemplate,
+    private val properties: HealthMindProperties,
 ) {
     @Scheduled(fixedDelayString = "\${healthmind.scheduler.outbox-fixed-delay:PT1S}")
     fun publishNext() {
-        val event = claim() ?: return
+        val event = transactions.execute { claim() } ?: return
         try {
-            kafka.send(event.destination, event.partitionKey, event.payload).get(15, TimeUnit.SECONDS)
-            markPublished(event.eventId)
+            kafka.send(event.destination, event.partitionKey, event.payload)
+                .get(properties.kafka.publishTimeout.toMillis(), TimeUnit.MILLISECONDS)
+            transactions.executeWithoutResult { markPublished(event.eventId) }
         } catch (exception: Exception) {
-            markFailed(event.eventId, "KAFKA_PUBLISH_FAILED", "Kafka publish failed")
+            transactions.executeWithoutResult { markFailed(event.eventId, "KAFKA_PUBLISH_FAILED", "Kafka publish failed") }
         }
     }
 
-    @Transactional
-    fun claim(): PendingEvent? {
+    private fun claim(): PendingEvent? {
         val row = jdbc.query(
             """
             SELECT event_id, destination_key, partition_key, payload::text
@@ -40,7 +43,8 @@ class HealthMindOutboxPublisher(
         jdbc.update(
             """
             UPDATE healthmind.integration_outbox
-               SET status='publishing', attempt_count=attempt_count+1, failure_code=NULL, failure_message=NULL
+               SET status='publishing', attempt_count=attempt_count+1, failure_code=NULL, failure_message=NULL,
+                   next_attempt_at=NOW() + INTERVAL '5 minutes'
              WHERE event_id=:eventId
             """.trimIndent(),
             mapOf("eventId" to row.eventId),
@@ -48,16 +52,14 @@ class HealthMindOutboxPublisher(
         return row
     }
 
-    @Transactional
-    fun markPublished(eventId: UUID) {
+    private fun markPublished(eventId: UUID) {
         jdbc.update(
             "UPDATE healthmind.integration_outbox SET status='published', published_at=NOW() WHERE event_id=:eventId AND status='publishing'",
             mapOf("eventId" to eventId),
         )
     }
 
-    @Transactional
-    fun markFailed(eventId: UUID, code: String, message: String) {
+    private fun markFailed(eventId: UUID, code: String, message: String) {
         jdbc.update(
             """
             UPDATE healthmind.integration_outbox

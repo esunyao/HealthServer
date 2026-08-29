@@ -23,7 +23,11 @@ class NutritionCaptureReadyListener(
         val root = canonicalJson.parse(raw)
         require(root.path("event_type").asString() == NutritionEventTypes.CAPTURE_READY) { "Unsupported event_type" }
         require(root.path("schema_version").asString() == NutritionEventTypes.SCHEMA_VERSION) { "Unsupported schema_version" }
+        require(root.path("producer").asString() == "NutriMemo") { "Unsupported event producer" }
+        require(root.path("aggregate_type").asString() == "meal") { "Unsupported aggregate_type" }
         val payload = root.path("payload")
+        val mealId = payload.path("meal_id").asLong()
+        require(mealId > 0 && root.path("aggregate_id").asString() == mealId.toString()) { "Invalid meal aggregate" }
         val event = IntegrationEvent(
             eventId = UUID.fromString(root.path("event_id").asString()),
             eventType = root.path("event_type").asString(),
@@ -35,10 +39,10 @@ class NutritionCaptureReadyListener(
             aggregateId = root.path("aggregate_id").asString(),
             schemaVersion = root.path("schema_version").asString(),
             payload = NutritionCaptureReadyPayload(
-                captureSessionId = payload.path("capture_session_id").asLong(),
-                mealId = payload.path("meal_id").asLong(),
+                captureSessionId = UUID.fromString(payload.path("capture_session_id").asString()),
+                mealId = mealId,
             ),
         )
-        repository.acceptCaptureReady(event, canonicalJson.sha256(root))
+        repository.acceptCaptureReady(event, root, canonicalJson.sha256(root))
     }
 }

@@ -11,14 +11,14 @@ import tools.jackson.databind.JsonNode
 class JsonSchemaService(private val canonicalJson: CanonicalJson) {
     private val registry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12)
 
-    fun validate(schemaJson: String, value: JsonNode) {
+    fun validate(schemaJson: String, value: JsonNode, errorCode: String = "OUTPUT_CONTRACT_INVALID") {
         val schema = registry.getSchema(canonicalJson.parse(schemaJson))
         val errors = schema.validate(value)
         if (errors.isNotEmpty()) {
             throw TaskExecutionException(
-                code = "OUTPUT_CONTRACT_INVALID",
+                code = errorCode,
                 category = FailureCategory.CONTRACT,
-                message = errors.take(3).joinToString("; ") { it.message },
+                message = "JSON value does not match its contract (${errors.size} validation errors)",
             )
         }
     }

@@ -19,7 +19,7 @@
       "additionalProperties": false,
       "required": ["capture_session_id", "meal_id"],
       "properties": {
-        "capture_session_id": {"type": "integer"},
+        "capture_session_id": {"type": "string", "format": "uuid"},
         "meal_id": {"type": "integer"}
       }
     }

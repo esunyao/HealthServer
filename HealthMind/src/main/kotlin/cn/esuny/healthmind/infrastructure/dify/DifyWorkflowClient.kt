@@ -6,22 +6,39 @@ import cn.esuny.healthmind.domain.task.FailureCategory
 import cn.esuny.healthmind.domain.task.TaskExecution
 import cn.esuny.healthmind.domain.task.TaskExecutionException
 import cn.esuny.healthmind.infrastructure.config.HealthMindProperties
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpStatusCode
+import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientException
 import org.springframework.web.client.RestClientResponseException
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ObjectMapper
+import java.net.SocketTimeoutException
+import java.net.http.HttpClient
+import java.net.http.HttpTimeoutException
 import java.security.MessageDigest
 
 @Component
 class DifyWorkflowClient(
+    @Qualifier("directRestClientBuilder")
     restClientBuilder: RestClient.Builder,
     private val objectMapper: ObjectMapper,
     private val properties: HealthMindProperties,
 ) : DifyWorkflowPort {
-    private val client = restClientBuilder.baseUrl(properties.dify.baseUrl.trimEnd('/')).build()
+    private val client = run {
+        val httpClient = HttpClient.newBuilder()
+            .connectTimeout(properties.dify.connectTimeout)
+            .build()
+        val requestFactory = JdkClientHttpRequestFactory(httpClient).apply {
+            setReadTimeout(properties.dify.readTimeout)
+        }
+        restClientBuilder.clone()
+            .requestFactory(requestFactory)
+            .baseUrl(properties.dify.baseUrl.trimEnd('/'))
+            .build()
+    }
 
     override fun run(command: TaskExecution): DifyWorkflowResult {
         val apiKey = properties.dify.appKeys[command.difyAppId]
@@ -49,7 +66,7 @@ class DifyWorkflowClient(
                 throw TaskExecutionException(
                     code = "DIFY_WORKFLOW_${status.uppercase()}",
                     category = if (status == "stopped") FailureCategory.CANCELLED else FailureCategory.PERMANENT,
-                    message = data.path("error").asString("Dify workflow did not succeed").take(500),
+                    message = "Dify workflow did not succeed (status=$status)",
                 )
             }
             val returnedWorkflowId = data.path("workflow_id").asString(response.path("workflow_id").asString())
@@ -58,7 +75,7 @@ class DifyWorkflowClient(
             }
             val outputs = data.path("outputs")
             val resultNode = when {
-                outputs.has("result") && outputs.path("result").isTextual -> objectMapper.readTree(outputs.path("result").asString())
+                outputs.has("result") && outputs.path("result").isString -> objectMapper.readTree(outputs.path("result").asString())
                 outputs.has("result") -> outputs.path("result")
                 else -> outputs
             }
@@ -76,6 +93,9 @@ class DifyWorkflowClient(
         } catch (exception: RestClientResponseException) {
             throw classifyHttp(exception.statusCode, exception)
         } catch (exception: RestClientException) {
+            if (isTimeout(exception)) {
+                throw TaskExecutionException("DIFY_TIMEOUT", FailureCategory.TIMEOUT, "Dify request timed out", exception)
+            }
             throw TaskExecutionException("DIFY_NETWORK_ERROR", FailureCategory.TRANSIENT, "Dify request failed", exception)
         }
     }
@@ -93,4 +113,14 @@ class DifyWorkflowClient(
             .joinToString("") { "%02x".format(it) }
         return "hm-${digest.take(24)}"
     }
+
+    private fun isTimeout(exception: Throwable): Boolean =
+        generateSequence(exception) { it.cause }
+            .any {
+                it is HttpTimeoutException ||
+                    it is SocketTimeoutException ||
+                    it.javaClass.simpleName.contains("Timeout", ignoreCase = true) ||
+                    it.message?.contains("timed out", ignoreCase = true) == true ||
+                    it.message?.contains("subscription cancelled", ignoreCase = true) == true
+            }
 }

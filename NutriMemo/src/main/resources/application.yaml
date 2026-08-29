@@ -7,7 +7,7 @@ spring:
 
   config:
     import:
-      - "optional:nacos:NutriMemo_Application.yaml?group=NUTRIMEMO_GROUP&refreshEnabled=true"
+      - "optional:nacos:NutriMemo_Application.yaml?group=${NACOS_GROUP:NUTRIMEMO_GROUP}&refreshEnabled=true"
 
   datasource:
     url: ${DB_URL:}
@@ -22,6 +22,24 @@ spring:
   flyway:
     enabled: false
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${NUTRIMEMO_KAFKA_CONSUMER_GROUP:nutrimemo-analysis-result-v1}
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+    listener:
+      ack-mode: record
+    properties:
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+      sasl.mechanism: ${KAFKA_SASL_MECHANISM:PLAIN}
+      sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG:}
+      ssl.truststore.location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:}
+      ssl.truststore.password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:}
+      ssl.keystore.location: ${KAFKA_SSL_KEYSTORE_LOCATION:}
+      ssl.keystore.password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
+      ssl.key.password: ${KAFKA_SSL_KEY_PASSWORD:}
+
   cloud:
     nacos:
       serverAddr: ${NACOS_SERVER_ADDR:}
@@ -29,7 +47,7 @@ spring:
       password: ${NACOS_PASSWORD:}
       discovery:
         enabled: true
-        group: HEALTH_GROUP
+        group: ${NACOS_GROUP:HEALTH_GROUP}
 
 nutri:
   capture:
@@ -46,6 +64,20 @@ nutri:
     presigned-expiration: 5m
     max-file-size: 10485760
     allowed-content-types: [image/jpeg, image/png, image/webp]
+  integration:
+    capture-ready-destination: ${NUTRIMEMO_CAPTURE_READY_DESTINATION:nutrition-capture-ready}
+    analysis-completed-destination: ${NUTRIMEMO_ANALYSIS_COMPLETED_DESTINATION:nutrition-analysis-completed}
+    analysis-failed-destination: ${NUTRIMEMO_ANALYSIS_FAILED_DESTINATION:nutrition-analysis-failed}
+    consumer-group: ${NUTRIMEMO_KAFKA_CONSUMER_GROUP:nutrimemo-analysis-result-v1}
+    outbox-fixed-delay: ${NUTRIMEMO_OUTBOX_FIXED_DELAY:1s}
+    recovery-fixed-delay: ${NUTRIMEMO_RECOVERY_FIXED_DELAY:1m}
+    publish-timeout: ${NUTRIMEMO_PUBLISH_TIMEOUT:15s}
+  internal:
+    security:
+      issuer-uri: ${NUTRIMEMO_INTERNAL_ISSUER_URI:http://localhost:9000/application/o/nutrimemo/}
+      jwk-set-uri: ${NUTRIMEMO_INTERNAL_JWK_SET_URI:http://localhost:9000/application/o/nutrimemo/jwks/}
+      audience: ${NUTRIMEMO_INTERNAL_AUDIENCE:nutrimemo-internal}
+      allowed-health-mind-client-id: ${NUTRIMEMO_HEALTHMIND_CLIENT_ID:healthmind-nutrimemo}
 
 management:
   endpoints:

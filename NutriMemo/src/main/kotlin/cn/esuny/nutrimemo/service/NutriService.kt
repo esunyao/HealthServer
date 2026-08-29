@@ -7,6 +7,7 @@ import cn.esuny.nutrimemo.identity.AuthenticatedUser
 import cn.esuny.nutrimemo.model.*
 import cn.esuny.nutrimemo.persistence.NutriRepository
 import org.springframework.http.HttpStatus
+import org.slf4j.MDC
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -119,7 +120,8 @@ class NutriService(
         val meal = MealRecord(mealId, session.captureSessionId, user.userId, request.mealType, consumedAt, session.timezone, consumedAt.atZoneSameInstant(ZoneId.of(session.timezone)).toLocalDate(), notes, "queued", "active", OffsetDateTime.now(), OffsetDateTime.now())
         repository.insertMeal(meal)
         repository.updateSessionStatus(sessionId, user.userId, "ready_for_analysis", true)
-        repository.insertOutbox(UUID.randomUUID(), sessionId, mealId)
+        val eventId = UUID.randomUUID()
+        repository.insertOutbox(eventId, sessionId, mealId, user.userId, MDC.get("traceId") ?: eventId.toString())
         repository.recalculateDaily(user.userId, meal.localDate, ids.nextId())
         return CaptureSubmissionView(captureView(repository.session(sessionId, user.userId)!!), mealView(repository.meal(mealId, user.userId)!!))
     }
@@ -132,7 +134,8 @@ class NutriService(
         val meal = repository.mealByCaptureSession(sessionId, user.userId) ?: notFound()
         repository.updateMealAnalysisStatus(meal.mealId, user.userId, "queued")
         repository.updateSessionStatus(sessionId, user.userId, "ready_for_analysis", true)
-        repository.insertOutbox(UUID.randomUUID(), sessionId, meal.mealId)
+        val eventId = UUID.randomUUID()
+        repository.insertOutbox(eventId, sessionId, meal.mealId, user.userId, MDC.get("traceId") ?: eventId.toString())
         return CaptureSubmissionView(captureView(repository.session(sessionId, user.userId)!!), mealView(repository.meal(meal.mealId, user.userId)!!))
     }
 
@@ -155,7 +158,7 @@ class NutriService(
 
     @Transactional
     fun patchMeal(user: AuthenticatedUser, id: Long, request: MealMetadataPatchRequest): MealView {
-        val current = repository.meal(id, user.userId)?.takeIf { it.status == "active" } ?: notFound()
+        val current = repository.mealForUpdate(id, user.userId)?.takeIf { it.status == "active" } ?: notFound()
         val mealType = request.mealType ?: current.mealType
         val consumedAt = request.consumedAt ?: current.consumedAt
         val timezone = request.timezone?.trim()?.ifBlank { current.timezone } ?: current.timezone
@@ -172,7 +175,7 @@ class NutriService(
 
     @Transactional
     fun replaceMeal(user: AuthenticatedUser, id: Long, request: MealCorrectionRequest): MealView {
-        val current = repository.meal(id, user.userId)?.takeIf { it.status == "active" } ?: notFound()
+        val current = repository.mealForUpdate(id, user.userId)?.takeIf { it.status == "active" } ?: notFound()
         validMealType(request.mealType); validateTimezone(request.timezone)
         if (request.consumedAt.isAfter(OffsetDateTime.now().plusMinutes(5))) bad("用餐时间不能晚于当前时间")
         val existingItemIds = repository.items(id).map { it.itemId }.toSet()

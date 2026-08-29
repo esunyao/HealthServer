@@ -31,14 +31,14 @@ class InternalContextClient(
         "/internal/v1/analysis-context/capture",
         mapOf(
             "subject_id" to requireNotNull(grant.subjectId).toString(),
-            "capture_session_id" to grant.captureSessionId,
+            "capture_session_id" to grant.captureSessionId.toString(),
             "meal_id" to grant.mealId,
             "task_id" to grant.taskId.toString(),
         ),
     )
 
     private fun post(config: HealthMindProperties.OAuth.Client, path: String, body: Any): JsonNode =
-        builder.baseUrl(config.baseUrl).build().post().uri(path)
+        builder.clone().baseUrl(config.baseUrl).build().post().uri(path)
             .header("Authorization", "Bearer ${tokens.token(config)}")
             .body(body)
             .retrieve()

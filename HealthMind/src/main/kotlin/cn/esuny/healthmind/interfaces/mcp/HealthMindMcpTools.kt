@@ -54,8 +54,10 @@ class HealthMindMcpTools(
         val callerSubject = auth.token.subject?.let { runCatching { UUID.fromString(it) }.getOrNull() }
         val invocation = repository.authorizeAndStart(toolCode, UUID.fromString(taskId), UUID.fromString(attemptId), callerSubject, scopes)
         return try {
+            val request = canonicalJson.parse("""{"attempt_id":"$attemptId","task_id":"$taskId"}""")
+            schemas.validate(invocation.grant.requestSchema, request, "TOOL_REQUEST_CONTRACT_INVALID")
             val response = call(invocation.grant)
-            schemas.validate(invocation.grant.responseSchema, response)
+            schemas.validate(invocation.grant.responseSchema, response, "TOOL_RESPONSE_CONTRACT_INVALID")
             val json = canonicalJson.stringify(response)
             repository.succeed(invocation, canonicalJson.sha256(response))
             json

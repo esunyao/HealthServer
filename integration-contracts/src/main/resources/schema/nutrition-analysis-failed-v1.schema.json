@@ -20,10 +20,10 @@
       "required": ["task_id", "capture_session_id", "meal_id", "error_code", "failure_category", "retryable", "error_summary"],
       "properties": {
         "task_id": {"type": "string", "format": "uuid"},
-        "capture_session_id": {"type": "integer"},
+        "capture_session_id": {"type": "string", "format": "uuid"},
         "meal_id": {"type": "integer"},
         "error_code": {"type": "string", "minLength": 1},
-        "failure_category": {"enum": ["transient", "permanent", "contract", "authorization"]},
+        "failure_category": {"enum": ["transient", "permanent", "contract", "timeout", "cancelled"]},
         "retryable": {"type": "boolean"},
         "error_summary": {"type": "string", "maxLength": 500}
       }

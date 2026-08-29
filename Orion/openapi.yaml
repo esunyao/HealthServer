@@ -35,6 +35,8 @@ tags:
     description: 只允许追加的隐私或业务同意记录
   - name: 头像
     description: 头像预签名直传与确认
+  - name: AI 内部上下文
+    description: 仅供持有 Orion internal audience/scope 的 HealthMind 服务调用
 security:
   - bearerAuth: []
 paths:
@@ -459,6 +461,35 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/ServerError' }
 
+  /internal/v1/ai-context/nutrition:
+    post:
+      tags: [AI 内部上下文]
+      summary: 获取营养分析最小健康上下文
+      description: 要求最新 ai_nutrition_analysis 同意为 granted；不返回邮箱、角色、完整出生日期、临床观察历史或同意正文。
+      operationId: getNutritionAiContext
+      security:
+        - internalM2M: [orion.ai-context.read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [subject_id, task_id]
+              properties:
+                subject_id: { type: string, format: uuid }
+                task_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 最小营养健康上下文
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NutritionAiContext' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: audience/scope/caller 无效或缺少 AI 分析同意
+
 components:
   securitySchemes:
     bearerAuth:
@@ -466,6 +497,13 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Authentik OIDC access_token。客户端不要伪造 X-Auth-* 或 X-Gateway-Source 请求头。
+    internalM2M:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /application/o/token/
+          scopes:
+            orion.ai-context.read: 读取最小营养健康上下文
   parameters:
     RecordId:
       name: id
@@ -1024,3 +1062,17 @@ components:
       required: [avatarUrl]
       properties:
         avatarUrl: { type: string, format: uri, description: 最终头像访问 URL }
+    NutritionAiContext:
+      type: object
+      required: [subject_id, active_goals, allergies, medical_conditions, dietary_restrictions, cuisine_preferences]
+      properties:
+        subject_id: { type: string, format: uuid }
+        age_years: { type: integer, nullable: true, minimum: 0 }
+        gender: { type: string, nullable: true }
+        height_cm: { type: number, nullable: true }
+        latest_measurement: { type: object, nullable: true, additionalProperties: true }
+        active_goals: { type: array, items: { type: object, additionalProperties: true } }
+        allergies: { type: array, items: { type: object, additionalProperties: true } }
+        medical_conditions: { type: array, items: { type: object, additionalProperties: true } }
+        dietary_restrictions: { type: array, items: { type: object, additionalProperties: true } }
+        cuisine_preferences: { type: array, items: { type: object, additionalProperties: true } }

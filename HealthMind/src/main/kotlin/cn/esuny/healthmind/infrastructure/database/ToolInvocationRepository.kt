@@ -24,12 +24,12 @@ class ToolInvocationRepository(
         val grants = jdbc.query(
             """
             SELECT t.task_id, t.subject_id, t.trace_id, t.workflow_release_id,
-                   (t.context_manifest->>'capture_session_id')::bigint capture_session_id,
+                   (t.context_manifest->>'capture_session_id')::uuid capture_session_id,
                    (t.context_manifest->>'meal_id')::bigint meal_id,
                    d.tool_id, d.request_schema_version, d.response_schema_version,
                    d.request_schema::text, d.response_schema::text, rt.allowed_scope, rt.max_calls,
                    (SELECT COUNT(*) FROM healthmind.ai_tool_invocations i
-                     WHERE i.attempt_id=:attemptId AND i.tool_id=d.tool_id AND i.status NOT IN ('denied','failed')) call_count
+                     WHERE i.attempt_id=:attemptId AND i.tool_id=d.tool_id AND i.status <> 'denied') call_count
               FROM healthmind.ai_tasks t
               JOIN healthmind.ai_task_attempts a ON a.task_id=t.task_id AND a.attempt_id=:attemptId
               JOIN healthmind.workflow_release_tools rt ON rt.release_id=t.workflow_release_id
@@ -46,7 +46,7 @@ class ToolInvocationRepository(
                 subjectId = rs.getObject("subject_id", UUID::class.java),
                 traceId = rs.getString("trace_id"),
                 releaseId = rs.getObject("workflow_release_id", UUID::class.java),
-                captureSessionId = rs.getLong("capture_session_id"),
+                captureSessionId = rs.getObject("capture_session_id", UUID::class.java),
                 mealId = rs.getLong("meal_id"),
                 toolId = rs.getObject("tool_id", UUID::class.java),
                 requestSchemaVersion = rs.getString("request_schema_version"),
@@ -126,7 +126,7 @@ class ToolInvocationRepository(
         val subjectId: UUID?,
         val traceId: String,
         val releaseId: UUID,
-        val captureSessionId: Long,
+        val captureSessionId: UUID,
         val mealId: Long,
         val toolId: UUID,
         val requestSchemaVersion: String,

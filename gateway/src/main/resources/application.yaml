@@ -55,6 +55,14 @@ spring:
                     pattern: /v1/files/avatar/**, /v1/users/**
               filters:
                 - AddRequestHeader=X-Gateway-Source, HealthServer-Gateway
+            - id: nutrimemo_service_route
+              uri: lb://NutriMemo
+              predicates:
+                - name: Path
+                  args:
+                    pattern: /v1/nutri/**
+              filters:
+                - AddRequestHeader=X-Gateway-Source, HealthServer-Gateway
 
 # ----------------------------------------------------------
 # Actuator 监控端点配置

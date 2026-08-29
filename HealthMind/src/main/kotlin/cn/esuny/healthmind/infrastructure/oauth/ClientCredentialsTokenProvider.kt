@@ -1,6 +1,7 @@
 package cn.esuny.healthmind.infrastructure.oauth
 
 import cn.esuny.healthmind.infrastructure.config.HealthMindProperties
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.util.LinkedMultiValueMap
@@ -10,7 +11,9 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 @Component
-class ClientCredentialsTokenProvider(private val builder: RestClient.Builder) {
+class ClientCredentialsTokenProvider(
+    @Qualifier("directRestClientBuilder") private val builder: RestClient.Builder,
+) {
     private val cache = ConcurrentHashMap<String, CachedToken>()
 
     fun token(config: HealthMindProperties.OAuth.Client): String {
@@ -25,7 +28,7 @@ class ClientCredentialsTokenProvider(private val builder: RestClient.Builder) {
                 add("scope", config.scope)
                 add("audience", config.audience)
             }
-            val response = builder.build().post().uri(config.tokenUri)
+            val response = builder.clone().build().post().uri(config.tokenUri)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(form)
                 .retrieve()

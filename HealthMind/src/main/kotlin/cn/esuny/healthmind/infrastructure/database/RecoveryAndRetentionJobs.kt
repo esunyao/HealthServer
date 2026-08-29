@@ -1,12 +1,17 @@
 package cn.esuny.healthmind.infrastructure.database
 
+import cn.esuny.healthmind.domain.task.FailureCategory
+import cn.esuny.healthmind.domain.task.TaskExecutionException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 
 @Component
-class RecoveryAndRetentionJobs(private val jdbc: JdbcTemplate) {
+class RecoveryAndRetentionJobs(
+    private val jdbc: JdbcTemplate,
+    private val tasks: TaskCommandRepository,
+) {
     @Scheduled(fixedDelayString = "\${healthmind.scheduler.recovery-fixed-delay:PT1M}")
     @Transactional
     fun recoverStaleWork() {
@@ -14,7 +19,7 @@ class RecoveryAndRetentionJobs(private val jdbc: JdbcTemplate) {
             """
             UPDATE healthmind.integration_outbox
                SET status='failed', failure_code='PUBLISHER_INTERRUPTED', failure_message='Recovered stale publisher', next_attempt_at=NOW()
-             WHERE status='publishing' AND created_at < NOW() - INTERVAL '5 minutes'
+             WHERE status='publishing' AND next_attempt_at < NOW()
             """.trimIndent(),
         )
         jdbc.update(
@@ -26,16 +31,18 @@ class RecoveryAndRetentionJobs(private val jdbc: JdbcTemplate) {
              WHERE a.task_id=t.task_id AND a.status='running' AND a.started_at + (a.timeout_ms * INTERVAL '1 millisecond') < NOW()
             """.trimIndent(),
         )
-        jdbc.update(
-            """
-            UPDATE healthmind.ai_tasks t
-               SET status='queued', next_attempt_at=NOW(), lock_version=lock_version+1
-             WHERE t.status='running' AND EXISTS (
-                 SELECT 1 FROM healthmind.ai_task_attempts a
-                  WHERE a.task_id=t.task_id AND a.status='timed_out' AND a.finished_at > NOW() - INTERVAL '2 minutes'
-             )
-            """.trimIndent(),
-        )
+        tasks.claimTimedOut().forEach { execution ->
+            tasks.fail(
+                execution,
+                TaskExecutionException(
+                    "ATTEMPT_TIMEOUT",
+                    FailureCategory.TIMEOUT,
+                    "Execution exceeded configured timeout",
+                ),
+                FailureCategory.TIMEOUT,
+                "ATTEMPT_TIMEOUT",
+            )
+        }
     }
 
     @Scheduled(cron = "0 20 3 * * *")

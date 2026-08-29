@@ -4,15 +4,16 @@ info:
   version: 2.0.0
   description: |
     客户端经 Gateway 创建个人拍照采集会话、上传并确认 1–10 张图片后显式提交识别。
-    本版本不提供食物库、手动建餐、DietAi、Kafka 或 AI 原始结果接口。
+    本版本通过 Kafka 与 HealthMind 完成 AI 分析，但不向客户端暴露 Kafka、Prompt 或 AI 原始结果接口。
 servers:
-  - url: http://localhost:8091
+  - url: http://localhost:8099
     description: Gateway
 security: [{ bearerAuth: [] }]
 tags:
   - name: 拍照采集
   - name: 餐次历史
   - name: 营养汇总
+  - name: AI 内部上下文
 paths:
   /v1/nutri/capture-policy:
     get:
@@ -131,8 +132,43 @@ paths:
       operationId: getDailyTrend
       parameters: [{ $ref: '#/components/parameters/DateFrom' }, { $ref: '#/components/parameters/DateTo' }]
       responses: { '200': { $ref: '#/components/responses/DailyTrend' } }
+  /internal/v1/analysis-context/capture:
+    post:
+      tags: [AI 内部上下文]
+      summary: 获取已确认采集图片的短时访问上下文
+      description: 仅供 HealthMind M2M 调用；校验用户、采集会话与餐次关系，不返回对象键或存储凭据。
+      operationId: getNutritionCaptureContext
+      security:
+        - internalM2M: [nutrimemo.ai-context.read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [subject_id, capture_session_id, meal_id, task_id]
+              properties:
+                subject_id: { type: string, format: uuid }
+                capture_session_id: { type: string, format: uuid }
+                meal_id: { type: integer, format: int64 }
+                task_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 餐次元数据与 confirmed 图片 5 分钟 URL
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 components:
-  securitySchemes: { bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT } }
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    internalM2M:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /application/o/token/
+          scopes:
+            nutrimemo.ai-context.read: 读取已确认采集图片上下文
   parameters:
     CaptureSessionId: { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
     ImageId: { name: imageId, in: path, required: true, schema: { type: string, description: 雪花 ID，以字符串传输避免 JavaScript 精度丢失 } }

@@ -33,7 +33,7 @@ spring:
   # Spring Boot 配置导入机制；optional: 前缀防止 Nacos 不可用时启动失败
   config:
     import:
-      - "optional:nacos:Orion_Application.yaml?group=ORION_GROUP&refreshEnabled=true"
+      - "optional:nacos:Orion_Application.yaml?group=${NACOS_GROUP:ORION_GROUP}&refreshEnabled=true"
 
   # ----------------------------------------------------------
   # 数据源配置 — PostgreSQL
@@ -63,7 +63,7 @@ spring:
       password: ${NACOS_PASSWORD:}
       discovery:
         enabled: true
-        group: 'HEALTH_GROUP'
+        group: ${NACOS_GROUP:HEALTH_GROUP}
 
 # ----------------------------------------------------------
 # OSS 对象存储配置（S3 兼容协议）
@@ -113,3 +113,11 @@ logging:
   level:
     cn.esuny.orion: INFO
     cn.esuny.orion.mapper: INFO
+
+orion:
+  internal:
+    security:
+      issuer-uri: ${ORION_INTERNAL_ISSUER_URI:http://localhost:9000/application/o/orion/}
+      jwk-set-uri: ${ORION_INTERNAL_JWK_SET_URI:http://localhost:9000/application/o/orion/jwks/}
+      audience: ${ORION_INTERNAL_AUDIENCE:orion-internal}
+      allowed-health-mind-client-id: ${ORION_HEALTHMIND_CLIENT_ID:healthmind-orion}

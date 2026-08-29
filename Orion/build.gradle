@@ -26,6 +26,8 @@ dependencies {
 
     // 验证 — Bean Validation，配合实体校验
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
 
     // AWS S3 SDK（S3 兼容协议，支持 RustFS / MinIO / 阿里云 OSS）
     implementation 'software.amazon.awssdk:s3:2.31.6'

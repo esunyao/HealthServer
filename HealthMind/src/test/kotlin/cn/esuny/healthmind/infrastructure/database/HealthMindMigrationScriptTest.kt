@@ -6,6 +6,7 @@ import kotlin.test.assertTrue
 
 class HealthMindMigrationScriptTest {
     private val migration = requireNotNull(javaClass.getResource("/db/migration/V1__create_healthmind_schema.sql")).readText()
+    private val seeds = requireNotNull(javaClass.getResource("/db/migration/V2__seed_stable_definitions.sql")).readText()
 
     @Test
     fun `migration declares workbook twelve tables`() {
@@ -26,5 +27,13 @@ class HealthMindMigrationScriptTest {
         assertTrue(migration.contains("uk_ai_tasks_idempotency"))
         assertTrue(migration.contains("ck_ai_tasks_lifecycle"))
         assertTrue(migration.contains("idx_integration_outbox_delivery"))
+    }
+
+    @Test
+    fun `stable tools seed explicit request and response contracts`() {
+        assertTrue(seeds.contains("\"required\":[\"attempt_id\",\"task_id\"]"))
+        assertTrue(seeds.contains("\"required\":[\"capture_session_id\",\"meal_id\",\"meal_type\""))
+        assertTrue(seeds.contains("\"required\":[\"subject_id\",\"age_years\",\"gender\""))
+        assertTrue(seeds.contains("'{}'::jsonb").not())
     }
 }

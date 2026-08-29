@@ -19,7 +19,7 @@ data class TaskExecution(
     val subjectId: UUID?,
     val aggregateType: String,
     val aggregateId: String,
-    val captureSessionId: Long,
+    val captureSessionId: UUID,
     val mealId: Long,
     val traceId: String,
     val difyAppId: String,

@@ -26,13 +26,13 @@ data class IntegrationEvent<T>(
 )
 
 data class NutritionCaptureReadyPayload(
-    @JsonProperty("capture_session_id") val captureSessionId: Long,
+    @JsonProperty("capture_session_id") val captureSessionId: UUID,
     @JsonProperty("meal_id") val mealId: Long,
 )
 
 data class NutritionAnalysisCompletedPayload(
     @JsonProperty("task_id") val taskId: UUID,
-    @JsonProperty("capture_session_id") val captureSessionId: Long,
+    @JsonProperty("capture_session_id") val captureSessionId: UUID,
     @JsonProperty("meal_id") val mealId: Long,
     @JsonProperty("result_version") val resultVersion: Int,
     @JsonProperty("overall_confidence") val overallConfidence: BigDecimal,
@@ -53,7 +53,7 @@ data class AnalyzedNutrient(
 
 data class NutritionAnalysisFailedPayload(
     @JsonProperty("task_id") val taskId: UUID,
-    @JsonProperty("capture_session_id") val captureSessionId: Long,
+    @JsonProperty("capture_session_id") val captureSessionId: UUID,
     @JsonProperty("meal_id") val mealId: Long,
     @JsonProperty("error_code") val errorCode: String,
     @JsonProperty("failure_category") val failureCategory: String,

@@ -22,6 +22,7 @@ data class HealthMindProperties(
         @field:NotBlank val analysisCompletedDestination: String = "nutrition-analysis-completed",
         @field:NotBlank val analysisFailedDestination: String = "nutrition-analysis-failed",
         @field:NotBlank val consumerGroup: String = "healthmind-nutrition-v1",
+        val publishTimeout: Duration = Duration.ofSeconds(15),
     )
 
     data class Dify(
@@ -33,8 +34,14 @@ data class HealthMindProperties(
     )
 
     data class OAuth(
+        @field:NotBlank val issuerUri: String = "http://localhost:9000/application/o/healthmind/",
+        @field:NotBlank val jwkSetUri: String = "http://localhost:9000/application/o/healthmind/jwks/",
         @field:NotBlank val expectedMcpAudience: String = "healthmind-mcp",
         @field:NotBlank val allowedDifyClientId: String = "dify-healthmind",
+        @field:NotBlank val mcpResourceUri: String = "http://localhost:8100/mcp",
+        @field:NotBlank val protectedResourceMetadataUri: String = "http://localhost:8100/.well-known/oauth-protected-resource/mcp",
+        val connectTimeout: Duration = Duration.ofSeconds(3),
+        val readTimeout: Duration = Duration.ofSeconds(15),
         @field:Valid val orion: Client = Client(audience = "orion-internal", scope = "orion.ai-context.read"),
         @field:Valid val nutrimemo: Client = Client(audience = "nutrimemo-internal", scope = "nutrimemo.ai-context.read"),
     ) {
@@ -42,7 +49,7 @@ data class HealthMindProperties(
             @field:NotBlank val baseUrl: String = "http://localhost:8090",
             @field:NotBlank val tokenUri: String = "http://localhost:9000/application/o/token/",
             @field:NotBlank val clientId: String = "healthmind-client",
-            val clientSecret: String = "",
+            @field:NotBlank val clientSecret: String = "",
             @field:NotBlank val audience: String,
             @field:NotBlank val scope: String,
         )

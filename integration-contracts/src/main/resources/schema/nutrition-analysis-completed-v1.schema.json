@@ -20,7 +20,7 @@
       "required": ["task_id", "capture_session_id", "meal_id", "result_version", "overall_confidence", "items"],
       "properties": {
         "task_id": {"type": "string", "format": "uuid"},
-        "capture_session_id": {"type": "integer"},
+        "capture_session_id": {"type": "string", "format": "uuid"},
         "meal_id": {"type": "integer"},
         "result_version": {"type": "integer", "minimum": 1},
         "overall_confidence": {"type": "number", "minimum": 0, "maximum": 1},

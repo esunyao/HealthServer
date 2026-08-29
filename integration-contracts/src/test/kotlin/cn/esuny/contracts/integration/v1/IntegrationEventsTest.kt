@@ -23,11 +23,11 @@ class IntegrationEventsTest {
             subjectId = UUID.fromString("ce9cb0fe-0c58-4a66-9f7e-a25c788520dc"),
             aggregateType = "meal",
             aggregateId = "12",
-            payload = NutritionCaptureReadyPayload(11, 12),
+            payload = NutritionCaptureReadyPayload(UUID.fromString("6078e44f-4d34-424a-af6d-fe2ad886ae84"), 12),
         )
 
         val json = mapper.writeValueAsString(event)
-        assertTrue(json.contains("\"capture_session_id\":11"))
+        assertTrue(json.contains("\"capture_session_id\":\"6078e44f-4d34-424a-af6d-fe2ad886ae84\""))
         assertTrue(json.contains("\"schema_version\":\"1.0\""))
         assertFalse(json.contains("captureSessionId"))
     }
