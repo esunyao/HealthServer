@@ -1,3 +1,80 @@
 spring:
   application:
     name: HealthMind
+  config:
+    import: optional:nacos:${spring.application.name}.yaml?group=${NACOS_GROUP:DEFAULT_GROUP}&refreshEnabled=true
+  datasource:
+    url: ${HEALTHMIND_DB_URL:jdbc:postgresql://localhost:5432/healthserver}
+    username: ${HEALTHMIND_DB_USERNAME:postgres}
+    password: ${HEALTHMIND_DB_PASSWORD:postgres}
+    hikari:
+      schema: healthmind
+  flyway:
+    enabled: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${HEALTHMIND_KAFKA_CONSUMER_GROUP:healthmind-nutrition-v1}
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+    listener:
+      ack-mode: record
+    properties:
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+      sasl.mechanism: ${KAFKA_SASL_MECHANISM:PLAIN}
+      sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG:}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTHENTIK_ISSUER_URI:http://localhost:9000/application/o/healthmind/}
+          jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:http://localhost:9000/application/o/healthmind/jwks/}
+  ai:
+    mcp:
+      server:
+        name: HealthMind
+        version: 1.0.0
+        type: SYNC
+        protocol: STREAMABLE
+        streamable-http:
+          mcp-endpoint: /mcp
+
+server:
+  port: ${HEALTHMIND_PORT:8100}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+healthmind:
+  kafka:
+    capture-ready-destination: ${HEALTHMIND_CAPTURE_READY_DESTINATION:nutrition-capture-ready}
+    analysis-completed-destination: ${HEALTHMIND_ANALYSIS_COMPLETED_DESTINATION:nutrition-analysis-completed}
+    analysis-failed-destination: ${HEALTHMIND_ANALYSIS_FAILED_DESTINATION:nutrition-analysis-failed}
+    consumer-group: ${HEALTHMIND_KAFKA_CONSUMER_GROUP:healthmind-nutrition-v1}
+  dify:
+    base-url: ${DIFY_BASE_URL:http://localhost:8080/v1}
+    deployment-version: ${DIFY_DEPLOYMENT_VERSION:1.17.0}
+  oauth:
+    expected-mcp-audience: ${HEALTHMIND_MCP_AUDIENCE:healthmind-mcp}
+    allowed-dify-client-id: ${HEALTHMIND_DIFY_CLIENT_ID:dify-healthmind}
+    orion:
+      base-url: ${ORION_INTERNAL_BASE_URL:http://Orion}
+      token-uri: ${ORION_OAUTH_TOKEN_URI:http://localhost:9000/application/o/token/}
+      client-id: ${ORION_OAUTH_CLIENT_ID:healthmind-orion}
+      client-secret: ${ORION_OAUTH_CLIENT_SECRET:}
+      audience: ${ORION_OAUTH_AUDIENCE:orion-internal}
+      scope: ${ORION_OAUTH_SCOPE:orion.ai-context.read}
+    nutrimemo:
+      base-url: ${NUTRIMEMO_INTERNAL_BASE_URL:http://NutriMemo}
+      token-uri: ${NUTRIMEMO_OAUTH_TOKEN_URI:http://localhost:9000/application/o/token/}
+      client-id: ${NUTRIMEMO_OAUTH_CLIENT_ID:healthmind-nutrimemo}
+      client-secret: ${NUTRIMEMO_OAUTH_CLIENT_SECRET:}
+      audience: ${NUTRIMEMO_OAUTH_AUDIENCE:nutrimemo-internal}
+      scope: ${NUTRIMEMO_OAUTH_SCOPE:nutrimemo.ai-context.read}
+
+logging:
+  level:
+    cn.esuny.healthmind: INFO

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://healthmind.local/schema/nutrition-analysis-completed-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "occurred_at", "producer", "trace_id", "subject_id", "aggregate_type", "aggregate_id", "schema_version", "payload"],
+  "properties": {
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {"const": "nutrition.analysis.completed.v1"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "producer": {"type": "string", "minLength": 1},
+    "trace_id": {"type": "string", "minLength": 1},
+    "subject_id": {"type": "string", "format": "uuid"},
+    "aggregate_type": {"const": "meal"},
+    "aggregate_id": {"type": "string", "minLength": 1},
+    "schema_version": {"const": "1.0"},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "capture_session_id", "meal_id", "result_version", "overall_confidence", "items"],
+      "properties": {
+        "task_id": {"type": "string", "format": "uuid"},
+        "capture_session_id": {"type": "integer"},
+        "meal_id": {"type": "integer"},
+        "result_version": {"type": "integer", "minimum": 1},
+        "overall_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "weight_grams", "confidence", "nutrients"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "weight_grams": {"type": "number", "minimum": 0},
+              "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+              "nutrients": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["code", "value"],
+                  "properties": {
+                    "code": {"type": "string", "pattern": "^[A-Z0-9_]{1,32}$"},
+                    "value": {"type": "number", "minimum": 0}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

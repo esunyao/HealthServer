@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://healthmind.local/schema/nutrition-analysis-failed-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "occurred_at", "producer", "trace_id", "subject_id", "aggregate_type", "aggregate_id", "schema_version", "payload"],
+  "properties": {
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {"const": "nutrition.analysis.failed.v1"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "producer": {"type": "string", "minLength": 1},
+    "trace_id": {"type": "string", "minLength": 1},
+    "subject_id": {"type": "string", "format": "uuid"},
+    "aggregate_type": {"const": "meal"},
+    "aggregate_id": {"type": "string", "minLength": 1},
+    "schema_version": {"const": "1.0"},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "capture_session_id", "meal_id", "error_code", "failure_category", "retryable", "error_summary"],
+      "properties": {
+        "task_id": {"type": "string", "format": "uuid"},
+        "capture_session_id": {"type": "integer"},
+        "meal_id": {"type": "integer"},
+        "error_code": {"type": "string", "minLength": 1},
+        "failure_category": {"enum": ["transient", "permanent", "contract", "authorization"]},
+        "retryable": {"type": "boolean"},
+        "error_summary": {"type": "string", "maxLength": 500}
+      }
+    }
+  }
+}

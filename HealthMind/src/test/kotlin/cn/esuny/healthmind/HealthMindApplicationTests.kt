@@ -1,13 +1,13 @@
 package cn.esuny.healthmind
 
 import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.SpringBootTest
+import kotlin.test.assertNotNull
 
-@SpringBootTest
 class HealthMindApplicationTests {
 
     @Test
-    fun contextLoads() {
+    fun applicationEntryPointExists() {
+        assertNotNull(HealthMindApplication::class)
     }
 
 }

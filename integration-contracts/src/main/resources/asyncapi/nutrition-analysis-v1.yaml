@@ -1,0 +1,48 @@
+asyncapi: 3.0.0
+info:
+  title: HealthMind Nutrition Analysis Events
+  version: 1.0.0
+  description: Logical event contract. Physical Kafka topics and consumer groups are deployment configuration.
+channels:
+  nutritionCaptureReady:
+    address: "{captureReadyDestination}"
+    messages:
+      ready:
+        $ref: '#/components/messages/NutritionCaptureReady'
+  nutritionAnalysisCompleted:
+    address: "{analysisCompletedDestination}"
+    messages:
+      completed:
+        $ref: '#/components/messages/NutritionAnalysisCompleted'
+  nutritionAnalysisFailed:
+    address: "{analysisFailedDestination}"
+    messages:
+      failed:
+        $ref: '#/components/messages/NutritionAnalysisFailed'
+operations:
+  receiveCaptureReady:
+    action: receive
+    channel:
+      $ref: '#/channels/nutritionCaptureReady'
+  sendAnalysisCompleted:
+    action: send
+    channel:
+      $ref: '#/channels/nutritionAnalysisCompleted'
+  sendAnalysisFailed:
+    action: send
+    channel:
+      $ref: '#/channels/nutritionAnalysisFailed'
+components:
+  messages:
+    NutritionCaptureReady:
+      name: nutrition.capture.ready.v1
+      payload:
+        $ref: '../schema/nutrition-capture-ready-v1.schema.json'
+    NutritionAnalysisCompleted:
+      name: nutrition.analysis.completed.v1
+      payload:
+        $ref: '../schema/nutrition-analysis-completed-v1.schema.json'
+    NutritionAnalysisFailed:
+      name: nutrition.analysis.failed.v1
+      payload:
+        $ref: '../schema/nutrition-analysis-failed-v1.schema.json'
