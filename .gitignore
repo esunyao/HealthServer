@@ -46,5 +46,7 @@ plans
 .mcp.json
 .mcp
 
+doc/
+
 ### 本地环境变量（含真实凭据），禁止提交 ###
 .env

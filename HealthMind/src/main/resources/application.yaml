@@ -2,7 +2,8 @@ spring:
   application:
     name: HealthMind
   config:
-    import: optional:nacos:${spring.application.name}.yaml?group=${NACOS_GROUP:DEFAULT_GROUP}&refreshEnabled=true
+    import: optional:nacos:Health_Application.yaml?group=${NACOS_GROUP:HEALTHMIND_GROUP}&refreshEnabled=true
+
   datasource:
     url: ${HEALTHMIND_DB_URL:jdbc:postgresql://localhost:5432/healthserver}
     username: ${HEALTHMIND_DB_USERNAME:postgres}
@@ -10,22 +11,16 @@ spring:
     hikari:
       maximum-pool-size: ${HEALTHMIND_DB_MAX_POOL_SIZE:20}
       minimum-idle: ${HEALTHMIND_DB_MIN_IDLE:3}
-  flyway:
-    enabled: ${HEALTHMIND_FLYWAY_ENABLED:true}
-    schemas: healthmind
-    default-schema: healthmind
-    create-schemas: true
+
   cloud:
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
       username: ${NACOS_USERNAME:}
       password: ${NACOS_PASSWORD:}
-      config:
-        namespace: ${NACOS_NAMESPACE:}
       discovery:
         enabled: ${NACOS_DISCOVERY_ENABLED:true}
-        namespace: ${NACOS_NAMESPACE:}
         group: ${NACOS_GROUP:HEALTH_GROUP}
+
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -43,12 +38,14 @@ spring:
       ssl.keystore.location: ${KAFKA_SSL_KEYSTORE_LOCATION:}
       ssl.keystore.password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
       ssl.key.password: ${KAFKA_SSL_KEY_PASSWORD:}
+
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: ${AUTHENTIK_ISSUER_URI:http://localhost:9000/application/o/healthmind/}
           jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:http://localhost:9000/application/o/healthmind/jwks/}
+
   ai:
     mcp:
       server:

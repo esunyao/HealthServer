@@ -1,24 +1,25 @@
 package cn.esuny.healthmind.infrastructure.database
 
-import org.flywaydb.core.Flyway
+import cn.esuny.healthmind.infrastructure.config.FlywayConfig
 import org.junit.jupiter.api.Test
+import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @Testcontainers(disabledWithoutDocker = true)
 class PostgresMigrationIntegrationTest {
     @Test
     fun `postgres 17 applies migration and creates twelve tables`() {
-        Flyway.configure()
-            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-            .schemas("healthmind")
-            .defaultSchema("healthmind")
-            .createSchemas(true)
-            .locations("classpath:db/migration")
-            .load()
-            .migrate()
+        val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+        val flyway = FlywayConfig().flyway(dataSource)
+
+        val migrationResult = flyway.migrate()
+
+        assertTrue(migrationResult.success)
+        assertEquals("healthmind", flyway.configuration.defaultSchema)
 
         postgres.createConnection("").use { connection ->
             connection.prepareStatement(
@@ -27,6 +28,14 @@ class PostgresMigrationIntegrationTest {
                 statement.executeQuery().use { result ->
                     result.next()
                     assertEquals(12, result.getInt(1))
+                }
+            }
+            connection.prepareStatement(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='healthmind' AND table_name='flyway_schema_history'",
+            ).use { statement ->
+                statement.executeQuery().use { result ->
+                    result.next()
+                    assertEquals(1, result.getInt(1))
                 }
             }
         }
