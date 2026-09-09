@@ -153,8 +153,11 @@ async def release_preview(request: Request, body: ReleaseRequest):
 
 @app.post("/api/releases/execute")
 async def release_execute(request: Request, body: ReleaseRequest):
-    require_csrf(request, body.csrf_token); request.app.state.previews.consume(body.preview_token or "", "release."+body.operation)
+    require_csrf(request, body.csrf_token); preview = request.app.state.previews.consume(body.preview_token or "", "release."+body.operation)
     if body.confirmation != f"RELEASE {body.operation.upper()}": raise HTTPException(409, "confirmation text mismatch")
+    if body.operation != "create":
+        current = await request.app.state.repo.snapshot("healthmind.workflow_releases", "release_id", body.release_id or "")
+        if not current or sha256_json(current) != preview.snapshot_hash: raise HTTPException(409, "版本在预览后发生变化，请重新预览")
     op = request.app.state.audit.write("release."+body.operation, body.release_id or body.release_version or "new", body.reason, "started")
     try:
         if body.operation == "create": rid = await request.app.state.repo.create_release(body.model_dump(), body.reason)
@@ -176,8 +179,10 @@ async def retry_preview(request: Request, task_id: str, body: RetryRequest):
 
 @app.post("/api/tasks/{task_id}/retry/execute")
 async def retry_execute(request: Request, task_id: str, body: RetryRequest):
-    require_csrf(request, body.csrf_token); request.app.state.previews.consume(body.preview_token or "", "task.retry")
+    require_csrf(request, body.csrf_token); preview = request.app.state.previews.consume(body.preview_token or "", "task.retry")
     if body.confirmation != f"RETRY {task_id}": raise HTTPException(409, "confirmation text mismatch")
+    current = await request.app.state.repo.snapshot("healthmind.ai_tasks", "task_id", task_id)
+    if not current or sha256_json(current) != preview.snapshot_hash: raise HTTPException(409, "任务在预览后发生变化，请重新预览")
     op = request.app.state.audit.write("task.retry", task_id, body.reason, "started")
     try:
         new_id = await request.app.state.repo.retry_task(task_id, body.release_id, body.reason, op)
@@ -190,7 +195,10 @@ async def retry_execute(request: Request, task_id: str, body: RetryRequest):
 @app.post("/api/recovery/preview")
 async def recovery_preview(request: Request, body: RecoveryRequest):
     require_csrf(request, body.csrf_token)
-    target = (f"{body.schema_name}.integration_outbox", "event_id") if body.operation == "reset_outbox" else (("healthmind.ai_task_attempts", "attempt_id") if body.operation == "recover_attempt" else ("healthmind.ai_tasks", "task_id"))
+    if body.operation in {"reset_outbox", "replay_outbox"}: target = (f"{body.schema_name}.integration_outbox", "event_id")
+    elif body.operation == "replay_nutri_inbox": target = ("nutri.integration_inbox", "event_id")
+    elif body.operation == "recover_attempt": target = ("healthmind.ai_task_attempts", "attempt_id")
+    else: target = ("healthmind.ai_tasks", "task_id")
     snapshot = await request.app.state.repo.snapshot(*target, body.record_id)
     if not snapshot: raise HTTPException(404, "record not found")
     token, preview = request.app.state.previews.create("recovery."+body.operation, body.model_dump(exclude={"preview_token"}), snapshot)
@@ -199,11 +207,21 @@ async def recovery_preview(request: Request, body: RecoveryRequest):
 
 @app.post("/api/recovery/execute")
 async def recovery_execute(request: Request, body: RecoveryRequest):
-    require_csrf(request, body.csrf_token); request.app.state.previews.consume(body.preview_token or "", "recovery."+body.operation)
+    require_csrf(request, body.csrf_token); preview = request.app.state.previews.consume(body.preview_token or "", "recovery."+body.operation)
     if body.confirmation != f"RECOVER {body.record_id}": raise HTTPException(409, "confirmation text mismatch")
+    if body.operation in {"reset_outbox", "replay_outbox"}: target = (f"{body.schema_name}.integration_outbox", "event_id")
+    elif body.operation == "replay_nutri_inbox": target = ("nutri.integration_inbox", "event_id")
+    elif body.operation == "recover_attempt": target = ("healthmind.ai_task_attempts", "attempt_id")
+    else: target = ("healthmind.ai_tasks", "task_id")
+    current = await request.app.state.repo.snapshot(*target, body.record_id)
+    if not current or sha256_json(current) != preview.snapshot_hash: raise HTTPException(409, "记录在预览后发生变化，请重新预览")
     op = request.app.state.audit.write("recovery."+body.operation, body.record_id, body.reason, "started")
     try:
-        result = await request.app.state.repo.recover(body.operation, body.schema_name, body.record_id)
+        if body.operation in {"replay_outbox", "replay_nutri_inbox"}:
+            message = await request.app.state.repo.replay_message(body.schema_name, body.record_id, body.operation == "replay_nutri_inbox")
+            result = await request.app.state.kafka.produce(message["topic"], message["key"], message["payload"], {"x-healthmind-control-replay":"true"}, None)
+        else:
+            result = await request.app.state.repo.recover(body.operation, body.schema_name, body.record_id)
         request.app.state.audit.write("recovery."+body.operation, body.record_id, body.reason, "succeeded", operation_id=op, result=result)
         return serial(result)
     except Exception as exc:
@@ -220,4 +238,3 @@ async def events(request: Request):
             yield f"event: status\ndata: {json.dumps(serial(payload), ensure_ascii=False)}\n\n"
             await asyncio.sleep(settings.refresh_seconds)
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})
-

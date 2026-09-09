@@ -22,7 +22,7 @@ def redact(value: Any) -> Any:
 
 
 def canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
 def sha256_json(value: Any) -> str:
@@ -64,4 +64,3 @@ def require_csrf(request: Request, token: str | None) -> None:
     expected = request.app.state.csrf_token
     if not token or not secrets.compare_digest(token, expected):
         raise HTTPException(403, "CSRF token invalid")
-

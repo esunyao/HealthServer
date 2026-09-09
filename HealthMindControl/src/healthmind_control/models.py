@@ -38,7 +38,6 @@ class RetryRequest(MutationRequest):
 
 
 class RecoveryRequest(MutationRequest):
-    operation: Literal["reset_outbox", "recover_attempt", "cancel_task"]
+    operation: Literal["reset_outbox", "replay_outbox", "replay_nutri_inbox", "recover_attempt", "cancel_task"]
     schema_name: Literal["healthmind", "nutri"] = "healthmind"
     record_id: str
-

@@ -2,7 +2,7 @@
 name = "healthmind-control"
 version = "0.1.0"
 description = "Local operations console for HealthMind, NutriMemo, Kafka and Dify"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
   "confluent-kafka>=2.6",
   "fastapi>=0.115",
@@ -32,4 +32,3 @@ packages = ["src/healthmind_control"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-

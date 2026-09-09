@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from confluent_kafka import Consumer, KafkaException, Producer, TopicPartition
+from confluent_kafka import Consumer, ConsumerGroupTopicPartitions, KafkaException, Producer, TopicPartition
 from confluent_kafka.admin import AdminClient
 
 from .config import Settings
@@ -30,17 +30,24 @@ class KafkaService:
         md = self.admin.list_topics(timeout=5)
         brokers = [{"id": b.id, "host": b.host, "port": b.port} for b in md.brokers.values()]
         topics = []
+        consumer = Consumer({"bootstrap.servers": self.cfg.kafka_bootstrap_servers, "group.id": "healthmind-control-metadata", "enable.auto.commit": False})
         for name, topic in sorted(md.topics.items()):
             if name.startswith("__"):
                 continue
             parts = []
             for pid, part in sorted(topic.partitions.items()):
+                try:
+                    low, high = consumer.get_watermark_offsets(TopicPartition(name, pid), timeout=2)
+                except Exception:
+                    low, high = None, None
                 parts.append({
                     "partition": pid, "leader": part.leader,
                     "replicas": list(part.replicas), "isr": list(part.isrs),
+                    "earliest_offset": low, "latest_offset": high,
                     "healthy": part.leader >= 0 and set(part.replicas) == set(part.isrs),
                 })
             topics.append({"name": name, "error": str(topic.error) if topic.error else None, "partitions": parts})
+        consumer.close()
         return {"brokers": brokers, "topics": topics}
 
     async def groups(self) -> list[dict[str, Any]]:
@@ -50,7 +57,20 @@ class KafkaService:
         result = self.admin.list_consumer_groups(request_timeout=5).result(6)
         groups = []
         for listing in result.valid:
-            groups.append({"group_id": listing.group_id, "state": str(listing.state), "simple": listing.is_simple_consumer_group})
+            item = {"group_id": listing.group_id, "state": str(listing.state), "simple": listing.is_simple_consumer_group, "lag": None}
+            try:
+                offsets = self.admin.list_consumer_group_offsets([ConsumerGroupTopicPartitions(listing.group_id)], request_timeout=5)[listing.group_id].result(6)
+                md = self.admin.list_topics(timeout=5)
+                lag = 0
+                consumer = Consumer({"bootstrap.servers": self.cfg.kafka_bootstrap_servers, "group.id": "healthmind-control-lag", "enable.auto.commit": False})
+                for tp in offsets.topic_partitions:
+                    if tp.offset >= 0 and tp.topic in md.topics:
+                        _, high = consumer.get_watermark_offsets(TopicPartition(tp.topic, tp.partition), timeout=2)
+                        lag += max(0, high - tp.offset)
+                consumer.close(); item["lag"] = lag
+            except Exception:
+                pass
+            groups.append(item)
         return groups
 
     async def messages(
@@ -122,7 +142,7 @@ class KafkaService:
                 delivered["error"] = str(error)
             else:
                 delivered.update(topic=message.topic(), partition=message.partition(), offset=message.offset())
-        kwargs = {"topic": topic, "key": key, "value": json.dumps(payload, ensure_ascii=False), "headers": headers, "callback": callback}
+        kwargs = {"topic": topic, "key": key, "value": json.dumps(payload, ensure_ascii=False), "headers": list(headers.items()), "callback": callback}
         if partition is not None:
             kwargs["partition"] = partition
         self.producer.produce(**kwargs)
@@ -130,4 +150,3 @@ class KafkaService:
         if remaining or delivered.get("error"):
             raise RuntimeError(delivered.get("error") or f"{remaining} message(s) undelivered")
         return delivered
-

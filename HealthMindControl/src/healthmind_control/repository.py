@@ -51,7 +51,18 @@ class Repository:
            WHERE status IN ('pending','publishing','failed') AND created_at < now()-(%s*interval '1 minute')
           ORDER BY at LIMIT 100
         """, (self.stale_minutes,) * 3)
-        return {"counts": rows, "stale": stale}
+        inconsistent = await self.db.fetch_all("""
+          SELECT m.meal_id,m.capture_session_id,m.analysis_status,s.status AS capture_status,t.status AS task_status,t.task_id
+          FROM nutri.meal_records m JOIN nutri.meal_capture_sessions s USING(capture_session_id)
+          LEFT JOIN LATERAL (
+            SELECT task_id,status FROM healthmind.ai_tasks
+            WHERE aggregate_id=m.meal_id::text ORDER BY created_at DESC LIMIT 1
+          ) t ON true
+          WHERE (m.analysis_status='completed' AND s.status<>'completed')
+             OR (m.analysis_status='analysing' AND (t.status IS NULL OR t.status IN('failed','cancelled','expired')))
+          ORDER BY m.updated_at DESC LIMIT 100
+        """)
+        return {"counts": rows, "stale": stale, "inconsistent": inconsistent}
 
     async def tasks(self, status: str | None, cursor: str | None, limit: int) -> list[dict[str, Any]]:
         clauses, params = [], []
@@ -102,11 +113,24 @@ class Repository:
         allowed = {
           ("healthmind.ai_tasks", "task_id"), ("healthmind.ai_task_attempts", "attempt_id"),
           ("healthmind.integration_outbox", "event_id"), ("nutri.integration_outbox", "event_id"),
+          ("nutri.integration_inbox", "event_id"),
           ("healthmind.workflow_releases", "release_id"),
         }
         if (table, column) not in allowed:
             raise ValueError("unsupported snapshot")
         return await self.db.fetch_one(f"SELECT * FROM {table} WHERE {column}=%s", (value,))
+
+    async def replay_message(self, schema: str, record_id: str, from_inbox: bool = False) -> dict[str, Any]:
+        if from_inbox:
+            row = await self.db.fetch_one("""SELECT o.destination_key topic,o.partition_key key,o.payload
+              FROM nutri.integration_inbox i JOIN healthmind.integration_outbox o ON o.event_id=i.event_id
+              WHERE i.event_id=%s AND i.status='failed'""", (record_id,))
+        elif schema == "healthmind":
+            row = await self.db.fetch_one("SELECT destination_key topic,partition_key key,payload FROM healthmind.integration_outbox WHERE event_id=%s AND status='published'", (record_id,))
+        else:
+            row = await self.db.fetch_one("SELECT 'nutrition-capture-ready' topic,aggregate_id::text key,payload FROM nutri.integration_outbox WHERE event_id=%s AND status='published'", (record_id,))
+        if not row: raise RuntimeError("可重放的已发布 outbox/失败 inbox 不存在")
+        return row
 
     async def create_release(self, data: dict[str, Any], reason: str) -> str:
         identity = "/".join(str(data[k]) for k in ("workspace_id","app_id","workflow_id","workflow_version"))
@@ -137,7 +161,11 @@ class Repository:
             if not release: raise RuntimeError("release not found")
             old = release["status"]
             if operation in {"promote","rollback"}:
+                cur = await conn.execute("SELECT release_id FROM healthmind.workflow_releases WHERE task_type_id=%s AND status='production' AND release_id<>%s FOR UPDATE", (release["task_type_id"],rid))
+                replaced = await cur.fetchone()
                 await conn.execute("UPDATE healthmind.workflow_releases SET status='retired',retired_at=now() WHERE task_type_id=%s AND status='production' AND release_id<>%s", (release["task_type_id"],rid))
+                if replaced:
+                    await conn.execute("INSERT INTO healthmind.workflow_release_audits(audit_id,release_id,action,from_status,to_status,reason) VALUES(%s,%s,'retired','production','retired',%s)", (uuid4(),replaced["release_id"],f"Replaced by {rid}: {reason}"))
                 await conn.execute("UPDATE healthmind.workflow_releases SET status='production',promoted_at=now(),retired_at=NULL WHERE release_id=%s", (rid,))
                 new = "production"
             elif operation == "retire":
@@ -194,4 +222,3 @@ class Repository:
             row = await cur.fetchone()
             if not row: raise RuntimeError("record changed or operation precondition failed")
             return dict(row)
-
