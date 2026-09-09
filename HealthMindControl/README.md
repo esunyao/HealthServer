@@ -1,11 +1,13 @@
-# HealthMindControl
+# HealthMindControl v0.2
 
-HealthMind、NutriMemo、Kafka 和 Dify 的本地 Web 运维控制台。程序只监听
-`127.0.0.1:8765`，不会开放到局域网或公网。
+HealthMind、NutriMemo、Kafka 与 Dify 的本地 Web 运维控制台。只监听 127.0.0.1:8765，不开放到局域网/公网；
+所有数据库与 Kafka 写操作都必须「预览 → 输入确认文本 → 事务执行」，并双写审计（DB + JSONL）。
 
-## 1. 准备 Python 环境
+v0.2 变更：后端按领域分包、前端多视图 + 主题系统（4 基色 × 6 强调色 + 跟随系统）、
+无 npm/CDN 的现代组件化 UI（htmx 风格属性 + Web Components）、需求合规缺口全部补齐
+（详见 docs/requirements.md）。
 
-项目使用父目录 `HealthServer/.venv`，不要在 `HealthMindControl` 内再创建虚拟环境。
+## 1. 环境准备（只使用父目录虚拟环境）
 
 ```powershell
 cd E:\ProjectSpace\HealthServer
@@ -14,99 +16,80 @@ $env:UV_PROJECT_ENVIRONMENT = "E:\ProjectSpace\HealthServer\.venv"
 uv sync --project HealthMindControl --extra test
 ```
 
-如果不激活 `.venv`，只要保留上述绝对路径形式的 `UV_PROJECT_ENVIRONMENT` 设置也可以。
-
-## 2. 创建并配置 `.env`
+## 2. 配置 .env
 
 ```powershell
-cd E:\ProjectSpace\HealthServer\HealthMindControl
-Copy-Item .env.example .env
-notepad .env
-```
-
-程序启动时会自动读取下面的文件，不需要额外执行“绑定”命令：
-
-```text
-E:\ProjectSpace\HealthServer\HealthMindControl\.env
-```
-
-最低配置示例：
-
-```dotenv
-HMC_DATABASE_DSN=postgresql://数据库用户:数据库密码@192.168.3.101:5432/Health
-HMC_KAFKA_BOOTSTRAP_SERVERS=192.168.3.101:9092
-HMC_DIFY_URL=https://dify.lovedage.com.cn
-HMC_MCP_URL=http://192.168.3.101:8093/mcp
-HMC_AUTH_URL=https://auth.lovedage.com.cn:8093
-HMC_DIFYCTL_PATH=C:/Users/Esuny/AppData/Local/difyctl/bin/difyctl.exe
+Copy-Item .env.example .env   # 然后编辑
 ```
 
 | 配置项 | 用途 |
 |---|---|
-| `HMC_DATABASE_DSN` | PostgreSQL 连接串，同时访问 `healthmind` 和 `nutri` schema |
-| `HMC_NUTRI_DATABASE_DSN` | 可选；仅当 Nutri 使用另一个数据库时填写 |
-| `HMC_KAFKA_BOOTSTRAP_SERVERS` | Kafka 地址，多个地址用逗号分隔 |
-| `HMC_DIFY_URL` | Dify 基础地址 |
-| `HMC_MCP_URL` | HealthMind MCP 地址 |
-| `HMC_AUTH_URL` | Authentik 地址 |
-| `HMC_DIFYCTL_PATH` | 本机 `difyctl.exe` 完整路径 |
-| `HMC_DIFY_CONSOLE_TOKEN` | 可选；自动读取 published workflow 时使用 |
-| `HMC_STALE_MINUTES` | 滞留判定时间，默认 5 分钟 |
-| `HMC_REFRESH_SECONDS` | 总览刷新间隔，默认 5 秒 |
+| HMC_DATABASE_DSN | PostgreSQL，同时访问 healthmind / nutri schema |
+| HMC_NUTRI_DATABASE_DSN | 可选（Nutri 独立库时） |
+| HMC_KAFKA_BOOTSTRAP_SERVERS | Kafka 地址（逗号分隔） |
+| HMC_DIFY_URL / HMC_MCP_URL / HMC_AUTH_URL | Dify / MCP / Authentik |
+| HMC_DIFYCTL_PATH | difyctl.exe 路径 |
+| HMC_DIFY_CONSOLE_TOKEN | 可选：只读自动读取 published workflow |
+| HMC_STALE_MINUTES / HMC_REFRESH_SECONDS | 滞留判定 / SSE 间隔 |
+| HMC_KAFKA_MAX_SCAN_MESSAGES | 消息查看扫描上限（默认 50000） |
+| HMC_KAFKA_METADATA_CACHE_SECONDS / HMC_PROBE_CACHE_TTL_SECONDS | 缓存节流 |
+| HMC_PREVIEW_TTL_SECONDS / HMC_TASK_RETENTION_DAYS | 预览令牌 / 克隆保留期 |
 
-密码包含 `@`、`:`、`/`、`#` 等字符时需要 URL 编码，例如 `a@b` 写成 `a%40b`。
-`.env` 已被 Git 忽略，请勿把真实凭据复制到 `.env.example`。
-
-## 3. 启动
-
-当前位于 `HealthMindControl` 目录时：
+## 3. 启动与访问
 
 ```powershell
 cd E:\ProjectSpace\HealthServer\HealthMindControl
 uv run --active --project . healthmind-control
 ```
 
-也可以简写为：
+浏览器打开 http://127.0.0.1:8765（自动跳转 /ui/dashboard）。
 
-```powershell
-uv run --active healthmind-control
+## 4. 页面
+
+总览（SSE 5s 轻量 + 昂贵按需）、任务、数据浏览（healthmind/nutri 受控行浏览器，keyset 分页 ≤100、
+payload 延迟、脱敏）、链路（关系优先时间线 + 模糊命中标注）、Kafka（分区健康/成员/offsets/只读消息
+含时间与结构化过滤/受控生产）、Dify 版本（candidate→绑定工具→production→退役/回滚，含审计）、
+受控修复（一键诊断 + 手动 + 克隆 + attempt 恢复语义闭环）、审计（JSONL + DB）、关于。
+
+### 主题切换
+右上角 ◐：4 基色（midnight 默认 / light / slate / olive）× 6 强调色 + 跟随系统；持久化于 localStorage
+（hmc.theme）；切换带颜色过渡，状态翻转有脉冲动画。
+
+## 5. 项目结构
+
+```
+src/healthmind_control/
+├─ main.py / app.py        # 入口与薄装配（lifespan 注入 + routers）
+├─ config.py security.py audit.py models.py util.py
+├─ db/database.py          # 连接池 + 表结构自检 + 15s statement_timeout
+├─ services/               # kafka / dify
+├─ repositories/           # overview tasks rows trace releases recovery → 门面 Repository
+├─ api/                    # overview tasks rows trace kafka releases recovery auditlog events
+├─ ui/                     # page（视图路由）/ parts（片段）/ fmt（模板辅助）
+├─ templates/              # base + views/* + partials/*
+└─ static/                 # css（tokens/theme/base/components/views） js（模块 + views/*） img
+tests/                     # pytest 单测（无外部依赖）+ _smoke.py 可选真库冒烟
+docs/requirements.md       # 需求合规矩阵与 V1.1 清单
 ```
 
-当前位于父目录 `HealthServer` 时：
+约定：模板全局 fmt_ts / col_label / badge_cls 见 ui/fmt.py；前端 hx-* 属性为 htmx 兼容子集
+（js/hx.js 驱动，官方 htmx.min.js 可原样替换）；CSRF 走 <meta name=csrf>；预览流统一 js/flow.js。
 
-```powershell
-cd E:\ProjectSpace\HealthServer
-uv run --active --project HealthMindControl healthmind-control
-```
-
-成功启动后会显示：
-
-```text
-Application startup complete.
-Uvicorn running on http://127.0.0.1:8765
-```
-
-浏览器打开 <http://127.0.0.1:8765>，按 `Ctrl+C` 停止程序。
-
-## 4. 检查与常见问题
-
-运行测试：
+## 6. 测试
 
 ```powershell
 cd E:\ProjectSpace\HealthServer
 \.venv\Scripts\python.exe -m pytest -q HealthMindControl\tests
+\.venv\Scripts\python.exe HealthMindControl\tests\_smoke.py   # 需要 .env 可达真库（可选）
 ```
 
-- `Project directory HealthMindControl does not exist`：你已经位于该目录，应使用 `--project .`。
-- `HMC_DATABASE_DSN 未配置`：检查 `.env` 的位置和变量名；变量必须以 `HMC_` 开头。
-- `password authentication failed for user "user"`：当前 `.env` 仍是模板值，请把
-  `数据库用户`、`数据库密码`（或 `user`、`password`）替换为 PostgreSQL 的真实账号。
-- 数据库可读但写入禁用：页面会显示缺少的表，需要先执行对应 Flyway migration。
-- Dify `/v1/info` 返回 401：包含 Bearer challenge 时会被识别为服务正常。
+JS 语法由 pytest 用 node --check 递归校验（node 缺失自动跳过）。
 
-## 5. 安全规则
+## 7. 安全与边界（沿用 + v0.2）
 
-- Kafka 消息查看器不提交业务消费 offset。
-- 所有数据库和 Kafka 写操作都必须先预览，再输入确认文本。
-- 操作审计位于 `HealthMindControl/var/audit/admin-actions.jsonl`。
-- Dify App API Key 继续由 HealthMind 的 Nacos/环境变量管理。
+- Kafka 消息查看绝不提交业务消费组 offset；控制台自身诊断组（healthmind-control-*）不在列表中展示。
+- 所有写操作：预览令牌 120s（可配）+ 记录快照哈希绑定；恢复 attempt 另有行锁与 lock_version 双校验。
+- HealthMind 收件箱不存 payload：缺失 → 重放 capture-ready；已存在 → 只允许克隆任务（不重置原 inbox）。
+- 审计：var/audit/admin-actions.jsonl（portalocker + fsync），DB workflow_release_audits 每变更同写。
+- Dify API Key 只由 Nacos/环境变量管理；difyctl 导出永不加 --include-secret；不读取凭据文件。
+- v1 不做：topic 创建/删除、消费组 offset 重置、Kafka 配置修改、任意 SQL、物理删除、修改历史成功记录。
