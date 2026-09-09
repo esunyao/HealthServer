@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'cn.esuny'
-version = '0.0.1-SNAPSHOT'
+version = '0.0.2-SNAPSHOT'
 
 subprojects {
     // 统一应用 Java 和依赖管理插件
@@ -14,7 +14,7 @@ subprojects {
     apply plugin: 'io.spring.dependency-management'
 
     group = 'cn.esuny'
-    version = '0.0.1-SNAPSHOT'
+    version = '0.0.2-SNAPSHOT'
 
     ext {
         set('springCloudVersion', "2025.1.2")

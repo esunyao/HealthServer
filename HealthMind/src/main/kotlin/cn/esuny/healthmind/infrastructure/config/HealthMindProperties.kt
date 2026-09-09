@@ -34,8 +34,8 @@ data class HealthMindProperties(
     )
 
     data class OAuth(
-        @field:NotBlank val issuerUri: String = "http://localhost:9000/application/o/healthmind/",
-        @field:NotBlank val jwkSetUri: String = "http://localhost:9000/application/o/healthmind/jwks/",
+        @field:NotBlank val issuerUri: String = "http://localhost:9000/application/o/healthmind-mcp/",
+        @field:NotBlank val jwkSetUri: String = "http://localhost:9000/application/o/healthmind-mcp/jwks/",
         @field:NotBlank val expectedMcpAudience: String = "healthmind-mcp",
         @field:NotBlank val allowedDifyClientId: String = "dify-healthmind",
         @field:NotBlank val mcpResourceUri: String = "http://localhost:8100/mcp",

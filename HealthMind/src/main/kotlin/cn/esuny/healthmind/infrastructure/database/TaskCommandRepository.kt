@@ -69,7 +69,7 @@ class TaskCommandRepository(
             emptyMap<String, Any>(),
         ) { rs, _ -> ProductionRelease(rs.getObject(1, UUID::class.java), rs.getObject(2, UUID::class.java), rs.getString(3), rs.getString(4)) }
             .singleOrNull()
-            ?: throw IllegalStateException("No production workflow release for nutrition.meal_analysis")
+            ?: throw cn.esuny.healthmind.domain.task.ProductionWorkflowUnavailableException()
 
         try {
             schemas.validate(release.inputSchema, eventNode, "INPUT_CONTRACT_INVALID")

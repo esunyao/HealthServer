@@ -9,17 +9,22 @@ import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.util.UUID
+import java.time.Duration
+import org.slf4j.LoggerFactory
+import org.springframework.kafka.support.Acknowledgment
+import cn.esuny.healthmind.domain.task.ProductionWorkflowUnavailableException
 
 @Component
 class NutritionCaptureReadyListener(
     private val canonicalJson: CanonicalJson,
     private val repository: TaskCommandRepository,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
     @KafkaListener(
         topics = ["\${healthmind.kafka.capture-ready-destination}"],
         groupId = "\${healthmind.kafka.consumer-group}",
     )
-    fun receive(raw: String) {
+    fun receive(raw: String, acknowledgment: Acknowledgment) {
         val root = canonicalJson.parse(raw)
         require(root.path("event_type").asString() == NutritionEventTypes.CAPTURE_READY) { "Unsupported event_type" }
         require(root.path("schema_version").asString() == NutritionEventTypes.SCHEMA_VERSION) { "Unsupported schema_version" }
@@ -43,6 +48,13 @@ class NutritionCaptureReadyListener(
                 mealId = mealId,
             ),
         )
-        repository.acceptCaptureReady(event, root, canonicalJson.sha256(root))
+        try {
+            repository.acceptCaptureReady(event, root, canonicalJson.sha256(root))
+        } catch (_: ProductionWorkflowUnavailableException) {
+            log.warn("Nutrition event {} deferred: no production workflow for nutrition.meal_analysis; retry in 30s", event.eventId)
+            acknowledgment.nack(Duration.ofSeconds(30))
+            return
+        }
+        acknowledgment.acknowledge()
     }
 }

@@ -26,7 +26,6 @@ class ClientCredentialsTokenProvider(
                 add("client_id", config.clientId)
                 add("client_secret", config.clientSecret)
                 add("scope", config.scope)
-                add("audience", config.audience)
             }
             val response = builder.clone().build().post().uri(config.tokenUri)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)

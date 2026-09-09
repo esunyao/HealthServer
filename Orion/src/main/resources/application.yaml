@@ -33,7 +33,7 @@ spring:
   # Spring Boot 配置导入机制；optional: 前缀防止 Nacos 不可用时启动失败
   config:
     import:
-      - "optional:nacos:Orion_Application.yaml?group=${NACOS_GROUP:ORION_GROUP}&refreshEnabled=true"
+      - "nacos:Orion_Application.yaml?group=${NACOS_GROUP:ORION_GROUP}&refreshEnabled=true"
 
   # ----------------------------------------------------------
   # 数据源配置 — PostgreSQL
@@ -117,7 +117,7 @@ logging:
 orion:
   internal:
     security:
-      issuer-uri: ${ORION_INTERNAL_ISSUER_URI:http://localhost:9000/application/o/orion/}
-      jwk-set-uri: ${ORION_INTERNAL_JWK_SET_URI:http://localhost:9000/application/o/orion/jwks/}
+      issuer-uri: ${ORION_INTERNAL_ISSUER_URI:http://localhost:9000/application/o/orion-internal/}
+      jwk-set-uri: ${ORION_INTERNAL_JWK_SET_URI:http://localhost:9000/application/o/orion-internal/jwks/}
       audience: ${ORION_INTERNAL_AUDIENCE:orion-internal}
       allowed-health-mind-client-id: ${ORION_HEALTHMIND_CLIENT_ID:healthmind-orion}

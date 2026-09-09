@@ -16,6 +16,7 @@ class FlywayConfig {
             .schemas("healthmind")
             .defaultSchema("healthmind")
             .createSchemas(true)
+            .placeholderReplacement(false)
             .locations("classpath:db/migration")
             .load()
     }

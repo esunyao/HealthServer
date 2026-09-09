@@ -75,7 +75,7 @@ class NutriRepository(private val jdbc: JdbcTemplate) {
             'event_type', 'nutrition.capture.ready.v1',
             'occurred_at', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
             'producer', 'NutriMemo',
-            'trace_id', ?,
+            'trace_id', CAST(? AS text),
             'subject_id', CAST(? AS text),
             'aggregate_type', 'meal',
             'aggregate_id', CAST(? AS text),

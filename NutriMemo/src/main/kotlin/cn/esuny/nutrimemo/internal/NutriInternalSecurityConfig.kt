@@ -18,8 +18,8 @@ import org.springframework.validation.annotation.Validated
 @Validated
 @ConfigurationProperties("nutri.internal.security")
 data class NutriInternalSecurityProperties(
-    @field:NotBlank val issuerUri: String = "http://localhost:9000/application/o/nutrimemo/",
-    @field:NotBlank val jwkSetUri: String = "http://localhost:9000/application/o/nutrimemo/jwks/",
+    @field:NotBlank val issuerUri: String = "http://localhost:9000/application/o/nutrimemo-internal/",
+    @field:NotBlank val jwkSetUri: String = "http://localhost:9000/application/o/nutrimemo-internal/jwks/",
     @field:NotBlank val audience: String = "nutrimemo-internal",
     @field:NotBlank val allowedHealthMindClientId: String = "healthmind-nutrimemo",
 )

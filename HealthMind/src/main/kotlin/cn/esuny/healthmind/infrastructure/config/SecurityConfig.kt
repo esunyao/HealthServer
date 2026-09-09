@@ -30,6 +30,15 @@ class SecurityConfig(private val properties: HealthMindProperties) {
                     .anyRequest().denyAll()
             }
             .oauth2ResourceServer { server ->
+                server.protectedResourceMetadata { metadata ->
+                    metadata.protectedResourceMetadataCustomizer { builder ->
+                        builder.resource(properties.oauth.mcpResourceUri)
+                            .authorizationServer(properties.oauth.issuerUri)
+                            .scope("healthmind.tool.nutrimemo.capture-context.read")
+                            .scope("healthmind.tool.orion.nutrition-context.read")
+                            .tlsClientCertificateBoundAccessTokens(false)
+                    }
+                }
                 server.authenticationEntryPoint { _, response, exception ->
                     val error = (exception as? org.springframework.security.oauth2.core.OAuth2AuthenticationException)
                         ?.error?.errorCode

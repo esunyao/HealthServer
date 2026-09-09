@@ -18,8 +18,8 @@ import org.springframework.validation.annotation.Validated
 @Validated
 @ConfigurationProperties("orion.internal.security")
 data class OrionInternalSecurityProperties(
-    @field:NotBlank val issuerUri: String = "http://localhost:9000/application/o/orion/",
-    @field:NotBlank val jwkSetUri: String = "http://localhost:9000/application/o/orion/jwks/",
+    @field:NotBlank val issuerUri: String = "http://localhost:9000/application/o/orion-internal/",
+    @field:NotBlank val jwkSetUri: String = "http://localhost:9000/application/o/orion-internal/jwks/",
     @field:NotBlank val audience: String = "orion-internal",
     @field:NotBlank val allowedHealthMindClientId: String = "healthmind-orion",
 )

@@ -1,7 +1,10 @@
 package cn.esuny.healthmind.infrastructure.database
 
+import cn.esuny.healthmind.infrastructure.config.FlywayConfig
+import org.springframework.jdbc.datasource.DriverManagerDataSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class HealthMindMigrationScriptTest {
@@ -35,5 +38,14 @@ class HealthMindMigrationScriptTest {
         assertTrue(seeds.contains("\"required\":[\"capture_session_id\",\"meal_id\",\"meal_type\""))
         assertTrue(seeds.contains("\"required\":[\"subject_id\",\"age_years\",\"gender\""))
         assertTrue(seeds.contains("'{}'::jsonb").not())
+    }
+
+    @Test
+    fun `flyway does not interpret json schema as placeholders`() {
+        val dataSource = DriverManagerDataSource("jdbc:postgresql://localhost:1/unused", "unused", "unused")
+
+        val flyway = FlywayConfig().flyway(dataSource)
+
+        assertFalse(flyway.configuration.isPlaceholderReplacement)
     }
 }

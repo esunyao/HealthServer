@@ -2,12 +2,15 @@ server:
   port: ${SERVER_PORT:8099}
 
 spring:
+  output:
+    ansi:
+      enabled: always
   application:
     name: NutriMemo
 
   config:
     import:
-      - "optional:nacos:NutriMemo_Application.yaml?group=${NACOS_GROUP:NUTRIMEMO_GROUP}&refreshEnabled=true"
+      - "nacos:NutriMemo_Application.yaml?group=${NACOS_GROUP:NUTRIMEMO_GROUP}&refreshEnabled=true"
 
   datasource:
     url: ${DB_URL:}
@@ -74,8 +77,8 @@ nutri:
     publish-timeout: ${NUTRIMEMO_PUBLISH_TIMEOUT:15s}
   internal:
     security:
-      issuer-uri: ${NUTRIMEMO_INTERNAL_ISSUER_URI:http://localhost:9000/application/o/nutrimemo/}
-      jwk-set-uri: ${NUTRIMEMO_INTERNAL_JWK_SET_URI:http://localhost:9000/application/o/nutrimemo/jwks/}
+      issuer-uri: ${NUTRIMEMO_INTERNAL_ISSUER_URI:http://localhost:9000/application/o/nutrimemo-internal/}
+      jwk-set-uri: ${NUTRIMEMO_INTERNAL_JWK_SET_URI:http://localhost:9000/application/o/nutrimemo-internal/jwks/}
       audience: ${NUTRIMEMO_INTERNAL_AUDIENCE:nutrimemo-internal}
       allowed-health-mind-client-id: ${NUTRIMEMO_HEALTHMIND_CLIENT_ID:healthmind-nutrimemo}
 

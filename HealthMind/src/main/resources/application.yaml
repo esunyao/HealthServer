@@ -1,115 +1,207 @@
+# 内嵌 Web 服务监听端口。
+server:
+  port: ${HEALTHMIND_PORT:8100}
+
+# HealthMind 本地基础配置；未在本文件覆盖的业务配置可从 Nacos 加载。
 spring:
+  output:
+    ansi:
+      enabled: always
+  # Spring 应用名称，也用于服务注册与配置识别。
   application:
     name: HealthMind
+  # 导入共享 Nacos 配置；optional 表示 Nacos 不可用时仍尝试启动。
   config:
-    import: optional:nacos:Health_Application.yaml?group=${NACOS_GROUP:HEALTHMIND_GROUP}&refreshEnabled=true
+    import: nacos:HealthMind_Application.yaml?group=${NACOS_GROUP:HEALTHMIND_GROUP}&refreshEnabled=true
 
+  # PostgreSQL 数据源配置。生产环境应通过环境变量或 Nacos 提供连接信息。
   datasource:
+    # 数据库 JDBC 连接地址。
     url: ${HEALTHMIND_DB_URL:jdbc:postgresql://localhost:5432/healthserver}
+    # 数据库登录用户名。
     username: ${HEALTHMIND_DB_USERNAME:postgres}
+    # 数据库登录密码，不在代码仓库中填写真实密码。
     password: ${HEALTHMIND_DB_PASSWORD:}
     hikari:
+      # 连接池允许创建的最大连接数。
       maximum-pool-size: ${HEALTHMIND_DB_MAX_POOL_SIZE:20}
+      # 连接池保持的最小空闲连接数。
       minimum-idle: ${HEALTHMIND_DB_MIN_IDLE:3}
 
+  # Nacos 服务发现客户端配置。
   cloud:
     nacos:
+      # Nacos 服务地址，格式通常为 host:port。
       server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      # Nacos 登录用户名。
       username: ${NACOS_USERNAME:}
+      # Nacos 登录密码。
       password: ${NACOS_PASSWORD:}
       discovery:
+        # 是否启用服务注册与发现。
         enabled: ${NACOS_DISCOVERY_ENABLED:true}
+        # 服务注册所属的 Nacos 分组。
         group: ${NACOS_GROUP:HEALTH_GROUP}
 
+  # Kafka 客户端基础配置。
   kafka:
+    # Kafka 集群的 bootstrap 服务器列表。
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
+      # Kafka 消费者组；业务自定义配置中的 consumer-group 应保持一致。
       group-id: ${HEALTHMIND_KAFKA_CONSUMER_GROUP:healthmind-nutrition-v1}
+      # 关闭自动提交，由业务处理成功后控制消费位点提交。
       enable-auto-commit: false
+      # 没有已提交位点时从最早消息开始消费。
       auto-offset-reset: earliest
     listener:
-      ack-mode: record
+      # 每条消息处理完成后分别确认消费结果。
+      ack-mode: manual
     properties:
+      # Kafka 传输安全协议，如 PLAINTEXT、SASL_PLAINTEXT 或 SASL_SSL。
       security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+      # SASL 认证机制。
       sasl.mechanism: ${KAFKA_SASL_MECHANISM:PLAIN}
+      # SASL JAAS 登录配置；启用 SASL 时必须提供有效内容。
       sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG:}
+      # SSL truststore 文件路径及密码。
       ssl.truststore.location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:}
       ssl.truststore.password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:}
+      # SSL keystore 文件路径及密码。
       ssl.keystore.location: ${KAFKA_SSL_KEYSTORE_LOCATION:}
       ssl.keystore.password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
+      # SSL 私钥密码。
       ssl.key.password: ${KAFKA_SSL_KEY_PASSWORD:}
 
+  # Spring Security OAuth2 Resource Server 配置。
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTHENTIK_ISSUER_URI:http://localhost:9000/application/o/healthmind/}
-          jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:http://localhost:9000/application/o/healthmind/jwks/}
+          # OAuth2 签发方地址，用于校验 JWT 的签发者信息。
+          issuer-uri: ${AUTHENTIK_ISSUER_URI:http://localhost:9000/application/o/healthmind-mcp/}
+          # JWT 公钥集合地址，用于验证令牌签名。
+          jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:http://localhost:9000/application/o/healthmind-mcp/jwks/}
 
+  # Spring AI MCP 服务端配置。
   ai:
     mcp:
       server:
+        # MCP 服务名称与版本，供 MCP 客户端识别。
         name: HealthMind
         version: 1.0.0
+        # 使用同步方式执行 MCP 工具调用。
         type: SYNC
+        # 使用可流式 HTTP 协议提供 MCP 服务。
         protocol: STREAMABLE
         streamable-http:
+          # MCP HTTP 端点。
           mcp-endpoint: /mcp
 
-server:
-  port: ${HEALTHMIND_PORT:8100}
-
+# Spring Boot Actuator 管理端点配置。
 management:
   endpoints:
     web:
       exposure:
+        # 对外暴露健康检查、应用信息、指标和 Prometheus 指标端点。
         include: health,info,metrics,prometheus
 
+# 预期token
+#  iss   = https://aaa.jiancaiwangzhong.com:8093/application/o/healthmind-mcp/
+#  aud   = healthmind-mcp
+#  azp   = dify-healthmind
+#  scope = healthmind.tool.orion.nutrition-context.read
+#  healthmind.tool.nutrimemo.capture-context.read
+# HealthMind 业务自定义配置。
 healthmind:
+  # Kafka 业务主题与消息投递配置。
   kafka:
+    # 捕获数据准备完成事件的主题。
     capture-ready-destination: ${HEALTHMIND_CAPTURE_READY_DESTINATION:nutrition-capture-ready}
+    # 营养分析完成事件的主题。
     analysis-completed-destination: ${HEALTHMIND_ANALYSIS_COMPLETED_DESTINATION:nutrition-analysis-completed}
+    # 营养分析失败事件的主题。
     analysis-failed-destination: ${HEALTHMIND_ANALYSIS_FAILED_DESTINATION:nutrition-analysis-failed}
+    # HealthMind 消费业务事件使用的消费者组。
     consumer-group: ${HEALTHMIND_KAFKA_CONSUMER_GROUP:healthmind-nutrition-v1}
+    # Kafka 消息发布超时时间。
     publish-timeout: ${HEALTHMIND_KAFKA_PUBLISH_TIMEOUT:15s}
+  # Dify 工作流服务配置。
   dify:
+    # Dify API 基础地址。
     base-url: ${DIFY_BASE_URL:http://localhost:8080/v1}
+    # 对接的 Dify 部署版本，用于兼容性校验或请求适配。
     deployment-version: ${DIFY_DEPLOYMENT_VERSION:1.17.0}
+    # 调用 Dify 建立连接的超时时间。
     connect-timeout: ${DIFY_CONNECT_TIMEOUT:3s}
+    # 调用 Dify 读取响应的超时时间；应覆盖工作流执行耗时。
     read-timeout: ${DIFY_READ_TIMEOUT:130s}
+  # OAuth2 资源保护与内部服务调用配置。
   oauth:
-    issuer-uri: ${AUTHENTIK_ISSUER_URI:http://localhost:9000/application/o/healthmind/}
-    jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:http://localhost:9000/application/o/healthmind/jwks/}
+    # 业务侧 OAuth2 签发方地址。
+    issuer-uri: ${AUTHENTIK_ISSUER_URI:http://localhost:9000/application/o/healthmind-mcp/}
+    # 获取 JWT 公钥的地址。
+    jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:http://localhost:9000/application/o/healthmind-mcp/jwks/}
+    # MCP 访问令牌必须具备的 audience。
     expected-mcp-audience: ${HEALTHMIND_MCP_AUDIENCE:healthmind-mcp}
+    # 允许调用 MCP 的 Dify OAuth2 客户端 ID。
     allowed-dify-client-id: ${HEALTHMIND_DIFY_CLIENT_ID:dify-healthmind}
+    # MCP 资源标识，用于 OAuth2 资源元数据与令牌校验。
     mcp-resource-uri: ${HEALTHMIND_MCP_RESOURCE_URI:http://localhost:8100/mcp}
+    # MCP 受保护资源元数据地址。
     protected-resource-metadata-uri: ${HEALTHMIND_MCP_METADATA_URI:http://localhost:8100/.well-known/oauth-protected-resource/mcp}
+    # HealthMind 内部 OAuth2/HTTP 调用的连接与读取超时。
     connect-timeout: ${HEALTHMIND_INTERNAL_CONNECT_TIMEOUT:3s}
     read-timeout: ${HEALTHMIND_INTERNAL_READ_TIMEOUT:15s}
+    # Orion 内部 API 的 client_credentials 配置。
     orion:
+      # Orion 内部服务地址。
       base-url: ${ORION_INTERNAL_BASE_URL:http://Orion}
+      # Authentik OAuth2 令牌端点。
       token-uri: ${ORION_OAUTH_TOKEN_URI:http://localhost:9000/application/o/token/}
+      # Orion OAuth2 客户端 ID。
       client-id: ${ORION_OAUTH_CLIENT_ID:healthmind-orion}
+      # Orion OAuth2 客户端密钥，应通过环境变量或 Nacos 注入。
       client-secret: ${ORION_OAUTH_CLIENT_SECRET:}
+      # Orion 资源服务期望的 audience；令牌中的 aud 由 Authentik Scope Mapping 写入。
       audience: ${ORION_OAUTH_AUDIENCE:orion-internal}
+      # 请求 Orion 令牌时申请的 scope。
       scope: ${ORION_OAUTH_SCOPE:orion.ai-context.read}
+    # NutriMemo 内部 API 的 client_credentials 配置。
     nutrimemo:
+      # NutriMemo 内部服务地址。
       base-url: ${NUTRIMEMO_INTERNAL_BASE_URL:http://NutriMemo}
+      # Authentik OAuth2 令牌端点。
       token-uri: ${NUTRIMEMO_OAUTH_TOKEN_URI:http://localhost:9000/application/o/token/}
+      # NutriMemo OAuth2 客户端 ID。
       client-id: ${NUTRIMEMO_OAUTH_CLIENT_ID:healthmind-nutrimemo}
+      # NutriMemo OAuth2 客户端密钥，应通过环境变量或 Nacos 注入。
       client-secret: ${NUTRIMEMO_OAUTH_CLIENT_SECRET:}
+      # NutriMemo 资源服务期望的 audience；令牌中的 aud 由 Authentik Scope Mapping 写入。
       audience: ${NUTRIMEMO_OAUTH_AUDIENCE:nutrimemo-internal}
+      # 请求 NutriMemo 令牌时申请的 scope。
       scope: ${NUTRIMEMO_OAUTH_SCOPE:nutrimemo.ai-context.read}
+  # 后台任务调度配置。
   scheduler:
+    # 每轮批量处理的任务数量。
     batch-size: ${HEALTHMIND_SCHEDULER_BATCH_SIZE:10}
+    # 待处理任务扫描的固定间隔。
     task-fixed-delay: ${HEALTHMIND_TASK_FIXED_DELAY:1s}
+    # Outbox 消息投递扫描的固定间隔。
     outbox-fixed-delay: ${HEALTHMIND_OUTBOX_FIXED_DELAY:1s}
+    # 失败任务恢复扫描的固定间隔。
     recovery-fixed-delay: ${HEALTHMIND_RECOVERY_FIXED_DELAY:1m}
+  # 不同类型业务数据的保留时长。
   retention:
+    # 结构化分析结果保留时长。
     result: ${HEALTHMIND_RESULT_RETENTION:30d}
+    # 任务与工具调用审计数据保留时长。
     audit: ${HEALTHMIND_AUDIT_RETENTION:180d}
+    # 外部集成记录保留时长。
     integration: ${HEALTHMIND_INTEGRATION_RETENTION:30d}
 
+# 日志级别配置。
 logging:
   level:
+    # HealthMind 自有代码默认使用 INFO 级别。
     cn.esuny.healthmind: INFO
