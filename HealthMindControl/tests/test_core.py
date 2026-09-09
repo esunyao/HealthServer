@@ -1,5 +1,8 @@
 import json
+import shutil
+import subprocess
 import time
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -33,3 +36,10 @@ def test_business_event_validation():
     event["payload"] = {}
     assert service.validate_event("nutrition-capture-ready", event) == []
 
+
+def test_browser_javascript_parses():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    script = Path(__file__).parents[1] / "src" / "healthmind_control" / "static" / "app.js"
+    subprocess.run([node, "--check", str(script)], check=True, capture_output=True, text=True)
