@@ -1,0 +1,58 @@
+/* HealthMindControl design tokens — 基色主题只在这里定义，组件一律引用 var(--*) */
+:root {
+  /* 语义色（每个主题里映射） */
+  --ok: #2fbf8f; --warn: #e0a53a; --err: #ef6b78; --info: #5aa9e6;
+  /* 形状与动效 */
+  --radius-s: 7px; --radius: 11px; --radius-l: 15px;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.25);
+  --shadow-2: 0 6px 24px rgba(0,0,0,.35);
+  --dur: .18s;
+  --font: "Inter", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+}
+
+html[data-theme="midnight"] {
+  color-scheme: dark;
+  --bg: #09111d; --bg-2: #0d1726; --bg-3: #101b2c; --bg-4: #15243a;
+  --line: #22344f; --line-soft: #1b2a40;
+  --fg: #dbe6f3; --fg-2: #8ba0ba; --fg-3: #5c7190;
+  --ok: #2fbf8f; --warn: #e0a53a; --err: #ef6b78; --info: #5aa9e6;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6fa; --bg-2: #ffffff; --bg-3: #eef2f7; --bg-4: #e3eaf2;
+  --line: #d5deea; --line-soft: #e2e9f2;
+  --fg: #1d2837; --fg-2: #5d7087; --fg-3: #8b9bb0;
+  --ok: #158a63; --warn: #a9740f; --err: #c23b4b; --info: #2f7fb8;
+}
+
+html[data-theme="slate"] {
+  color-scheme: dark;
+  --bg: #12151d; --bg-2: #171b26; --bg-3: #1d2230; --bg-4: #262d40;
+  --line: #323a52; --line-soft: #262d40;
+  --fg: #e0e5f0; --fg-2: #97a3bd; --fg-3: #68748f;
+  --ok: #34d399; --warn: #fbbf24; --err: #fb7185; --info: #60a5fa;
+}
+
+html[data-theme="olive"] {
+  color-scheme: dark;
+  --bg: #0e120c; --bg-2: #141a11; --bg-3: #1a2217; --bg-4: #233020;
+  --line: #32422c; --line-soft: #27341f;
+  --fg: #e4ead9; --fg-2: #9fb193; --fg-3: #6d7d63;
+  --ok: #59c97f; --warn: #d9b64c; --err: #e07b6a; --info: #6fb3c9;
+}
+
+/* 强调色（浅色主题下自动映射深一档） */
+html[data-accent="teal"]   { --accent: #2dd4bf; --accent-strong: #17b5a2; }
+html[data-theme="light"][data-accent="teal"] { --accent: #0d9488; --accent-strong: #0f766e; }
+html[data-accent="blue"]   { --accent: #60a5fa; --accent-strong: #3b82f6; }
+html[data-theme="light"][data-accent="blue"] { --accent: #2563eb; --accent-strong: #1d4ed8; }
+html[data-accent="violet"] { --accent: #a78bfa; --accent-strong: #8b5cf6; }
+html[data-theme="light"][data-accent="violet"] { --accent: #7c3aed; --accent-strong: #6d28d9; }
+html[data-accent="amber"]  { --accent: #fbbf24; --accent-strong: #f59e0b; }
+html[data-theme="light"][data-accent="amber"] { --accent: #d97706; --accent-strong: #b45309; }
+html[data-accent="rose"]   { --accent: #fb7185; --accent-strong: #f43f5e; }
+html[data-theme="light"][data-accent="rose"] { --accent: #e11d48; --accent-strong: #be123c; }
+html[data-accent="green"]  { --accent: #4ade80; --accent-strong: #22c55e; }
+html[data-theme="light"][data-accent="green"] { --accent: #16a34a; --accent-strong: #15803d; }

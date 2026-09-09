@@ -1,0 +1,31 @@
+{% macro ts_cell(value) -%}
+{% if value is not none -%}
+<span class="ts" data-ts="{{ fmt_iso(value) }}">{{ fmt_ts(value) }}</span>
+{%- else -%}<span class="muted">-</span>{%- endif %}
+{%- endmacro %}
+
+{% macro cell(value, col) -%}
+{%- if is_time_col(col) and value is not none -%}
+{{ ts_cell(value) }}
+{%- elif col in ("status", "task_status", "capture_status", "analysis_status", "event_type", "matched", "outcome", "state", "lifecycle") and value is string -%}
+<span class="badge {{ badge_cls(value) }}">{{ value }}</span>
+{%- elif value is boolean -%}
+<span class="badge {{ 'b-ok' if value else 'b-mut' }}">{{ '是' if value else '否' }}</span>
+{%- elif value is number -%}
+<span class="num">{{ value }}</span>
+{%- elif value is string and value|length > 90 -%}
+<span class="mono-cell ellip" title="{{ value }}">{{ value }}</span>
+{%- elif value is string and value|length >= 14 and value|replace('-', '')|length == 36 -%}
+<span class="mono-cell ellip" title="{{ value }}">{{ value }}</span>
+{%- elif value is string -%}
+{{ value }}
+{%- elif value is mapping or value is sequence -%}
+<span class="muted">-</span>
+{%- else -%}
+<span class="mono-cell ellip" title="{{ value }}">{{ value }}</span>
+{%- endif %}
+{%- endmacro %}
+
+{% macro copy_id(value) -%}
+{% if value -%}<button class="btn sm ghost" data-copy="{{ value }}" title="复制">⧉</button>{%- endif %}
+{%- endmacro %}

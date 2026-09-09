@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block subtitle %}输入 trace / event / task / attempt / meal / capture_session ID，按阶段时间线展示（关系优先，模糊命中会标注）{% endblock %}
+{% block content %}
+<div class="card">
+  <form class="row grow" id="trace-form" onsubmit="return false">
+    <input type="search" id="trace-q" placeholder="trace_id / event_id / task_id / attempt_id / meal_id / capture_session_id" style="flex:1;min-width:260px">
+    <button class="btn primary" id="trace-go" type="button">查询链路</button>
+  </form>
+</div>
+<div id="trace-result"><div class="muted">输入 ID 后查询；例如 0f2d783f-…、98356041-…</div></div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/trace.js"></script>{% endblock %}

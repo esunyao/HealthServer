@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="midnight" data-accent="teal">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · HealthMindControl</title>
+  <script>
+    // 首屏防闪烁：在样式应用前同步恢复主题
+    (function () {
+      try {
+        var t = JSON.parse(localStorage.getItem("hmc.theme") || "{}");
+        var sysDark = matchMedia("(prefers-color-scheme: dark)").matches;
+        var base = (t.system && (t.system === "auto")) ? (sysDark ? "midnight" : "light") : (t.base || "midnight");
+        if (!["midnight", "light", "slate", "olive"].includes(base)) base = "midnight";
+        document.documentElement.dataset.theme = base;
+        document.documentElement.dataset.accent = ["teal", "blue", "violet", "amber", "rose", "green"].includes(t.accent) ? t.accent : "teal";
+      } catch (e) { /* 忽略存储异常 */ }
+    })();
+  </script>
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="/static/css/theme.css">
+  <link rel="stylesheet" href="/static/css/views.css">
+  <meta name="csrf" content="{{ csrf_token }}">
+</head>
+<body>
+<aside class="app-side">
+  <div class="brand"><b>HealthMind</b>Control<span class="sub">本地运维控制台 · v0.2</span></div>
+  <nav class="app-nav">
+    {% set items = [
+      ("dashboard", "总览", "◈"), ("tasks", "任务", "☰"), ("rows", "数据浏览", "▤"),
+      ("trace", "链路", "⛓"), ("kafka", "Kafka", "≋"), ("releases", "Dify 版本", "⛃"),
+      ("repair", "修复", "✚"), ("audit", "审计", "✎"), ("about", "关于", "ℹ")
+    ] %}
+    {% for key, label, icon in items %}
+    <a href="/ui/{{ key }}" class="{{ 'active' if view == key }}"><span class="ic">{{ icon }}</span>{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <div class="app-foot">
+    <span class="live" id="sse-live"></span><span id="sse-state">未连接 SSE</span><br>
+    仅监听 <b>127.0.0.1:{{ 8765 }}</b> · 所有写操作均需预览确认
+  </div>
+</aside>
+
+<main class="app-main">
+  <div class="topline">
+    <div class="page-head">
+      <div>
+        <h1>{{ title }}</h1>
+        <p class="sub">{% block subtitle %}{% endblock %}</p>
+      </div>
+    </div>
+    <div class="head-actions">
+      <button id="theme-btn" class="icon-btn" type="button" title="主题与配色">◐</button>
+      <span class="clock" id="clock"></span>
+    </div>
+  </div>
+  {% block content %}{% endblock %}
+</main>
+
+<dialog id="theme-dialog" class="theme-dialog">
+  <h4>主题与配色</h4>
+  <div class="theme-group"><span>基色</span><div id="theme-base-options" class="base-swatches"></div></div>
+  <div class="theme-group"><span>强调色</span><div id="theme-accent-options" class="swatches"></div></div>
+  <div class="theme-row"><label for="theme-follow">跟随系统深浅</label><input id="theme-follow" type="checkbox"></div>
+  <div style="margin-top:12px;text-align:right"><button class="btn sm" id="theme-done" type="button">完成</button></div>
+</dialog>
+
+<div class="toast-stack" id="toasts"></div>
+<div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+<aside class="drawer" id="drawer" aria-label="详情抽屉">
+  <div class="drawer-head"><h3 id="drawer-title">详情</h3>
+    <div class="row" style="gap:6px">
+      <button class="btn sm ghost" id="drawer-copy" type="button" hidden>复制</button>
+      <button class="btn sm ghost" id="drawer-close" type="button">✕ 关闭</button>
+    </div>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<script type="module" src="/static/js/theme.js"></script>
+<script type="module" src="/static/js/hx.js"></script>
+<script type="module" src="/static/js/main.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

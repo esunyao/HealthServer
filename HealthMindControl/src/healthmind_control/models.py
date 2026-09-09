@@ -33,11 +33,27 @@ class ReleaseRequest(MutationRequest):
     tool_codes: list[str] = ["nutrimemo.capture_context.get", "orion.nutrition_context.get"]
 
 
+class ToolBinding(BaseModel):
+    tool_code: str
+    required: bool = True
+    max_calls: int = Field(1, ge=1, le=100)
+    timeout_ms: int = Field(10000, ge=100, le=60000)
+
+
+class BindToolsRequest(MutationRequest):
+    release_id: str
+    bindings: list[ToolBinding] = []
+
+
 class RetryRequest(MutationRequest):
     release_id: str | None = None
 
 
 class RecoveryRequest(MutationRequest):
-    operation: Literal["reset_outbox", "replay_outbox", "replay_nutri_inbox", "recover_attempt", "cancel_task"]
+    operation: Literal[
+        "reset_outbox", "replay_outbox", "replay_nutri_inbox", "replay_hm_inbox",
+        "recover_attempt", "cancel_task",
+    ]
     schema_name: Literal["healthmind", "nutri"] = "healthmind"
     record_id: str
+    expected_lock_version: int | None = None

@@ -4,7 +4,7 @@ from typing import Any, AsyncIterator
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-from .config import Settings
+from ..config import Settings
 
 
 REQUIRED_TABLES = {

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block subtitle %}按状态/类型/来源/错误码/时间筛选，keyset 分页（每页 ≤100），行点击查看详情抽屉{% endblock %}
+{% block content %}
+<div class="card">
+  <form id="tasks-filters" class="filterbar" onsubmit="return false">
+    <div class="field"><label>状态</label>
+      <select name="status">
+        <option value="">全部</option>
+        {% for s in ["queued", "running", "succeeded", "failed", "cancelled", "expired"] %}<option>{{ s }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label>任务类型</label><input type="text" name="task_type" placeholder="nutrition.meal_analysis"></div>
+    <div class="field"><label>来源服务</label><input type="text" name="service" placeholder="NutriMemo / HealthMindControl"></div>
+    <div class="field"><label>错误码</label><input type="text" name="code" placeholder="如 ATTEMPT_TIMEOUT"></div>
+    <div class="field"><label>用户/主体 UUID</label><input type="text" name="subject" placeholder="subject_id"></div>
+    <div class="field"><label>创建时间起</label><input type="datetime-local" name="since"></div>
+    <div class="field"><label>创建时间止</label><input type="datetime-local" name="until"></div>
+    <div class="field wide" style="flex-direction:row;align-items:end;gap:10px">
+      <button class="btn primary" type="button"
+        hx-get="/ui/parts/tasks" hx-include="#tasks-filters" hx-target="#tasks-rows" hx-swap="innerHTML">查询</button>
+      <button class="btn" type="button"
+        hx-get="/ui/parts/tasks" hx-include="#tasks-filters" hx-target="#tasks-rows" hx-swap="innerHTML">重置为空条件查询</button>
+      <span class="small muted">回车同「查询」（在输入框内回车请用按钮）</span>
+    </div>
+  </form>
+</div>
+<div class="card">
+  <div id="tasks-rows" hx-get="/ui/parts/tasks" hx-include="#tasks-filters" hx-trigger="load" hx-swap="innerHTML">
+    <div class="muted">载入中…</div>
+  </div>
+</div>
+{% endblock %}

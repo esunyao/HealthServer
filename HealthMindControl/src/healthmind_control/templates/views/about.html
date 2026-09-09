@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block subtitle %}版本、配置健康度与使用说明（本机工具，仅监听 127.0.0.1）{% endblock %}
+{% block content %}
+<div class="grid cols-2">
+  <div class="card">
+    <h2 class="section">服务健康（全量 /api/status，带缓存）</h2>
+    <div id="ab-status"><span class="spin"></span></div>
+  </div>
+  <div class="card">
+    <h2 class="section">配置与说明</h2>
+    <table class="tbl" style="font-size:13px">
+      <tbody>
+        <tr><td class="muted">版本</td><td>HealthMindControl v0.2（前后端一体，无构建依赖）</td></tr>
+        <tr><td class="muted">UI 刷新</td><td>SSE 轻量摘要 {{ refresh }}s；Kafka/滞留按需</td></tr>
+        <tr><td class="muted">滞留判定</td><td>HMC_STALE_MINUTES（默认 5 分钟）</td></tr>
+        <tr><td class="muted">预览令牌</td><td>120s（HMC_PREVIEW_TTL_SECONDS 可调），绑定记录快照哈希</td></tr>
+        <tr><td class="muted">审计</td><td>var/audit/admin-actions.jsonl（portalocker 串行 + fsync）</td></tr>
+        <tr><td class="muted">脱敏</td><td>敏感键掩码 + 预签名 URL 参数截断；业务载荷不在列表页下发</td></tr>
+        <tr><td class="muted">只读边界</td><td>消息查看器不提交业务消费组 offset；Kafka 不建 topic、不重置 offset</td></tr>
+        <tr><td class="muted">安全</td><td>CSRF 防护；所有写操作 = 预览 → 确认文本 → 事务执行 → 双写审计</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="card">
+  <h2 class="section">原始状态 JSON</h2>
+  <pre class="code" id="ab-json">加载中…</pre>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/about.js"></script>{% endblock %}

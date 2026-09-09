@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block subtitle %}受控行浏览器：healthmind / nutri 两 schema 常用表，allowlist 注册表驱动，详情走抽屉且已脱敏{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="row grow" style="align-items:end">
+    <div class="field" style="max-width:340px"><label>数据表（kind）</label><select id="rows-kind"></select></div>
+    <button class="btn" id="rows-kind-info" type="button" disabled title="表结构说明">?</button>
+    <div class="small muted" id="rows-kind-desc"></div>
+  </div>
+  <form id="rows-filters" class="filterbar" style="margin-top:10px" onsubmit="return false">
+    <div class="field"><label>status 精确值</label><input type="text" name="status" placeholder="如 failed / processing"></div>
+    <div class="field" hidden id="f-analysis"><label>analysis 值</label><input type="text" name="analysis" placeholder="analysing / completed…"></div>
+    <div class="field" hidden id="f-code"><label>错误码/最后错误 包含</label><input type="text" name="code"></div>
+    <div class="field" hidden id="f-service"><label>服务/生产者</label><input type="text" name="service"></div>
+    <div class="field" hidden id="f-subject"><label>用户 UUID</label><input type="text" name="subject_id"></div>
+    <div class="field"><label>时间起</label><input type="datetime-local" name="since"></div>
+    <div class="field"><label>时间止</label><input type="datetime-local" name="until"></div>
+    <div class="field wide" style="flex-direction:row;gap:10px;align-items:end">
+      <button class="btn primary" type="button" id="rows-query">查询</button>
+      <button class="btn" type="button" id="rows-reset">重置</button>
+      <span class="small muted">筛选列随所选表变化；错误码筛选用“等值”匹配，无列的表自动隐藏该筛选</span>
+    </div>
+  </form>
+</div>
+<div class="card">
+  <h2 class="section" id="rows-title">记录</h2>
+  <div id="rows-rows"><div class="muted">选择数据表后查询</div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/rows.js"></script>{% endblock %}

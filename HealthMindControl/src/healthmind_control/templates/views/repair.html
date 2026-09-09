@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block subtitle %}一切修复先预览：2 分钟令牌 + 记录版本绑定；HealthMind inbox 不保存 payload，故缺失走重放、已存在走克隆任务{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 class="section">一键诊断（按 meal / event / task / attempt / capture ID）</h2>
+  <form class="row grow" onsubmit="return false">
+    <input type="search" id="guide-q" placeholder="例如 capture session / meal / event / task ID" style="flex:1">
+    <button class="btn primary" id="guide-go" type="button">诊断并推荐修复</button>
+  </form>
+  <div id="guide-result" style="margin-top:10px"><div class="muted">输入 ID 后点击诊断；系统会给出可执行建议（含前置校验与阻塞原因）</div></div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h2 class="section">手动修复</h2>
+    <form class="form-grid" id="repair-form" onsubmit="return false">
+      <div class="field"><label>操作</label><select id="rp-op">
+        <option value="reset_outbox">重置 failed/publishing outbox → pending</option>
+        <option value="replay_outbox">原样重放 published outbox（同 event_id）</option>
+        <option value="replay_nutri_inbox">Nutri failed inbox → 重放对应 HM outbox</option>
+        <option value="replay_hm_inbox">HM inbox 缺失 → 重放 capture-ready（自动预检）</option>
+        <option value="recover_attempt">恢复超时 running attempt（重排或发失败事件）</option>
+        <option value="cancel_task">取消 queued 任务</option>
+      </select></div>
+      <div class="field"><label>schema</label><select id="rp-schema"><option>healthmind</option><option>nutri</option></select></div>
+      <div class="field"><label>记录 ID（event/attempt/task）</label><input type="text" id="rp-id" placeholder="完整 UUID"></div>
+      <div class="field wide"><label>操作原因</label><input type="text" id="rp-reason" placeholder="≥3 字符，写入审计"></div>
+      <div class="field wide"><button class="btn primary" id="rp-preview" type="button">预览修复</button></div>
+    </form>
+    <div id="rp-preview-box" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h2 class="section">克隆终态任务（failed/cancelled/expired）</h2>
+    <form class="form-grid" onsubmit="return false">
+      <div class="field"><label>原任务 task_id</label><input type="text" id="ct-task" placeholder="failed 任务 UUID"></div>
+      <div class="field"><label>目标 release（留空 = 当前 production）</label><input type="text" id="ct-release" placeholder="release_id（可选）"></div>
+      <div class="field wide"><label>操作原因</label><input type="text" id="ct-reason" placeholder="克隆原因"></div>
+      <div class="field wide"><button class="btn primary" id="ct-preview" type="button">预览克隆</button></div>
+    </form>
+    <div id="ct-preview-box" style="margin-top:10px"></div>
+    <div class="small muted" style="margin-top:8px">克隆保留旧任务与 attempts；新任务 queued + 独立幂等键 + 原 trace；校验 meal / capture / 已确认图片后，把 NutriMemo failed 恢复为 analysing。</div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/repair.js"></script>{% endblock %}

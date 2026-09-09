@@ -1,0 +1,101 @@
+/* 基础布局与排版 */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.55;
+  display: grid;
+  grid-template-columns: 236px 1fr;
+  min-height: 100vh;
+}
+
+a { color: var(--accent-strong); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* 侧栏 */
+aside.app-side {
+  background: var(--bg-2);
+  border-right: 1px solid var(--line-soft);
+  padding: 22px 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+.brand { font-size: 19px; font-weight: 700; letter-spacing: .2px; margin: 2px 8px 0; }
+.brand b { color: var(--accent); }
+.brand .sub { display: block; font-size: 11.5px; color: var(--fg-3); font-weight: 400; margin-top: 2px; }
+nav.app-nav { display: grid; gap: 3px; margin-top: 18px; }
+nav.app-nav a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--radius-s);
+  color: var(--fg-2); border: 1px solid transparent;
+}
+nav.app-nav a .ic { width: 16px; text-align: center; opacity: .85; }
+nav.app-nav a:hover { background: var(--bg-3); color: var(--fg); text-decoration: none; }
+nav.app-nav a.active {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-3));
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.app-foot { margin-top: auto; color: var(--fg-3); font-size: 12px; padding: 10px 8px 0; line-height: 1.5; }
+.app-foot b { color: var(--accent-strong); font-weight: 600; }
+.live { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+.live.off { background: var(--err); }
+
+/* 主区 */
+main.app-main { padding: 22px 28px 60px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.page-head h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
+.page-head .sub { color: var(--fg-2); margin: 4px 0 0; font-size: 13px; }
+.head-actions { display: flex; gap: 8px; align-items: center; }
+
+h2.section { font-size: 15.5px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+h2.section .hint { font-weight: 400; font-size: 12px; color: var(--fg-3); }
+
+.card {
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-l);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-1);
+  min-width: 0;
+}
+.card.hoverable:hover { border-color: var(--line); }
+.card.danger { border-color: color-mix(in srgb, var(--err) 45%, var(--line-soft)); }
+.card.warn-line { border-color: color-mix(in srgb, var(--warn) 40%, var(--line-soft)); }
+
+.grid { display: grid; gap: 14px; }
+.grid.cols-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.grid.cols-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.grid.cols-5 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row.grow > * { flex: 1 1 auto; min-width: 0; }
+.spread { justify-content: space-between; }
+.muted { color: var(--fg-2); }
+.small { font-size: 12px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.num { font-variant-numeric: tabular-nums; text-align: right; }
+.nowrap { white-space: nowrap; }
+.ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.w-100 { width: 100%; }
+
+/* 顶部条 */
+.topline { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 2px; flex-wrap: wrap; }
+.clock { color: var(--fg-2); font-size: 12.5px; }
+.clock b { color: var(--fg); font-weight: 600; }
+
+@media (max-width: 980px) {
+  body { grid-template-columns: 1fr; }
+  aside.app-side { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
+  nav.app-nav { display: flex; overflow-x: auto; margin-top: 0; }
+  .app-foot { display: none; }
+  main.app-main { padding: 14px; }
+}

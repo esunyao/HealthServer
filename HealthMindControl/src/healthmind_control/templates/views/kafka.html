@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block subtitle %}分区/leader/ISR、消费组 lag 与成员、只读消息查看（独立临时组、不提交业务 offset）、高级受控生产{% endblock %}
+{% block content %}
+<div class="grid cols-2">
+  <div class="card">
+    <h2 class="section">Topic 与分区
+      <span style="margin-left:auto"><button class="btn sm" id="k-reload" type="button">刷新元数据</button></span>
+    </h2>
+    <div id="k-topics"><div class="muted">加载中…</div></div>
+  </div>
+  <div class="card">
+    <h2 class="section">消费组（offset 明细 + 成员）
+      <span style="margin-left:auto"><button class="btn sm" id="g-reload" type="button">刷新</button></span>
+    </h2>
+    <div id="k-groups"><div class="muted">加载中…</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="section">无提交消息查看器 <span class="hint">只读：随机临时组，auto.commit/store 关闭，绝不触碰业务 offset</span></h2>
+  <div class="filterbar">
+    <div class="field"><label>Topic</label><select id="m-topic"></select></div>
+    <div class="field"><label>分区</label><select id="m-partition"></select></div>
+    <div class="field"><label>起读位置</label><select id="m-start">
+      <option value="latest">最新（往前翻一页）</option><option value="earliest">最早</option>
+      <option value="offset">指定 offset</option><option value="time">指定时间</option>
+    </select></div>
+    <div class="field" id="m-offset-field"><label>Offset</label><input type="number" id="m-offset" min="0" value="0"></div>
+    <div class="field" id="m-time-field" hidden><label>时间（本地时区）</label><input type="datetime-local" id="m-time"></div>
+    <div class="field"><label>范围</label><span class="small muted" id="m-range">-</span></div>
+    <div class="field"><label>key 精确</label><input type="text" id="m-key" placeholder="partition key"></div>
+    <div class="field"><label>event_id</label><input type="text" id="m-event"></div>
+    <div class="field"><label>trace_id</label><input type="text" id="m-trace"></div>
+    <div class="field"><label>event_type</label><input type="text" id="m-type" placeholder="nutrition.capture.ready.v1"></div>
+    <div class="field"><label>内容包含</label><input type="text" id="m-contains"></div>
+  </div>
+  <div class="row" style="margin:10px 0">
+    <button class="btn primary" id="m-read" type="button">读取消息</button>
+    <label class="auto-on"><input type="checkbox" id="m-auto"> 自动 15s</label>
+    <span class="small muted" id="m-status"></span>
+  </div>
+  <div id="m-messages"><div class="muted">尚未读取</div></div>
+</div>
+
+<div class="card danger">
+  <h2 class="section">高级：向现有 topic 生产消息 <span class="hint">必须预览；业务结构不完整需勾选强制；不会创建 topic</span></h2>
+  <div class="grid cols-2">
+    <div class="form-grid">
+      <div class="field wide"><label>Topic（仅限已存在）</label><input type="text" id="p-topic" list="topic-list" placeholder="nutrition-analysis-failed"><datalist id="topic-list"></datalist></div>
+      <div class="field"><label>Key（可空）</label><input type="text" id="p-key" placeholder="partition key"></div>
+      <div class="field"><label>分区（空 = 默认）</label><input type="number" id="p-partition" min="0"></div>
+      <div class="field wide">
+        <label>Headers（键值对）</label>
+        <div class="row" style="gap:4px;margin-bottom:4px"><input type="text" id="p-hk" placeholder="header key" style="flex:1"><input type="text" id="p-hv" placeholder="value" style="flex:1"><button class="btn sm" id="p-hadd" type="button">+ 添加</button></div>
+        <div id="p-headers"></div>
+      </div>
+      <div class="field wide">
+        <label>Payload（JSON）</label>
+        <textarea id="p-payload" rows="9" style="font-family:var(--mono);font-size:12px">{
+  "event_id": "",
+  "event_type": "",
+  "occurred_at": "",
+  "producer": "",
+  "trace_id": "",
+  "subject_id": null,
+  "aggregate_type": "meal",
+  "aggregate_id": "",
+  "schema_version": "1.0",
+  "payload": {}
+}</textarea>
+        <div class="row" style="margin-top:4px"><button class="btn sm" id="p-template" type="button">填充当前业务 topic 事件模板</button><button class="btn sm" id="p-pretty" type="button">格式化 JSON</button></div>
+      </div>
+      <div class="field wide"><label>操作原因（≥3 字符，审计必填）</label><input type="text" id="p-reason" placeholder="例如：人工补偿 NutriMemo 分析失败通知"></div>
+      <div class="field wide"><button class="btn primary" id="p-preview" type="button">预览生产</button></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0;font-size:13.5px">预览与确认</h3>
+      <div id="p-preview-box"><div class="muted">先填写 topic/payload/reason 再预览。已知业务 topic 会做事件结构校验并显示警告。</div></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/kafka.js"></script>{% endblock %}

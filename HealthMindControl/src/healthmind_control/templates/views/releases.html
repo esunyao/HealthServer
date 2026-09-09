@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block subtitle %}candidate → 绑定工具 → production → retire / rollback；每次变更双写 DB 审计与本地 JSONL{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 class="section">发布版本向导（登记 candidate）</h2>
+  <div class="row" style="margin-bottom:10px">
+    <button class="btn" id="w-parse" type="button">① 粘贴解析 publish / DSL</button>
+    <button class="btn" id="w-console" type="button">② 从 Dify Console 读 published（需 token）</button>
+    <button class="btn" id="w-dsl" type="button">③ difyctl describe app 回填</button>
+    <span class="small muted">④ 核对以下字段（schema 哈希将与 HealthMind Kotlin 一致性校验）</span>
+  </div>
+  <textarea id="w-publish" rows="3" style="margin-bottom:10px" placeholder="粘贴 Dify workflows/publish 返回 JSON，或 studio DSL（YAML/JSON），再点 ①"></textarea>
+  <div class="form-grid">
+    <div class="field"><label>app_id（② 需要）</label><input type="text" id="w-app" placeholder="console app UUID"></div>
+    <div class="field"><label>workspace ID</label><input type="text" id="w-workspace"></div>
+    <div class="field"><label>app ID</label><input type="text" id="w-appid"></div>
+    <div class="field"><label>published workflow ID</label><input type="text" id="w-workflow"></div>
+    <div class="field"><label>workflow version</label><input type="text" id="w-wfversion"></div>
+    <div class="field"><label>HealthMind release version</label><input type="text" id="w-version" placeholder="如 dify-20260901-v1"></div>
+  </div>
+  <div class="form-grid" style="margin-top:10px">
+    <div class="field"><label>input schema（JSON Schema）</label><textarea id="w-input" rows="7" style="font-family:var(--mono);font-size:12px">{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "producer", "trace_id", "schema_version", "occurred_at", "subject_id", "aggregate_type", "aggregate_id", "payload"],
+  "properties": {}
+}</textarea></div>
+    <div class="field"><label>output schema（JSON Schema）</label><textarea id="w-output" rows="7" style="font-family:var(--mono);font-size:12px">{}</textarea></div>
+  </div>
+  <div class="field" style="margin:10px 0"><label>绑定 MCP 工具（candidate 创建后仍可在列表“绑定工具”中修改）</label><div id="w-tools" class="row"></div></div>
+  <div class="field"><label>操作原因</label><input type="text" id="w-reason" placeholder="登记原因，≥3 字符"></div>
+  <div class="row" style="margin-top:10px">
+    <button class="btn primary" id="w-preview" type="button">预览登记 candidate</button>
+    <button class="btn" id="rel-reload" type="button">刷新版本列表</button>
+  </div>
+  <div id="w-preview-box" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <h2 class="section">版本列表 <span class="hint">同一 task_type 至多一个 production（DB 部分唯一索引兜底）</span></h2>
+  <div id="op-flow-host"></div>
+  <div id="rel-list"><div class="muted">加载中…</div></div>
+</div>
+
+<div class="card">
+  <h2 class="section">审计（DB workflow_release_audits）</h2>
+  <div class="row" style="margin-bottom:8px">
+    <input type="text" id="audit-rel" placeholder="release_id（可空 = 全部，最多 200 条）" style="max-width:340px">
+    <button class="btn" id="audit-go" type="button">查询</button>
+  </div>
+  <div id="audit-box"><div class="muted">未查询</div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/releases.js"></script>{% endblock %}

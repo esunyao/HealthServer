@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block subtitle %}本机操作 JSONL（写入侧倒序）+ workflow_release_audits（DB 侧）；无删除/清空入口{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 class="section">本机操作日志（var/audit/admin-actions.jsonl）</h2>
+  <div class="row" style="margin-bottom:10px">
+    <input type="text" id="a-action" placeholder="action 过滤：如 kafka.produce / recovery.reset_outbox" style="max-width:280px">
+    <select id="a-outcome"><option value="">outcome 全部</option><option>succeeded</option><option>failed</option><option>started</option></select>
+    <input type="text" id="a-op" placeholder="operation_id" style="max-width:280px">
+    <button class="btn primary" id="a-go" type="button">查询</button>
+    <button class="btn" id="a-clear" type="button">清除过滤</button>
+  </div>
+  <div id="a-list"><div class="muted">未查询</div></div>
+</div>
+
+<div class="card">
+  <h2 class="section">Dify 版本变更审计（DB）</h2>
+  <div class="row" style="margin-bottom:10px">
+    <input type="text" id="ra-release" placeholder="release_id（可空 = 全部）" style="max-width:340px">
+    <button class="btn" id="ra-go" type="button">查询</button>
+    <span class="small muted">Dify 版本页也有同数据入口</span>
+  </div>
+  <div id="ra-list"><div class="muted">未查询</div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/audit.js"></script>{% endblock %}

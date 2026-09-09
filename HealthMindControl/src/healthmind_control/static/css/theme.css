@@ -1,0 +1,21 @@
+/* 主题应用层：HTML 属性驱动的 CSS 变量 + 切换动效 */
+body { background: var(--bg); color: var(--fg); }
+
+/* 主题选择器 */
+.theme-dialog { border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--bg-2); color: var(--fg); padding: 16px; width: 300px; box-shadow: var(--shadow-2); }
+.theme-dialog::backdrop { background: rgba(0,0,0,.35); }
+.theme-dialog h4 { margin: 0 0 10px; font-size: 13.5px; }
+.theme-group { margin-bottom: 12px; }
+.theme-group > span { display: block; font-size: 11.5px; color: var(--fg-3); margin-bottom: 6px; }
+.swatches { display: flex; gap: 7px; flex-wrap: wrap; }
+.sw { width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; position: relative; }
+.sw:hover { transform: scale(1.08); }
+.sw[aria-pressed="true"] { border-color: var(--fg); }
+.sw .sub { position: absolute; inset: 0; border-radius: 5px; margin: 4px; background: transparent; }
+.theme-label { font-size: 11px; text-align: center; color: var(--fg-2); margin-top: 4px; }
+.base-swatches { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.base-sw { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 8px; border-radius: var(--radius-s); border: 1px solid var(--line-soft); background: var(--bg-3); }
+.base-sw:hover { border-color: var(--line); }
+.base-sw[aria-pressed="true"] { border-color: var(--accent); }
+.base-chip { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line); }
+.theme-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-top: 4px; }

@@ -1,0 +1,21 @@
+/* 视图级布局微调 */
+
+/* 总览 */
+.production-line { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* 消息卡片（Kafka） */
+.msg-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 14px; font-size: 12.5px; color: var(--fg-2); }
+.msg-meta b { color: var(--fg); font-weight: 600; }
+
+/* 发布向导步骤提示 */
+.step-chip { font-size: 11px; background: var(--bg-4); border: 1px solid var(--line); padding: 3px 9px; border-radius: 999px; color: var(--fg-2); }
+
+/* 表头内联筛选行 */
+.filterbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.filterbar .wide { grid-column: 1 / -1; }
+
+/* 主题按钮图标 */
+#theme-popover-btn { font-size: 17px; }
+
+/* JSON tree 控件自身尺寸约束 */
+json-tree { display: block; min-width: 0; }

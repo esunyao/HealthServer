@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block subtitle %}服务连通、任务与滞留一览；轻量数据由 SSE 每 {{ refresh }}s 推送，昂贵数据按需加载{% endblock %}
+{% block content %}
+<div class="stack">
+  <div class="card">
+    <h2 class="section">服务连通 <span class="hint">DB 摘要走 SSE，其余手动/慢轮询</span>
+      <span style="margin-left:auto" class="row">
+        <button class="btn sm" id="btn-health-refresh" type="button">刷新服务</button>
+      </span>
+    </h2>
+    <div class="health-grid" id="health-cards"></div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="card">
+      <h2 class="section">AI 任务状态 <span class="hint" id="task-summary-time"></span></h2>
+      <div class="stat-cards" id="task-stats"></div>
+      <h2 class="section" style="margin-top:14px">最近失败（≤8，含耗时）</h2>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>完成时间</th><th>任务</th><th>错误码</th><th>耗时</th><th>原因</th></tr></thead><tbody id="recent-failures"></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2 class="section">生产版本 <span class="hint">nutrition.meal_analysis</span></h2>
+      <div id="production-card"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="section">滞留与不一致 <span class="hint">默认 5 分钟判定（HMC_STALE_MINUTES 可调）</span>
+      <span style="margin-left:auto" class="row">
+        <label class="auto-on"><input type="checkbox" id="backlog-auto"> 自动 30s</label>
+        <button class="btn sm" id="btn-backlog-refresh" type="button">刷新滞留</button>
+      </span>
+    </h2>
+    <div id="backlog-body"><div class="muted">加载中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2 class="section">Kafka 概览 <span class="hint">分区健康与消费组 lag（慢轮询/手动）</span>
+      <span style="margin-left:auto" class="row">
+        <label class="auto-on"><input type="checkbox" id="kafka-auto"> 自动 30s</label>
+        <button class="btn sm" id="btn-kafka-refresh" type="button">刷新 Kafka</button>
+        <a class="btn sm ghost" href="/ui/kafka">进入 Kafka 管理 →</a>
+      </span>
+    </h2>
+    <div id="kafka-overview"><div class="muted">未加载（Kafka 元数据较昂贵，点刷新或开启自动）</div></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/dashboard.js"></script>{% endblock %}
