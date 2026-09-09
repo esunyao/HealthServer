@@ -32,6 +32,9 @@ Copy-Item .env.example .env   # 然后编辑
 | HMC_DIFY_CONSOLE_TOKEN | 可选：只读自动读取 published workflow |
 | HMC_STALE_MINUTES / HMC_REFRESH_SECONDS | 滞留判定 / SSE 间隔 |
 | HMC_KAFKA_MAX_SCAN_MESSAGES | 消息查看扫描上限（默认 50000） |
+| HMC_KAFKA_SECURITY_PROTOCOL | 默认 PLAINTEXT；集群启用认证时填 SASL_PLAINTEXT / SSL / SASL_SSL |
+| HMC_KAFKA_SASL_MECHANISM / _USERNAME / _PASSWORD | SASL 认证（凭据只在本机 .env，不入库/审计） |
+| HMC_KAFKA_SSL_CA_LOCATION | 自定义 CA 证书路径（SSL/SASL_SSL 时可选） |
 | HMC_KAFKA_METADATA_CACHE_SECONDS / HMC_PROBE_CACHE_TTL_SECONDS | 缓存节流 |
 | HMC_PREVIEW_TTL_SECONDS / HMC_TASK_RETENTION_DAYS | 预览令牌 / 克隆保留期 |
 
@@ -50,6 +53,12 @@ uv run --active --project . healthmind-control
 payload 延迟、脱敏）、链路（关系优先时间线 + 模糊命中标注）、Kafka（分区健康/成员/offsets/只读消息
 含时间与结构化过滤/受控生产）、Dify 版本（candidate→绑定工具→production→退役/回滚，含审计）、
 受控修复（一键诊断 + 手动 + 克隆 + attempt 恢复语义闭环）、审计（JSONL + DB）、关于。
+
+### 服务卡片与认证说明
+卡片是「可达性探活」，不携带业务凭据：Dify /v1/info 返回 401+Bearer challenge 视为可达；
+MCP / Authentik 若在认证网关后返回 401/403/405/429 也视为“可达但需认证”（副标题显示 HTTP 状态码）。
+Kafka 如需 SASL/SSL 按上表在 .env 配置。总览卡片由 SSE 轻量摘要 + 完整 /api/status 合并刷新，
+不会因 SSE 每 5s 推送把 Kafka/Dify/MCP/Authentik 误显示为不可用。
 
 ### 主题切换
 右上角 ◐：4 基色（midnight 默认 / light / slate / olive）× 6 强调色 + 跟随系统；持久化于 localStorage

@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     database_dsn: str | None = None
     nutri_database_dsn: str | None = None
     kafka_bootstrap_servers: str = "192.168.3.101:9092"
+    kafka_security_protocol: str = "PLAINTEXT"
+    kafka_sasl_mechanism: str | None = None
+    kafka_sasl_username: str | None = None
+    kafka_sasl_password: str | None = None
+    kafka_ssl_ca_location: str | None = None
     dify_url: str = "https://dify.lovedage.com.cn"
     mcp_url: str = "http://192.168.3.101:8093/mcp"
     auth_url: str = "https://auth.lovedage.com.cn:8093"

@@ -94,12 +94,29 @@ function failures(failures) {
   }).join("");
 }
 
+// 完整状态缓存：SSE 轻量摘要只覆盖 DB/任务区，不得冲掉 kafka/dify/mcp/auth 服务卡
+let lastFull = null;
+
 export function applySummary(s) {
   if (!s || s.error) { toast("SSE 摘要异常", "err"); return; }
-  healthCards(s);
-  taskStats(s.tasks);
-  if (document.getElementById("production-card")) productionCard(s.production);
-  if (document.getElementById("recent-failures")) failures(s.recent_failures);
+  const hasServices = s.kafka !== undefined || s.dify !== undefined || s.mcp !== undefined || s.auth !== undefined;
+  if (hasServices) {
+    lastFull = s;                       // /api/status 完整负载
+  } else if (lastFull) {
+    lastFull = { ...lastFull, database: s.database, tasks: s.tasks, production: s.production, recent_failures: s.recent_failures };
+  } else {
+    lastFull = s;                       // 尚无完整负载（理论上不会走到）
+  }
+  const merged = lastFull;
+  const host = document.getElementById("health-cards");
+  if (host && (merged.kafka === undefined && merged.dify === undefined)) {
+    host.innerHTML = '<div class="muted">完整服务状态尚未加载——请点右上“刷新服务”</div>';
+  } else {
+    healthCards(merged);
+  }
+  taskStats(merged.tasks);
+  if (document.getElementById("production-card")) productionCard(merged.production);
+  if (document.getElementById("recent-failures")) failures(merged.recent_failures);
   document.getElementById("task-summary-time").textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }
 

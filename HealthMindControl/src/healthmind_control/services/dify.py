@@ -15,7 +15,12 @@ class DifyService:
         self.cfg = cfg
         self._probe_cache: dict[str, dict[str, Any]] = {}
 
-    async def probe(self, url: str, expected_401: bool = False) -> dict[str, Any]:
+    async def probe(self, url: str, expected_401: bool = False, auth_ok: bool = False) -> dict[str, Any]:
+        """可达性探活（不带凭据）。
+
+        - expected_401: Dify /v1/info 语义——401 + Bearer challenge 视为可达；
+        - auth_ok: 端点处于认证网关之后——401/403/405/429（服务器已应答）视为可达。
+        """
         now = time.monotonic()
         cached = self._probe_cache.get(url)
         if cached and now - cached["at"] < self.cfg.probe_cache_ttl_seconds:
@@ -23,11 +28,12 @@ class DifyService:
         try:
             async with httpx.AsyncClient(timeout=5, follow_redirects=True) as client:
                 response = await client.get(url)
+            status = response.status_code
             ok = response.is_success or (
-                expected_401 and response.status_code == 401
+                expected_401 and status == 401
                 and "bearer" in response.headers.get("www-authenticate", "").lower()
-            )
-            value = {"ok": ok, "status": response.status_code}
+            ) or (auth_ok and status in (401, 403, 405, 429))
+            value = {"ok": ok, "status": status}
         except Exception as exc:
             value = {"ok": False, "error": str(exc)}
         self._probe_cache[url] = {"at": now, "value": value}

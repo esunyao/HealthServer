@@ -14,15 +14,29 @@ async def status(request: Request):
     repo_status, kafka_status, dify, mcp, auth = await asyncio.gather(
         request.app.state.repo.status_light(),
         request.app.state.kafka.metadata(),
-        request.app.state.dify.probe(f"{settings.dify_url.rstrip('/')}/v1/info", True),
-        request.app.state.dify.probe(settings.mcp_url, True),
+        request.app.state.dify.probe(f"{settings.dify_url.rstrip('/')}/v1/info", True, False),
+        request.app.state.dify.probe(settings.mcp_url, False, True),
         request.app.state.dify.probe(
-            f"{settings.auth_url.rstrip('/')}/application/o/healthmind-mcp/.well-known/openid-configuration"
+            f"{settings.auth_url.rstrip('/')}/application/o/healthmind-mcp/.well-known/openid-configuration",
+            False, True,
         ),
         return_exceptions=True,
     )
-    def safe(value): return {"ok": False, "error": str(value)} if isinstance(value, Exception) else value
-    return serial({**safe(repo_status), "kafka": safe(kafka_status), "dify": safe(dify), "mcp": safe(mcp), "auth": safe(auth)})
+    def safe(value):
+        return {"ok": False, "error": str(value)} if isinstance(value, Exception) else value
+
+    def safe_kafka(value):
+        # Kafka 元数据原始返回没有 ok 语义：brokers 非空即视为可达
+        if isinstance(value, Exception):
+            return {"ok": False, "error": str(value)}
+        brokers = value.get("brokers") or []
+        return {"ok": bool(brokers), "brokers": brokers, "topics": value.get("topics") or []}
+
+    return serial({
+        **safe(repo_status),
+        "kafka": safe_kafka(kafka_status),
+        "dify": safe(dify), "mcp": safe(mcp), "auth": safe(auth),
+    })
 
 
 @router.get("/api/summary")
