@@ -1,1 +1,0 @@
-"""HealthMindControl project marker."""
