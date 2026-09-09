@@ -46,7 +46,16 @@ plans
 .mcp.json
 .mcp
 
+#python
+.venv
+
 doc/
 
 ### 本地环境变量（含真实凭据），禁止提交 ###
 .env
+
+# HealthMindControl local state
+HealthMindControl/var/
+HealthMindControl/.env
+HealthMindControl/.pytest_cache/
+HealthMindControl/**/__pycache__/

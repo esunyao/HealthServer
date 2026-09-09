@@ -63,10 +63,14 @@ class DifyWorkflowClient(
             val data = response.path("data")
             val status = data.path("status").asString()
             if (status != "succeeded") {
+                val detail = data.path("error").asString().trim().take(500)
                 throw TaskExecutionException(
                     code = "DIFY_WORKFLOW_${status.uppercase()}",
                     category = if (status == "stopped") FailureCategory.CANCELLED else FailureCategory.PERMANENT,
-                    message = "Dify workflow did not succeed (status=$status)",
+                    message = buildString {
+                        append("Dify workflow did not succeed (status=$status)")
+                        if (detail.isNotEmpty()) append(": $detail")
+                    },
                 )
             }
             val returnedWorkflowId = data.path("workflow_id").asString(response.path("workflow_id").asString())

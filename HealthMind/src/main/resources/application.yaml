@@ -136,6 +136,8 @@ healthmind:
     connect-timeout: ${DIFY_CONNECT_TIMEOUT:3s}
     # 调用 Dify 读取响应的超时时间；应覆盖工作流执行耗时。
     read-timeout: ${DIFY_READ_TIMEOUT:130s}
+    app-keys:
+      ${DIFY_APP_KEY_1:-}: ${DIFY_API_KEY_1:-}
   # OAuth2 资源保护与内部服务调用配置。
   oauth:
     # 业务侧 OAuth2 签发方地址。

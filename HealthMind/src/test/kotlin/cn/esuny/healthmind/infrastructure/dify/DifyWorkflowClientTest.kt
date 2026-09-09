@@ -73,6 +73,30 @@ class DifyWorkflowClientTest {
         assertEquals("timeout", exception.category.wireValue)
     }
 
+    @Test
+    fun `retains Dify workflow failure detail`() {
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(
+            """{"data":{"workflow_id":"wf-1","status":"failed","error":"MCP tool nutrimemo.capture_context.get failed"}}""",
+        ))
+        server.start()
+        val client = DifyWorkflowClient(
+            RestClient.builder(),
+            ObjectMapper(),
+            HealthMindProperties(dify = HealthMindProperties.Dify(
+                baseUrl = server.url("/v1").toString().trimEnd('/'),
+                appKeys = mapOf("app-1" to "test-only-key"),
+            )),
+        )
+
+        val exception = assertFailsWith<TaskExecutionException> { client.run(command()) }
+
+        assertEquals("DIFY_WORKFLOW_FAILED", exception.code)
+        assertEquals(
+            "Dify workflow did not succeed (status=failed): MCP tool nutrimemo.capture_context.get failed",
+            exception.message,
+        )
+    }
+
     private fun command() = TaskExecution(
         taskId = UUID.randomUUID(),
         attemptId = UUID.randomUUID(),
