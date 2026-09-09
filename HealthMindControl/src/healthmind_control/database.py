@@ -29,11 +29,18 @@ class Database:
             self.cfg.database_dsn,
             min_size=1,
             max_size=6,
+            timeout=5,
             kwargs={"autocommit": True, "row_factory": dict_row},
             open=False,
         )
-        await self.pool.open()
-        await self.verify_schema()
+        try:
+            await self.pool.open()
+            await self.verify_schema()
+        except Exception as exc:
+            self.schema_error = f"数据库连接失败: {exc}"
+            self.write_enabled = False
+            await self.pool.close()
+            self.pool = None
 
     async def close(self) -> None:
         if self.pool:
@@ -70,4 +77,3 @@ class Database:
                 await conn.execute("SET LOCAL lock_timeout='3s'")
                 await conn.execute("SET LOCAL statement_timeout='15s'")
                 yield conn
-
