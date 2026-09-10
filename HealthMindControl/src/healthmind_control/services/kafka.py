@@ -19,17 +19,20 @@ BUSINESS_TOPICS = {
 SELF_GROUP_PREFIX = "healthmind-control-"
 
 
-def build_client_config(cfg: Settings, group_id: str | None = None) -> dict[str, Any]:
+def build_client_config(cfg: Settings, group_id: str | None = None, consumer: bool = False) -> dict[str, Any]:
     """统一构造 confluent-kafka 客户端配置（含可选 SASL/SSL）。
 
-    凭据只来自环境变量/.env（HMC_*），绝不入库/入审计；缺配置时抛出可读错误。
+    - consumer=True 时才注入消费端专有属性（session.timeout.ms），避免 Producer/Admin
+      触发 librdkafka 的 CONFWARN 警告；
+    - 凭据只来自环境变量/.env（HMC_*），绝不入库/入审计；缺配置时抛出可读错误。
     """
     protocol = (cfg.kafka_security_protocol or "PLAINTEXT").upper()
     base: dict[str, Any] = {
         "bootstrap.servers": cfg.kafka_bootstrap_servers,
         "socket.timeout.ms": 5000,
-        "session.timeout.ms": 6000,
     }
+    if consumer:
+        base["session.timeout.ms"] = 6000
     if protocol != "PLAINTEXT":
         base["security.protocol"] = protocol
         if protocol.startswith("SASL"):
@@ -61,11 +64,7 @@ class KafkaService:
         except RuntimeError as exc:
             # 配置缺失时保持客户端可构造：使用无认证的降级配置，使用时再抛可读错误
             self._auth_error = str(exc)
-            self._base = {
-                "bootstrap.servers": cfg.kafka_bootstrap_servers,
-                "socket.timeout.ms": 5000,
-                "session.timeout.ms": 6000,
-            }
+            self._base = {"bootstrap.servers": cfg.kafka_bootstrap_servers, "socket.timeout.ms": 5000}
         self.admin = AdminClient(self._base)
         self.producer = Producer(self._base)
         self._metadata_cache: dict[str, Any] = {"at": 0.0, "value": None}
@@ -75,7 +74,13 @@ class KafkaService:
             raise RuntimeError(self._auth_error)
 
     def _consumer(self, group_id: str, **extra: Any) -> Consumer:
-        config = {**self._base, **extra, "group.id": group_id, "enable.auto.commit": False}
+        config = {
+            **self._base,
+            "session.timeout.ms": 6000,   # 消费端专有属性
+            **extra,
+            "group.id": group_id,
+            "enable.auto.commit": False,
+        }
         return Consumer(config)
 
     # ---------- 元数据（带短 TTL 缓存） ----------

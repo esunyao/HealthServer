@@ -30,7 +30,9 @@ class Database:
             min_size=1,
             max_size=6,
             timeout=5,
-            kwargs={"autocommit": True, "row_factory": dict_row},
+            # statement_timeout 通过连接 options 下发，避免每次查询多跑一条 SET
+            # （此前 SET + 查询两条命令在同一连接上，客户端中途取消会留下 "another command is already in progress"）
+            kwargs={"autocommit": True, "row_factory": dict_row, "options": "-c statement_timeout=15000"},
             open=False,
         )
         try:
@@ -60,7 +62,6 @@ class Database:
             return []
         async with self.pool.connection() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SET statement_timeout='15s'")
                 await cur.execute(sql, params)
                 return list(await cur.fetchall())
 

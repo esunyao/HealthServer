@@ -18,6 +18,12 @@ async def root(request: Request):
     return RedirectResponse("/ui/dashboard")
 
 
+@router.get("/.well-known/appspecific/com.chrome.devtools.json")
+async def chrome_devtools_probe():
+    """Chrome DevTools 自动探测端点：返回空对象，避免日志里刷 404。"""
+    return {}
+
+
 @router.get("/ui/{view}", response_class=HTMLResponse)
 async def view_page(request: Request, view: str):
     if view not in VIEWS:

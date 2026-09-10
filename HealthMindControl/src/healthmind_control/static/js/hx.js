@@ -1,7 +1,7 @@
 // hx.js —— htmx 风格轻量驱动（属性与官方 htmx 同名，可无痛替换 vendor/htmx.min.js）
 // 支持：hx-get / hx-trigger(click|load|change) / hx-target / hx-swap(innerHTML|append|outerHTML)
 //       hx-include(选择器或 closest form) / hx-indicator('self' 或选择器) / hx-push-url
-import { toast, getJson } from "./main.js";
+import { toast } from "./main.js";
 
 function valueOf(input) {
   if (input.type === "checkbox") return input.checked ? (input.value || "on") : null;
@@ -44,7 +44,8 @@ async function perform(el) {
   const qs = form ? serialize(el, form) : "";
   if (qs) url += (url.includes("?") ? "&" : "?") + qs;
   const targetSel = el.getAttribute("hx-target");
-  const target = targetSel ? document.querySelector(targetSel) : null;
+  // 未显式声明 hx-target 时默认就地渲染（容器自身 hx-get + hx-trigger="load" 的常见场景）
+  const target = targetSel ? document.querySelector(targetSel) : el;
   const swap = el.getAttribute("hx-swap") || "innerHTML";
   const indicator = el.getAttribute("hx-indicator");
   const busy = indicator === "self" || indicator === null;
@@ -61,7 +62,7 @@ async function perform(el) {
     }
     const html = await r.text();
     if (swap === "none") return;
-    if (!target) { toast("hx-target 缺失", "err"); return; }
+    if (!target) { toast("hx-target 未找到：" + targetSel, "err"); return; }
     if (swap === "append") {
       const holder = document.createElement("div");
       holder.innerHTML = html;
@@ -79,6 +80,13 @@ async function perform(el) {
     window.dispatchEvent(new CustomEvent("hmc:afterSwap", { detail: { target } }));
   } catch (err) {
     toast("加载失败：" + err.message, "err");
+    // 容器型加载失败时把错误写回原位，避免页面一直停在“载入中…”
+    if (target && swap === "innerHTML") {
+      const box = document.createElement("div");
+      box.className = "muted";
+      box.textContent = "加载失败：" + err.message;
+      target.replaceChildren(box);
+    }
   } finally {
     delete el.dataset.hxBusy;
     if (busy) el.disabled = false;

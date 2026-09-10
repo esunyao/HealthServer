@@ -27,6 +27,15 @@ def test_kafka_client_config_plaintext():
     assert "sasl.username" not in conf
 
 
+def test_kafka_consumer_only_properties_are_scoped():
+    """session.timeout.ms 只给消费端：Producer/Admin 传入会触发 librdkafka CONFWARN。"""
+    cfg = _fake_cfg()
+    producer_conf = kmod.build_client_config(cfg)
+    consumer_conf = kmod.build_client_config(cfg, "g", consumer=True)
+    assert "session.timeout.ms" not in producer_conf
+    assert consumer_conf["session.timeout.ms"] == 6000
+
+
 def test_kafka_client_config_sasl_ssl():
     cfg = _fake_cfg(
         kafka_security_protocol="SASL_SSL",
