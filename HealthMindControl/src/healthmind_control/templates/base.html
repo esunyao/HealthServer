@@ -80,9 +80,11 @@
   <div class="drawer-body" id="drawer-body"></div>
 </aside>
 
+<!-- 全站模块：主题 / htmx 风格驱动 / 基础工具 / SSE（SSE 必须在每个页面加载，否则页脚一直停在“连接中…”） -->
 <script type="module" src="/static/js/theme.js"></script>
 <script type="module" src="/static/js/hx.js"></script>
 <script type="module" src="/static/js/main.js"></script>
+<script type="module" src="/static/js/sse.js"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
