@@ -30,8 +30,12 @@ def test_hx_driver_renders_without_explicit_target():
         target.write_bytes(source.read_bytes())
     (workdir / "run.mjs").write_bytes(HARNESS.read_bytes())
     try:
-        proc = subprocess.run([node, "run.mjs"], cwd=workdir, capture_output=True, text=True, timeout=60)
-        assert proc.returncode == 0, f"hx 驱动回归失败：{proc.stdout}\n{proc.stderr}"
+        proc = subprocess.run(
+            [node, "run.mjs"], cwd=workdir, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=60,
+        )
+        assert proc.returncode == 0, f"前端驱动回归失败：{proc.stdout}\n{proc.stderr}"
         assert "HX-DRIVER-OK" in proc.stdout
+        assert "SSE-DRIVER-OK" in proc.stdout
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

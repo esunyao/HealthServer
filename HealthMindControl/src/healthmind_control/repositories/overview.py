@@ -38,7 +38,7 @@ class OverviewMixin:
             row.pop("created_at", None)
         return {
             "database": {
-                "ok": True,
+                "ok": self.db.connected,       # 连接可用且最近一次查询成功
                 "write_enabled": self.db.write_enabled,
                 "schema_error": self.db.schema_error,
             },

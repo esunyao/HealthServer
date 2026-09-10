@@ -248,8 +248,7 @@ export function initDashboard() {
   getJson("/api/status").then(function (s) {
     applySummary(s);
   }).catch(function (e) { toast("状态加载失败: " + e.message, "err"); });
-  hmcSse.on("status", applySummary);
-  hmcSse.start();
+  hmcSse.on("status", applySummary);   // 连接由 sse.js 的 ensureSse() 全站启动（幂等），此处只订阅
   document.getElementById("btn-health-refresh").addEventListener("click", function () {
     getJson("/api/status").then(applySummary).catch(function (e) { toast(e.message, "err"); });
   });
