@@ -47,7 +47,7 @@ plans
 .mcp
 
 #python
-.venv
+**/.venv
 
 doc/
 
