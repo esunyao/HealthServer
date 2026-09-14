@@ -7,7 +7,7 @@ info:
     本版本通过 Kafka 与 HealthMind 完成 AI 分析，但不向客户端暴露 Kafka、Prompt 或 AI 原始结果接口。
 servers:
   - url: http://localhost:8099
-    description: Gateway
+    description: NutriMemo 本地服务（经 Gateway 时使用 8091）
 security: [{ bearerAuth: [] }]
 tags:
   - name: 拍照采集

@@ -4,8 +4,8 @@ HealthMind、NutriMemo、Kafka 与 Dify 的本地 Web 运维控制台。只监�
 所有数据库与 Kafka 写操作都必须「预览 → 输入确认文本 → 事务执行」，并双写审计（DB + JSONL）。
 
 v0.2 变更：后端按领域分包、前端多视图 + 主题系统（4 基色 × 6 强调色 + 跟随系统）、
-无 npm/CDN 的现代组件化 UI（htmx 风格属性 + Web Components）、需求合规缺口全部补齐
-（详见 docs/requirements.md）。
+无 npm/CDN 的现代组件化 UI（htmx 风格属性 + Web Components）。合规摘要见
+`doc/requirements.md`；当前仍有已复现缺陷和未验证场景。
 
 ## 1. 环境准备（只使用父目录虚拟环境）
 
@@ -19,11 +19,12 @@ uv sync --project HealthMindControl --extra test
 ## 2. 配置 .env
 
 ```powershell
-Copy-Item .env.example .env   # 然后编辑
+Copy-Item HealthMindControl\.env.example HealthMindControl\.env   # 然后编辑模块目录下的 .env
 ```
 
 | 配置项 | 用途 |
 |---|---|
+| HMC_HOST / HMC_PORT | 本地监听地址和端口（默认 `127.0.0.1:8765`） |
 | HMC_DATABASE_DSN | PostgreSQL，同时访问 healthmind / nutri schema |
 | HMC_NUTRI_DATABASE_DSN | 可选（Nutri 独立库时） |
 | HMC_KAFKA_BOOTSTRAP_SERVERS | Kafka 地址（逗号分隔） |
@@ -36,6 +37,8 @@ Copy-Item .env.example .env   # 然后编辑
 | HMC_KAFKA_SASL_MECHANISM / _USERNAME / _PASSWORD | SASL 认证（凭据只在本机 .env，不入库/审计） |
 | HMC_KAFKA_SSL_CA_LOCATION | 自定义 CA 证书路径（SSL/SASL_SSL 时可选） |
 | HMC_KAFKA_METADATA_CACHE_SECONDS / HMC_PROBE_CACHE_TTL_SECONDS | 缓存节流 |
+| HMC_QUERY_LIMIT | 受控列表默认查询上限 |
+| HMC_AUDIT_PATH | JSONL 审计文件路径 |
 | HMC_PREVIEW_TTL_SECONDS / HMC_TASK_RETENTION_DAYS | 预览令牌 / 克隆保留期 |
 
 ## 3. 启动与访问
@@ -78,7 +81,7 @@ src/healthmind_control/
 ├─ templates/              # base + views/* + partials/*
 └─ static/                 # css（tokens/theme/base/components/views） js（模块 + views/*） img
 tests/                     # pytest 单测（无外部依赖）+ _smoke.py 可选真库冒烟
-docs/requirements.md       # 需求合规矩阵与 V1.1 清单
+doc/requirements.md       # 公开合规状态摘要（三态）
 ```
 
 约定：模板全局 fmt_ts / col_label / badge_cls 见 ui/fmt.py；前端 hx-* 属性为 htmx 兼容子集
@@ -97,8 +100,8 @@ JS 语法由 pytest 用 node --check 递归校验（node 缺失自动跳过）�
 ## 7. 安全与边界（沿用 + v0.2）
 
 - Kafka 消息查看绝不提交业务消费组 offset；控制台自身诊断组（healthmind-control-*）不在列表中展示。
-- 所有写操作：预览令牌 120s（可配）+ 记录快照哈希绑定；恢复 attempt 另有行锁与 lock_version 双校验。
-- HealthMind 收件箱不存 payload：缺失 → 重放 capture-ready；已存在 → 只允许克隆任务（不重置原 inbox）。
+- 所有写操作经过预览令牌和确认链路；参数绑定、活动 release/task 并发保护和恢复 attempt 最新性仍有未验收缺口。
+- HealthMind 收件箱不存 payload；缺失时支持重放 capture-ready，已存在时不会重置原 inbox。任务克隆与 release/task 约束仍以公开合规摘要为准。
 - 审计：var/audit/admin-actions.jsonl（portalocker + fsync），DB workflow_release_audits 每变更同写。
 - Dify API Key 只由 Nacos/环境变量管理；difyctl 导出永不加 --include-secret；不读取凭据文件。
 - v1 不做：topic 创建/删除、消费组 offset 重置、Kafka 配置修改、任意 SQL、物理删除、修改历史成功记录。

@@ -26,7 +26,7 @@ spring:
     enabled: false
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:}
     consumer:
       group-id: ${NUTRIMEMO_KAFKA_CONSUMER_GROUP:nutrimemo-analysis-result-v1}
       enable-auto-commit: false
@@ -77,8 +77,8 @@ nutri:
     publish-timeout: ${NUTRIMEMO_PUBLISH_TIMEOUT:15s}
   internal:
     security:
-      issuer-uri: ${NUTRIMEMO_INTERNAL_ISSUER_URI:http://localhost:9000/application/o/nutrimemo-internal/}
-      jwk-set-uri: ${NUTRIMEMO_INTERNAL_JWK_SET_URI:http://localhost:9000/application/o/nutrimemo-internal/jwks/}
+      issuer-uri: ${NUTRIMEMO_INTERNAL_ISSUER_URI:}
+      jwk-set-uri: ${NUTRIMEMO_INTERNAL_JWK_SET_URI:}
       audience: ${NUTRIMEMO_INTERNAL_AUDIENCE:nutrimemo-internal}
       allowed-health-mind-client-id: ${NUTRIMEMO_HEALTHMIND_CLIENT_ID:healthmind-nutrimemo}
 

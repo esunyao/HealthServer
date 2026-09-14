@@ -82,7 +82,7 @@ oss:
     - image/png
     - image/webp
     - image/gif
-  # cdn-domain: https://cdn.example.com  # 可选
+  # cdn-domain: https://cdn.example.invalid  # 可选占位符
   cleanup:
     fixed-delay: 60000
     batch-size: 100
@@ -117,7 +117,7 @@ logging:
 orion:
   internal:
     security:
-      issuer-uri: ${ORION_INTERNAL_ISSUER_URI:http://localhost:9000/application/o/orion-internal/}
-      jwk-set-uri: ${ORION_INTERNAL_JWK_SET_URI:http://localhost:9000/application/o/orion-internal/jwks/}
+      issuer-uri: ${ORION_INTERNAL_ISSUER_URI:}
+      jwk-set-uri: ${ORION_INTERNAL_JWK_SET_URI:}
       audience: ${ORION_INTERNAL_AUDIENCE:orion-internal}
       allowed-health-mind-client-id: ${ORION_HEALTHMIND_CLIENT_ID:healthmind-orion}

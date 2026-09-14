@@ -17,9 +17,9 @@ spring:
   # PostgreSQL 数据源配置。生产环境应通过环境变量或 Nacos 提供连接信息。
   datasource:
     # 数据库 JDBC 连接地址。
-    url: ${HEALTHMIND_DB_URL:jdbc:postgresql://localhost:5432/healthserver}
+    url: ${HEALTHMIND_DB_URL:}
     # 数据库登录用户名。
-    username: ${HEALTHMIND_DB_USERNAME:postgres}
+    username: ${HEALTHMIND_DB_USERNAME:}
     # 数据库登录密码，不在代码仓库中填写真实密码。
     password: ${HEALTHMIND_DB_PASSWORD:}
     hikari:
@@ -32,7 +32,7 @@ spring:
   cloud:
     nacos:
       # Nacos 服务地址，格式通常为 host:port。
-      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      server-addr: ${NACOS_SERVER_ADDR:}
       # Nacos 登录用户名。
       username: ${NACOS_USERNAME:}
       # Nacos 登录密码。
@@ -46,7 +46,7 @@ spring:
   # Kafka 客户端基础配置。
   kafka:
     # Kafka 集群的 bootstrap 服务器列表。
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:}
     consumer:
       # Kafka 消费者组；业务自定义配置中的 consumer-group 应保持一致。
       group-id: ${HEALTHMIND_KAFKA_CONSUMER_GROUP:healthmind-nutrition-v1}
@@ -79,9 +79,9 @@ spring:
       resourceserver:
         jwt:
           # OAuth2 签发方地址，用于校验 JWT 的签发者信息。
-          issuer-uri: ${AUTHENTIK_ISSUER_URI:http://localhost:9000/application/o/healthmind-mcp/}
+          issuer-uri: ${AUTHENTIK_ISSUER_URI:}
           # JWT 公钥集合地址，用于验证令牌签名。
-          jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:http://localhost:9000/application/o/healthmind-mcp/jwks/}
+          jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:}
 
   # Spring AI MCP 服务端配置。
   ai:
@@ -106,12 +106,8 @@ management:
         # 对外暴露健康检查、应用信息、指标和 Prometheus 指标端点。
         include: health,info,metrics,prometheus
 
-# 预期token
-#  iss   = https://aaa.jiancaiwangzhong.com:8093/application/o/healthmind-mcp/
-#  aud   = healthmind-mcp
-#  azp   = dify-healthmind
-#  scope = healthmind.tool.orion.nutrition-context.read
-#  healthmind.tool.nutrimemo.capture-context.read
+# 预期 token 的 issuer、audience、authorized party 与 scope 由环境变量和 Authentik 配置提供；
+#  不在仓库中记录真实 issuer、域名或客户端凭据。
 # HealthMind 业务自定义配置。
 healthmind:
   # Kafka 业务主题与消息投递配置。
@@ -129,7 +125,7 @@ healthmind:
   # Dify 工作流服务配置。
   dify:
     # Dify API 基础地址。
-    base-url: ${DIFY_BASE_URL:http://localhost:8080/v1}
+    base-url: ${DIFY_BASE_URL:}
     # 对接的 Dify 部署版本，用于兼容性校验或请求适配。
     deployment-version: ${DIFY_DEPLOYMENT_VERSION:1.17.0}
     # 调用 Dify 建立连接的超时时间。
@@ -141,26 +137,26 @@ healthmind:
   # OAuth2 资源保护与内部服务调用配置。
   oauth:
     # 业务侧 OAuth2 签发方地址。
-    issuer-uri: ${AUTHENTIK_ISSUER_URI:http://localhost:9000/application/o/healthmind-mcp/}
+    issuer-uri: ${AUTHENTIK_ISSUER_URI:}
     # 获取 JWT 公钥的地址。
-    jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:http://localhost:9000/application/o/healthmind-mcp/jwks/}
+    jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:}
     # MCP 访问令牌必须具备的 audience。
     expected-mcp-audience: ${HEALTHMIND_MCP_AUDIENCE:healthmind-mcp}
     # 允许调用 MCP 的 Dify OAuth2 客户端 ID。
     allowed-dify-client-id: ${HEALTHMIND_DIFY_CLIENT_ID:dify-healthmind}
     # MCP 资源标识，用于 OAuth2 资源元数据与令牌校验。
-    mcp-resource-uri: ${HEALTHMIND_MCP_RESOURCE_URI:http://localhost:8100/mcp}
+    mcp-resource-uri: ${HEALTHMIND_MCP_RESOURCE_URI:}
     # MCP 受保护资源元数据地址。
-    protected-resource-metadata-uri: ${HEALTHMIND_MCP_METADATA_URI:http://localhost:8100/.well-known/oauth-protected-resource/mcp}
+    protected-resource-metadata-uri: ${HEALTHMIND_MCP_METADATA_URI:}
     # HealthMind 内部 OAuth2/HTTP 调用的连接与读取超时。
     connect-timeout: ${HEALTHMIND_INTERNAL_CONNECT_TIMEOUT:3s}
     read-timeout: ${HEALTHMIND_INTERNAL_READ_TIMEOUT:15s}
     # Orion 内部 API 的 client_credentials 配置。
     orion:
       # Orion 内部服务地址。
-      base-url: ${ORION_INTERNAL_BASE_URL:http://Orion}
+      base-url: ${ORION_INTERNAL_BASE_URL:}
       # Authentik OAuth2 令牌端点。
-      token-uri: ${ORION_OAUTH_TOKEN_URI:http://localhost:9000/application/o/token/}
+      token-uri: ${ORION_OAUTH_TOKEN_URI:}
       # Orion OAuth2 客户端 ID。
       client-id: ${ORION_OAUTH_CLIENT_ID:healthmind-orion}
       # Orion OAuth2 客户端密钥，应通过环境变量或 Nacos 注入。
@@ -172,9 +168,9 @@ healthmind:
     # NutriMemo 内部 API 的 client_credentials 配置。
     nutrimemo:
       # NutriMemo 内部服务地址。
-      base-url: ${NUTRIMEMO_INTERNAL_BASE_URL:http://NutriMemo}
+      base-url: ${NUTRIMEMO_INTERNAL_BASE_URL:}
       # Authentik OAuth2 令牌端点。
-      token-uri: ${NUTRIMEMO_OAUTH_TOKEN_URI:http://localhost:9000/application/o/token/}
+      token-uri: ${NUTRIMEMO_OAUTH_TOKEN_URI:}
       # NutriMemo OAuth2 客户端 ID。
       client-id: ${NUTRIMEMO_OAUTH_CLIENT_ID:healthmind-nutrimemo}
       # NutriMemo OAuth2 客户端密钥，应通过环境变量或 Nacos 注入。

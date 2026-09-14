@@ -7,7 +7,7 @@
 #
 # 环境变量速查表（可在 .env / 部署平台 / 运行配置中设置）：
 #   SERVER_PORT        网关监听端口
-#   NACOS_SERVER_ADDR  Nacos 地址           默认 192.168.3.101:8848（本机调试）
+#   NACOS_SERVER_ADDR  Nacos 地址           必须通过环境变量注入
 #   NACOS_USERNAME     Nacos 用户名         无默认，必填
 #   NACOS_PASSWORD     Nacos 密码           无默认，必填
 #   AUTHENTIK_ISSUER_URI  Authentik Discovery 的 issuer 字段，必填

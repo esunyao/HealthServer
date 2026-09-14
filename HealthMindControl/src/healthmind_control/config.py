@@ -16,15 +16,15 @@ class Settings(BaseSettings):
     port: int = 8765
     database_dsn: str | None = None
     nutri_database_dsn: str | None = None
-    kafka_bootstrap_servers: str = "192.168.3.101:9092"
+    kafka_bootstrap_servers: str = ""
     kafka_security_protocol: str = "PLAINTEXT"
     kafka_sasl_mechanism: str | None = None
     kafka_sasl_username: str | None = None
     kafka_sasl_password: str | None = None
     kafka_ssl_ca_location: str | None = None
-    dify_url: str = "https://dify.lovedage.com.cn"
-    mcp_url: str = "http://192.168.3.101:8093/mcp"
-    auth_url: str = "https://auth.lovedage.com.cn:8093"
+    dify_url: str = ""
+    mcp_url: str = ""
+    auth_url: str = ""
     dify_console_token: str | None = None
     difyctl_path: str = "difyctl"
     refresh_seconds: int = Field(5, ge=2, le=60)
@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     kafka_max_scan_messages: int = Field(50000, ge=100, le=500000)
     kafka_metadata_cache_seconds: int = Field(8, ge=2, le=300)
     probe_cache_ttl_seconds: int = Field(15, ge=5, le=300)
+
+    def missing_external_envs(self) -> tuple[str, ...]:
+        required = {
+            "HMC_KAFKA_BOOTSTRAP_SERVERS": self.kafka_bootstrap_servers,
+            "HMC_DIFY_URL": self.dify_url,
+            "HMC_MCP_URL": self.mcp_url,
+            "HMC_AUTH_URL": self.auth_url,
+        }
+        return tuple(name for name, value in required.items() if not value.strip())
 
     @property
     def nutri_dsn(self) -> str | None:

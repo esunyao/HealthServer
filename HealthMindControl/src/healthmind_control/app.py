@@ -46,6 +46,9 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        missing = settings.missing_external_envs()
+        if missing:
+            raise RuntimeError("Missing required environment variables: " + ", ".join(missing))
         app.state.csrf_token = secrets.token_urlsafe(32)
         app.state.previews = PreviewStore(settings.preview_ttl_seconds)
         app.state.audit = AuditLog(settings.audit_path)

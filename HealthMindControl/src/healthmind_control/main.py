@@ -7,6 +7,9 @@ from .config import settings
 
 
 def run() -> None:
+    missing = settings.missing_external_envs()
+    if missing:
+        raise SystemExit("Missing required environment variables: " + ", ".join(missing))
     if settings.host != "127.0.0.1":
         raise SystemExit("HealthMindControl v1 only permits HMC_HOST=127.0.0.1")
     # psycopg async connections require a selector loop on Windows.
