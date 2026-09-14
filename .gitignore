@@ -49,7 +49,7 @@ plans
 #python
 **/.venv
 
-doc/
+**/doc-project/**
 
 ### 本地环境变量（含真实凭据），禁止提交 ###
 .env
