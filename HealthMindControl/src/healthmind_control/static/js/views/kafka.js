@@ -74,6 +74,20 @@ function renderGroups() {
       + '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>topic</th><th style="text-align:right">分区</th><th style="text-align:right">offset</th><th style="text-align:right">high</th><th style="text-align:right">lag</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5" class="empty">无 offset</td></tr>') + "</tbody></table></div>"
       + "</details>";
   }).join("");
+  const groupList = document.getElementById("group-list");
+  if (groupList) groupList.innerHTML = groupsData.map(function (g) { return '<option value="' + esc(g.group_id) + '">'; }).join("");
+}
+
+function previewOffset() {
+  const valueText = document.getElementById("o-value").value;
+  startMutation(document.getElementById("o-flow"), {
+    previewUrl: "/api/kafka/offsets/preview", executeUrl: "/api/kafka/offsets/execute",
+    body: function () { return {
+      group_id: document.getElementById("o-group").value.trim(), topic: document.getElementById("o-topic").value.trim(),
+      partition: Number(document.getElementById("o-partition").value), position: document.getElementById("o-position").value,
+      value: valueText === "" ? null : Number(valueText), reason: document.getElementById("o-reason").value.trim(),
+    }; }, onDone: loadGroups,
+  });
 }
 
 async function loadTopics(force) {
@@ -199,8 +213,8 @@ function addHeaderRow(k, v) {
 function previewProduce() {
   const topic = document.getElementById("p-topic").value.trim();
   if (!topic) { toast("请填写 topic", "warn"); return; }
-  let payload;
-  try { payload = JSON.parse(document.getElementById("p-payload").value); }
+  const payloadText = document.getElementById("p-payload").value;
+  try { JSON.parse(payloadText); }
   catch { toast("payload 不是合法 JSON", "err"); return; }
   const key = document.getElementById("p-key").value.trim() || null;
   const partitionRaw = document.getElementById("p-partition").value;
@@ -212,7 +226,7 @@ function previewProduce() {
     previewUrl: "/api/kafka/produce/preview",
     executeUrl: "/api/kafka/produce/execute",
     title: "生产消息",
-    body: function () { return { topic: topic, key: key, partition: partition, headers: headers, payload: payload, reason: reason }; },
+    body: function () { return { topic: topic, key: key, partition: partition, headers: headers, payload_text: payloadText, reason: reason }; },
     onDone: function (result) {
       if (result && result.offset !== undefined) {
         document.getElementById("p-preview-box").innerHTML = '<div class="row"><span class="badge b-ok">delivered</span>'
@@ -246,6 +260,7 @@ function init() {
     catch { toast("不是合法 JSON", "err"); }
   });
   document.getElementById("p-preview").addEventListener("click", previewProduce);
+  if (document.getElementById("o-preview")) document.getElementById("o-preview").addEventListener("click", previewOffset);
   loadTopics(false);
   loadGroups();
 }

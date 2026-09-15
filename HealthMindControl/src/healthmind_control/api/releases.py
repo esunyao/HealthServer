@@ -3,8 +3,9 @@ from typing import Any
 
 import yaml
 from fastapi import APIRouter, HTTPException, Request
+from jsonschema import Draft202012Validator, SchemaError
 
-from ..models import BindToolsRequest, ReleaseRequest
+from ..models import BindToolsRequest, ExecuteRequest, ReleaseRequest
 from ..security import redact, require_csrf, sha256_json
 from ..util import serial
 
@@ -135,6 +136,13 @@ async def release_preview(request: Request, body: ReleaseRequest):
                     body.workflow_version, body.input_schema, body.output_schema]
         if any(v is None for v in required):
             raise HTTPException(422, "create requires all Dify IDs, version and schemas")
+        if not body.tool_codes:
+            raise HTTPException(422, "create requires at least one MCP tool binding")
+        try:
+            Draft202012Validator.check_schema(body.input_schema)
+            Draft202012Validator.check_schema(body.output_schema)
+        except SchemaError as exc:
+            raise HTTPException(422, f"invalid JSON schema: {exc.message}")
         snapshot = _release_snapshot(body)
     else:
         if not body.release_id:
@@ -152,29 +160,36 @@ async def release_preview(request: Request, body: ReleaseRequest):
 
 
 @router.post("/api/releases/execute")
-async def release_execute(request: Request, body: ReleaseRequest):
+async def release_execute(request: Request, body: ExecuteRequest):
     require_csrf(request, body.csrf_token)
-    preview = request.app.state.previews.consume(body.preview_token or "", "release." + body.operation)
-    if body.confirmation != f"RELEASE {body.operation.upper()}":
+    if not request.app.state.db.write_features.get("releases"):
+        raise HTTPException(409, request.app.state.db.schema_error or "release writes are disabled")
+    preview = request.app.state.previews.consume_for_prefix(body.preview_token, "release.")
+    intent = ReleaseRequest.model_validate(preview.payload)
+    if body.confirmation != f"RELEASE {intent.operation.upper()}":
         raise HTTPException(409, "confirmation text mismatch")
-    if body.operation != "create":
-        current = await request.app.state.repo.snapshot("healthmind.workflow_releases", "release_id", body.release_id or "")
+    if intent.operation != "create":
+        current = await request.app.state.repo.snapshot("healthmind.workflow_releases", "release_id", intent.release_id or "")
         if not current or sha256_json(current) != preview.snapshot_hash:
             raise HTTPException(409, "版本在预览后发生变化，请重新预览")
+    before = None if intent.operation == "create" else current
     op = request.app.state.audit.write(
-        "release." + body.operation, body.release_id or body.release_version or "new", body.reason, "started",
+        "release." + intent.operation, intent.release_id or intent.release_version or "new", intent.reason, "started",
+        before=redact(before),
     )
     try:
-        if body.operation == "create":
-            rid = await request.app.state.repo.create_release(body.model_dump(), body.reason)
+        if intent.operation == "create":
+            rid = await request.app.state.repo.create_release(intent.model_dump(), intent.reason)
         else:
-            rid = body.release_id
-            await request.app.state.repo.transition_release(rid, body.operation, body.reason)
-        request.app.state.audit.write("release." + body.operation, rid, body.reason, "succeeded", operation_id=op)
+            rid = intent.release_id
+            await request.app.state.repo.transition_release(rid, intent.operation, intent.reason)
+        after = await request.app.state.repo.release_detail(str(rid))
+        request.app.state.audit.write("release." + intent.operation, rid, intent.reason, "succeeded", operation_id=op,
+                                      before=redact(before), after=redact(after))
         return {"release_id": rid, "status": "ok"}
     except Exception as exc:
         request.app.state.audit.write(
-            "release." + body.operation, body.release_id or "new", body.reason, "failed", operation_id=op, error=str(exc),
+            "release." + intent.operation, intent.release_id or "new", intent.reason, "failed", operation_id=op, error=str(exc),
         )
         raise
 
@@ -199,9 +214,14 @@ async def bind_tools_preview(request: Request, release_id: str, body: BindToolsR
 
 
 @router.post("/api/releases/{release_id}/tools/execute")
-async def bind_tools_execute(request: Request, release_id: str, body: BindToolsRequest):
+async def bind_tools_execute(request: Request, release_id: str, body: ExecuteRequest):
     require_csrf(request, body.csrf_token)
+    if not request.app.state.db.write_features.get("releases"):
+        raise HTTPException(409, request.app.state.db.schema_error or "release writes are disabled")
     preview = request.app.state.previews.consume(body.preview_token or "", "release.bind_tools")
+    intent = BindToolsRequest.model_validate(preview.payload)
+    if intent.release_id != release_id:
+        raise HTTPException(409, "preview target mismatch")
     if body.confirmation != "RELEASE BIND_TOOLS":
         raise HTTPException(409, "confirmation text mismatch")
     current = await request.app.state.repo.release_detail(release_id)
@@ -209,13 +229,13 @@ async def bind_tools_execute(request: Request, release_id: str, body: BindToolsR
                 "bound": [t.get("tool_code") for t in current["tools"]] if current else []}
     if not current or sha256_json(snapshot) != preview.snapshot_hash:
         raise HTTPException(409, "版本在预览后发生变化，请重新预览")
-    op = request.app.state.audit.write("release.bind_tools", release_id, body.reason, "started")
+    op = request.app.state.audit.write("release.bind_tools", release_id, intent.reason, "started")
     try:
         result = await request.app.state.repo.bind_tools(
-            release_id, [b.model_dump() for b in body.bindings], body.reason,
+            release_id, [b.model_dump() for b in intent.bindings], intent.reason,
         )
-        request.app.state.audit.write("release.bind_tools", release_id, body.reason, "succeeded", operation_id=op)
+        request.app.state.audit.write("release.bind_tools", release_id, intent.reason, "succeeded", operation_id=op)
         return serial(result)
     except Exception as exc:
-        request.app.state.audit.write("release.bind_tools", release_id, body.reason, "failed", operation_id=op, error=str(exc))
+        request.app.state.audit.write("release.bind_tools", release_id, intent.reason, "failed", operation_id=op, error=str(exc))
         raise

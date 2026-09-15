@@ -90,11 +90,12 @@ class ReleasesMixin:
               (release_id, task_type_id, release_version, status, dify_workspace_id, dify_app_id,
                dify_workflow_id, dify_workflow_version, input_schema_version, input_schema, input_schema_sha256,
                output_schema_version, output_schema, output_schema_sha256, timeout_seconds, max_attempts)
-              VALUES (%s, %s, %s, 'candidate', %s, %s, %s, %s, '1.0', %s, %s, '1.0', %s, %s, 120, 1)""",
+              VALUES (%s, %s, %s, 'candidate', %s, %s, %s, %s, '1.0', %s, %s, '1.0', %s, %s, %s, %s)""",
               (rid, tt["task_type_id"], data["release_version"], data["workspace_id"], data["app_id"],
                data["workflow_id"], data["workflow_version"],
                Jsonb(data["input_schema"]), sha256_json(data["input_schema"]),
-               Jsonb(data["output_schema"]), sha256_json(data["output_schema"])))
+               Jsonb(data["output_schema"]), sha256_json(data["output_schema"]),
+               data["timeout_seconds"], data["max_attempts"]))
             cur = await conn.execute(
                 "SELECT tool_id, auth_scope FROM healthmind.ai_tool_definitions WHERE active AND tool_code = ANY(%s)",
                 (data["tool_codes"],),
@@ -163,6 +164,10 @@ class ReleasesMixin:
                 raise RuntimeError("release not found")
             old = release["status"]
             if operation in {"promote", "rollback"}:
+                cur = await conn.execute("SELECT count(*)::int AS n FROM healthmind.workflow_release_tools WHERE release_id=%s",
+                                         (rid,))
+                if (await cur.fetchone())["n"] < 1:
+                    raise RuntimeError("release has no bound tools")
                 cur = await conn.execute(
                     "SELECT release_id FROM healthmind.workflow_releases WHERE task_type_id=%s AND status='production'"
                     " AND release_id<>%s FOR UPDATE",

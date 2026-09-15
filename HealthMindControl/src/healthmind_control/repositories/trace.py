@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 
@@ -83,21 +84,27 @@ class TraceMixin:
         }
 
     async def trace(self, value: str) -> dict[str, Any]:
-        stages: list[dict[str, Any]] = []
-        for key, label, kind in self.STAGES:
+        semaphore = asyncio.Semaphore(4)
+
+        async def load(key: str, label: str, kind: str) -> dict[str, Any] | None:
             spec = self._queries(value)[key]
-            rows: list[dict[str, Any]] = []
             matched: str | None = None
-            rows = await self.db.fetch_all(spec["exact"], spec["args"])
+            async with semaphore:
+                rows = await self.db.fetch_all(spec["exact"], spec["args"])
             if not rows and spec.get("fuzzy"):
-                rows = await self.db.fetch_all(spec["fuzzy"], spec.get("fuzzy_args", ()))
+                async with semaphore:
+                    rows = await self.db.fetch_all(spec["fuzzy"], spec.get("fuzzy_args", ()))
                 if rows:
                     matched = "fuzzy"
             elif rows:
                 matched = "exact"
             if rows:
-                stages.append({
+                return {
                     "stage": key, "label": label, "kind": kind,
                     "matched": matched, "rows": rows[:60],
-                })
+                }
+            return None
+
+        loaded = await asyncio.gather(*(load(*stage) for stage in self.STAGES))
+        stages = [stage for stage in loaded if stage is not None]
         return {"query": value, "stages": stages}

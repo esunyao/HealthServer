@@ -2,6 +2,7 @@ import hashlib
 import json
 import secrets
 import time
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +13,7 @@ SENSITIVE = {
     "authorization", "token", "access_token", "refresh_token", "client_secret", "client_key",
     "password", "pwd", "passwd", "api_key", "apikey", "x-api-key", "secret", "secret_key",
     "private_key", "credential", "signature", "session_key", "accesskey", "access_key_id",
+    "bearer", "app_api_key",
 }
 
 # URL 查询参数中出现这些标记即视为预签名/凭据链接，整体截断
@@ -61,13 +63,19 @@ class PreviewStore:
     def create(self, action: str, payload: dict[str, Any], snapshot: Any) -> tuple[str, Preview]:
         self.prune()
         token = secrets.token_urlsafe(32)
-        preview = Preview(action, payload, sha256_json(snapshot), time.time() + self.ttl)
+        preview = Preview(action, deepcopy(payload), sha256_json(snapshot), time.time() + self.ttl)
         self._items[token] = preview
         return token, preview
 
     def consume(self, token: str, action: str) -> Preview:
         preview = self._items.pop(token, None)
         if preview is None or preview.expires_at < time.time() or preview.action != action:
+            raise HTTPException(409, "预览令牌无效或已过期，请重新预览")
+        return preview
+
+    def consume_for_prefix(self, token: str, action_prefix: str) -> Preview:
+        preview = self._items.pop(token, None)
+        if preview is None or preview.expires_at < time.time() or not preview.action.startswith(action_prefix):
             raise HTTPException(409, "预览令牌无效或已过期，请重新预览")
         return preview
 

@@ -114,6 +114,12 @@ class RecoveryMixin:
                 selected = str(row["release_id"]) if row else None
             if not selected:
                 raise RuntimeError("production release not found")
+            cur = await conn.execute(
+                "SELECT release_id FROM healthmind.workflow_releases WHERE release_id=%s AND task_type_id=%s",
+                (selected, old["task_type_id"]),
+            )
+            if not await cur.fetchone():
+                raise RuntimeError("selected release does not belong to the task type")
             manifest = dict(old["context_manifest"])
             manifest.update(admin_retry_of_task_id=task_id, admin_operation_id=operation_id, admin_reason=reason)
             capture_id, meal_id = manifest.get("capture_session_id"), manifest.get("meal_id")
@@ -125,6 +131,13 @@ class RecoveryMixin:
             meal = await cur.fetchone()
             if not meal or meal["status"] != "active" or meal["confirmed"] < 1:
                 raise RuntimeError("active meal with confirmed images not found")
+            cur = await conn.execute("""SELECT task_id,status FROM healthmind.ai_tasks
+                WHERE aggregate_type=%s AND aggregate_id=%s
+                  AND status IN ('queued','running') FOR UPDATE""",
+                (old["aggregate_type"], old["aggregate_id"]))
+            active = await cur.fetchone()
+            if active:
+                raise RuntimeError(f"active task already exists: {active['task_id']} ({active['status']})")
             await conn.execute("""INSERT INTO healthmind.ai_tasks
               (task_id, task_type_id, workflow_release_id, requester_service, subject_id, aggregate_type, aggregate_id,
                idempotency_key, invocation_mode, status, priority, trace_id, input_schema_version, input_digest,
@@ -134,7 +147,7 @@ class RecoveryMixin:
                      (SELECT input_schema_version FROM healthmind.workflow_releases WHERE release_id=%s),
                      input_digest, %s, now() + (%s * interval '1 day')
                 FROM healthmind.ai_tasks WHERE task_id=%s""",
-              (new_id, selected, f"admin-retry:{task_id}:{operation_id}", selected, Jsonb(manifest),
+              (new_id, selected, f"admin-retry:{task_id}:{selected}", selected, Jsonb(manifest),
                self.retention_days, task_id))
             await conn.execute(
                 "UPDATE nutri.meal_records SET analysis_status='analysing'"
@@ -165,14 +178,16 @@ class RecoveryMixin:
                 cur = await conn.execute("""UPDATE healthmind.integration_outbox
                     SET status='pending', next_attempt_at=now(), published_at=NULL,
                         failure_code=NULL, failure_message=NULL
-                    WHERE event_id=%s AND status IN ('failed', 'publishing')
-                    RETURNING event_id, status""", (record_id,))
+                    WHERE event_id=%s AND (status='failed' OR
+                      (status='publishing' AND next_attempt_at < now() - (%s * interval '1 minute')))
+                    RETURNING event_id, status""", (record_id, self.stale_minutes))
             else:
                 cur = await conn.execute("""UPDATE nutri.integration_outbox
                     SET status='pending', next_attempt_at=now(), published_at=NULL,
                         last_error=NULL, locked_at=NULL
-                    WHERE event_id=%s AND status IN ('failed', 'publishing')
-                    RETURNING event_id, status""", (record_id,))
+                    WHERE event_id=%s AND (status='failed' OR
+                      (status='publishing' AND locked_at < now() - (%s * interval '1 minute')))
+                    RETURNING event_id, status""", (record_id, self.stale_minutes))
             row = await cur.fetchone()
             if not row:
                 raise RuntimeError("record changed or operation precondition failed")
@@ -183,15 +198,30 @@ class RecoveryMixin:
             cur = await conn.execute("""UPDATE healthmind.ai_tasks
                 SET status='cancelled', completed_at=now(), lock_version=lock_version+1
                 WHERE task_id=%s AND status='queued'
-                RETURNING task_id, status, lock_version""", (record_id,))
+                RETURNING task_id,status,lock_version,trace_id,subject_id,aggregate_type,aggregate_id,context_manifest""", (record_id,))
             row = await cur.fetchone()
             if not row:
                 raise RuntimeError("record changed or operation precondition failed（仅 queued 任务可取消）")
-            return dict(row)
+            event_id = str(uuid4())
+            manifest = row.get("context_manifest") or {}
+            envelope = self._failure_envelope(row, event_id, manifest, "TASK_CANCELLED", "cancelled",
+                                              "Cancelled by HealthMindControl")
+            await conn.execute("""INSERT INTO healthmind.integration_outbox
+                (event_id,task_id,event_type,schema_version,producer,aggregate_type,aggregate_id,
+                 destination_key,partition_key,payload,payload_sha256,trace_id,retention_until)
+                VALUES (%s,%s,%s,'1.0','HealthMind',%s,%s,%s,%s,%s,%s,%s,
+                        now() + (%s * interval '1 day'))""",
+                (event_id, row["task_id"], FAILURE_EVENT_TYPE, row["aggregate_type"], row["aggregate_id"],
+                 FAILURE_TOPIC, manifest.get("capture_session_id") or str(row["task_id"]), Jsonb(envelope),
+                 sha256_json(envelope), row["trace_id"], self.retention_days))
+            return {"task_id": row["task_id"], "status": row["status"], "lock_version": row["lock_version"],
+                    "event_id": event_id}
 
     async def _recover_attempt(self, attempt_id: str, expected_lock_version: int | None) -> dict[str, Any]:
         """超时 running attempt：行锁 + lock_version 双校验后，有余次则重排任务，
         次数耗尽则将任务置 failed 并按标准结构写入 nutrition.analysis.failed.v1 outbox。"""
+        if expected_lock_version is None:
+            raise RuntimeError("expected_lock_version is required; preview again")
         async with self.db.transaction() as conn:
             cur = await conn.execute(
                 "SELECT attempt_id, task_id, attempt_no, status, started_at, timeout_ms"
@@ -204,6 +234,13 @@ class RecoveryMixin:
                 raise RuntimeError("attempt 已不是 running 状态，请重新预览")
             if attempt["started_at"] is None:
                 raise RuntimeError("attempt 缺少 started_at，无法判定超时")
+            cur = await conn.execute(
+                "SELECT attempt_id FROM healthmind.ai_task_attempts WHERE task_id=%s ORDER BY attempt_no DESC LIMIT 1",
+                (attempt["task_id"],),
+            )
+            latest = await cur.fetchone()
+            if not latest or latest["attempt_id"] != attempt["attempt_id"]:
+                raise RuntimeError("only the latest attempt may be recovered")
             deadline = attempt["started_at"] + timedelta(milliseconds=attempt["timeout_ms"])
             if deadline > datetime.now(UTC):
                 raise RuntimeError("attempt 尚未超过 timeout 期限，无法人工恢复")
@@ -218,7 +255,7 @@ class RecoveryMixin:
                 raise RuntimeError("task not found")
             if task["status"] != "running":
                 raise RuntimeError(f"任务已不是 running（当前 {task['status']}），请重新预览")
-            if expected_lock_version is not None and task["lock_version"] != expected_lock_version:
+            if task["lock_version"] != expected_lock_version:
                 raise RuntimeError("任务 lock_version 在预览后变化，请重新预览")
 
             updated = await conn.execute("""UPDATE healthmind.ai_task_attempts
@@ -286,6 +323,22 @@ class RecoveryMixin:
                  Jsonb(envelope), sha256_json(envelope), task["trace_id"], self.retention_days))
             return {"action": "task_failed", "event_id": event_id, "task_id": task["task_id"],
                     "attempt_no": attempt["attempt_no"], "max_attempts": max_attempts}
+
+    @staticmethod
+    def _failure_envelope(task: dict[str, Any], event_id: str, manifest: dict[str, Any],
+                          code: str, category: str, summary: str) -> dict[str, Any]:
+        return {
+            "event_id": event_id, "event_type": FAILURE_EVENT_TYPE,
+            "occurred_at": datetime.now(UTC).isoformat(), "producer": "HealthMind",
+            "trace_id": task["trace_id"],
+            "subject_id": str(task["subject_id"]) if task.get("subject_id") else None,
+            "aggregate_type": task["aggregate_type"], "aggregate_id": task["aggregate_id"],
+            "schema_version": "1.0",
+            "payload": {"task_id": str(task["task_id"]),
+                        "capture_session_id": manifest.get("capture_session_id"),
+                        "meal_id": manifest.get("meal_id"), "error_code": code,
+                        "failure_category": category, "retryable": False, "error_summary": summary},
+        }
 
     # ------------------------------------------------------------ 修复向导
     async def repair_guide(self, query: str) -> dict[str, Any]:

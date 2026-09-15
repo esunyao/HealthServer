@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block subtitle %}逐阶段注入、暂停、放行与观察；调试数据保留并带 HMC 标记{% endblock %}
+{% block content %}
+<section class="lab-shell">
+  <aside class="panel lab-context">
+    <div class="panel-head"><h2>运行上下文</h2><button id="d-new" class="btn sm">新建</button></div>
+    <label class="field"><span>调试运行</span><select id="d-runs"></select></label>
+    <div id="d-run-meta" class="small muted">尚未选择运行</div>
+    <div class="divider"></div>
+    <label class="field"><span>账户 / 用户检索</span><input id="d-user-q" placeholder="用户名、邮箱或 UUID"></label>
+    <button id="d-user-search" class="btn ghost sm">查找 Orion 用户</button>
+    <div id="d-users" class="lab-results"></div>
+  </aside>
+
+  <section class="panel lab-pipeline">
+    <div class="panel-head"><div><h2>业务链路控制轨</h2><p class="small muted">每步独立预览和执行；不会自动跳过边界</p></div><button id="d-observe" class="btn sm">立即观察</button></div>
+    <div class="stage-rail" id="d-stages">
+      {% set stages = [
+        ("nutri_create", "01", "创建采集会话", "真实调用 NutriMemo；参数含临时 bearer、timezone、可选 client_request_id"),
+        ("nutri_presign", "02", "申请图片上传", "参数含 capture_session_id、file_name、content_type、content_length"),
+        ("nutri_upload", "03", "上传图片", "参数含预签名 upload_url、upload_headers 和本地 file_path；文件不落 HMC"),
+        ("nutri_confirm", "04", "确认图片", "参数含 capture_session_id、image_id 和临时 bearer"),
+        ("nutri_submit", "05", "提交餐食", "参数含 capture_session_id、meal_type、notes 和临时 bearer"),
+        ("hold_capture", "06", "Nutri outbox 暂停", "输入 capture-ready event_id，将 next_attempt_at 保持到 2099"),
+        ("release_capture", "07", "Nutri outbox 放行", "恢复 next_attempt_at=now，由真实发布器发送 Kafka"),
+        ("kafka_capture", "08", "直接投递 capture-ready", "绕过 Nutri 发布器；保留原事件并添加调试 header"),
+        ("emulate_hm_ingest", "09", "模拟 HealthMind 消费", "用指定 capture-ready event 在单事务创建 inbox 与 held task，标记 HMC run"),
+        ("hold_task", "10", "HealthMind task 暂停", "输入 queued task_id，阻止调度器领取"),
+        ("release_task", "11", "HealthMind task 放行", "恢复 scheduled_at/next_attempt_at=now"),
+        ("dify_run", "12", "直接调用 Dify", "临时 App API Key 仅用于当前请求，不写本地记录"),
+        ("mcp_call", "13", "直接调用 MCP", "临时 Bearer 仅用于当前请求，可 initialize/tools/list/tools/call"),
+        ("hold_result", "14", "HealthMind result 暂停", "输入 completed/failed outbox event_id"),
+        ("release_result", "15", "HealthMind result 放行", "由真实发布器发送结果事件")
+      ] %}
+      {% for key, no, title, help in stages %}
+      <article class="stage" data-step="{{ key }}">
+        <span class="stage-no">{{ no }}</span><div class="stage-copy"><h3>{{ title }}</h3><p>{{ help }}</p></div>
+        <input class="stage-id" placeholder="record_id（Dify/MCP 可留空）">
+        {% if key in ("dify_run", "mcp_call", "nutri_create", "nutri_presign", "nutri_upload", "nutri_confirm", "nutri_submit") %}<textarea class="stage-params" rows="3" placeholder='JSON 参数'></textarea>{% endif %}
+        <button class="btn sm stage-preview">预览</button><div class="stage-flow"></div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <aside class="panel lab-evidence">
+    <div class="panel-head"><h2>实时证据</h2><span class="badge b-info">PostgreSQL</span></div>
+    <div id="d-evidence" class="small muted">选择运行后观察任务、attempt 与双端 outbox。</div>
+    {% if request.app.state.settings.enable_expert_mode %}
+    <div class="divider"></div><h2>专家 SQL</h2>
+    <p class="small muted">单语句；预览在事务中执行后强制回滚。执行需要哈希确认。</p>
+    <textarea id="d-sql" rows="8" class="mono" placeholder="SELECT ..."></textarea>
+    <input id="d-sql-reason" placeholder="操作原因（至少 3 字符）">
+    <button id="d-sql-preview" class="btn danger sm">SQL 预览</button><div id="d-sql-flow"></div>
+    {% else %}<div class="divider"></div><p class="small muted">专家模式未启用。设置 HMC_ENABLE_EXPERT_MODE=true 后重启可用。</p>{% endif %}
+  </aside>
+</section>
+<dialog id="d-new-dialog" class="theme-dialog">
+  <h4>创建调试运行</h4>
+  <label class="field"><span>名称</span><input id="d-new-name" value="餐食分析手动调试"></label>
+  <label class="field"><span>模式</span><select id="d-new-mode"><option value="mixed">真实 + 模拟混合</option><option value="real">真实服务边界</option><option value="emulated">数据库模拟</option></select></label>
+  <label class="field"><span>初始上下文 JSON</span><textarea id="d-new-context" rows="6">{}</textarea></label>
+  <div class="row"><button id="d-new-save" class="btn">创建</button><button id="d-new-cancel" class="btn ghost">取消</button></div>
+</dialog>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/debug.js"></script>{% endblock %}

@@ -19,3 +19,15 @@
 
 /* JSON tree 控件自身尺寸约束 */
 json-tree { display: block; min-width: 0; }
+/* Debug workbench: dense operations rail, not a generic card dashboard. */
+.lab-shell{display:grid;grid-template-columns:260px minmax(480px,1fr) minmax(320px,.72fr);gap:12px;align-items:start}
+.lab-context,.lab-pipeline,.lab-evidence{padding:14px;position:sticky;top:12px;max-height:calc(100vh - 36px);overflow:auto}
+.lab-pipeline{position:static;max-height:none}.stage-rail{position:relative;padding-left:8px}
+.stage-rail:before{content:"";position:absolute;left:26px;top:26px;bottom:26px;width:1px;background:var(--line)}
+.stage{position:relative;display:grid;grid-template-columns:38px minmax(170px,1fr) minmax(170px,.8fr) auto;gap:9px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line-soft)}
+.stage-no{z-index:1;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--surface-raised);border:1px solid var(--accent);font:700 11px var(--mono);color:var(--accent)}
+.stage-copy h3{font-size:13px;margin:0}.stage-copy p{font-size:11px;color:var(--text-muted);margin:3px 0 0}.stage textarea{grid-column:3/5}.stage-flow{grid-column:2/5}
+.lab-results{margin-top:8px}.user-hit{width:100%;display:flex;flex-direction:column;align-items:flex-start;padding:8px;border:0;border-bottom:1px solid var(--line-soft);background:transparent;color:inherit;cursor:pointer}.user-hit span{font-size:11px;color:var(--text-muted)}
+.lab-evidence details{border-bottom:1px solid var(--line-soft);padding:6px 0}.lab-evidence pre{max-height:230px;overflow:auto}
+@media(max-width:1400px){.lab-shell{grid-template-columns:220px minmax(0,1fr)}.lab-evidence{grid-column:1/-1;position:static;max-height:none}}
+@media(max-width:780px){.lab-shell{display:block}.lab-shell>.panel{margin-bottom:10px;position:static;max-height:none}.stage{grid-template-columns:38px 1fr}.stage-id,.stage .btn,.stage textarea{grid-column:2}.stage-flow{grid-column:1/-1}}

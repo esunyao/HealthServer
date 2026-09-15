@@ -8,6 +8,8 @@ from confluent_kafka import Consumer, ConsumerGroupTopicPartitions, KafkaExcepti
 from confluent_kafka.admin import AdminClient
 
 from ..config import Settings
+from ..security import canonical_json
+from ..util import json_safe
 
 
 BUSINESS_TOPICS = {
@@ -207,7 +209,7 @@ class KafkaService:
         scan_budget = min(max_scan or self.cfg.kafka_max_scan_messages, self.cfg.kafka_max_scan_messages)
         consumer = self._consumer(
             f"healthmind-control-diagnostic-{datetime.now().timestamp()}",
-            enable_auto_offset_store=False, auto_offset_reset="earliest",
+            **{"enable.auto.offset.store": False, "auto.offset.reset": "earliest"},
         )
         try:
             tp = TopicPartition(topic, partition)
@@ -246,7 +248,8 @@ class KafkaService:
                     "topic": msg.topic(), "partition": msg.partition(), "offset": msg.offset(),
                     "timestamp": msg.timestamp()[1],
                     "key": msg_key,
-                    "headers": dict(msg.headers() or []), "payload": payload,
+                    "headers": dict(msg.headers() or []), "payload": json_safe(payload),
+                    "payload_raw": raw,
                 })
             if scanned >= scan_budget:
                 output.append({"truncated_by_scan": True, "scanned": scanned})
@@ -318,11 +321,19 @@ class KafkaService:
             warnings.append("非标准消息：未包含 event_id/event_type 事件结构（可强制发送）")
         return warnings
 
+    @staticmethod
+    def parse_payload(payload_text: str) -> Any:
+        try:
+            return json.loads(payload_text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"payload 不是合法 JSON：{exc.msg}（位置 {exc.pos}）") from exc
+
     async def produce(self, topic: str, key: str | None, payload: Any,
                       headers: dict[str, str], partition: int | None) -> dict[str, Any]:
-        return await asyncio.to_thread(self._produce, topic, key, payload, headers, partition)
+        raw = payload if isinstance(payload, str) else canonical_json(payload)
+        return await asyncio.to_thread(self._produce, topic, key, raw, headers, partition)
 
-    def _produce(self, topic: str, key: str | None, payload: Any,
+    def _produce(self, topic: str, key: str | None, payload_text: str,
                  headers: dict[str, str], partition: int | None) -> dict[str, Any]:
         self._ready()
         delivered: dict[str, Any] = {}
@@ -331,7 +342,7 @@ class KafkaService:
                 delivered["error"] = str(error)
             else:
                 delivered.update(topic=message.topic(), partition=message.partition(), offset=message.offset())
-        kwargs = {"topic": topic, "key": key, "value": json.dumps(payload, ensure_ascii=False),
+        kwargs = {"topic": topic, "key": key, "value": payload_text.encode("utf-8"),
                   "headers": list(headers.items()), "callback": callback}
         if partition is not None:
             kwargs["partition"] = partition
@@ -340,3 +351,58 @@ class KafkaService:
         if remaining or delivered.get("error"):
             raise RuntimeError(delivered.get("error") or f"{remaining} message(s) undelivered")
         return {"delivery": "ok", **delivered}
+
+    async def offset_plan(self, group_id: str, topic: str, partition: int,
+                          position: str, value: int | None) -> dict[str, Any]:
+        return await asyncio.to_thread(self._offset_plan, group_id, topic, partition, position, value)
+
+    def _offset_plan(self, group_id: str, topic: str, partition: int,
+                     position: str, value: int | None) -> dict[str, Any]:
+        self._ready()
+        description = self.admin.describe_consumer_groups([group_id], request_timeout=5)[group_id].result(6)
+        if description.members:
+            raise RuntimeError("消费组仍有在线成员；仅允许修改 inactive/empty 组")
+        offsets = self.admin.list_consumer_group_offsets(
+            [ConsumerGroupTopicPartitions(group_id)], request_timeout=5,
+        )[group_id].result(6)
+        current = next((tp.offset for tp in offsets.topic_partitions
+                        if tp.topic == topic and tp.partition == partition), -1)
+        consumer = self._consumer(f"{SELF_GROUP_PREFIX}offset-plan-{time.time_ns()}")
+        try:
+            low, high = consumer.get_watermark_offsets(TopicPartition(topic, partition), timeout=5)
+            if position == "earliest":
+                target = low
+            elif position == "latest":
+                target = high
+            elif position == "timestamp":
+                if value is None:
+                    raise ValueError("timestamp position requires value in epoch milliseconds")
+                target = self._offset_for_time(consumer, TopicPartition(topic, partition), value)
+            elif position == "delta":
+                if value is None or current < 0:
+                    raise ValueError("delta position requires value and an existing group offset")
+                target = current + value
+            else:
+                if value is None:
+                    raise ValueError("absolute position requires value")
+                target = value
+        finally:
+            consumer.close()
+        if target < low or target > high:
+            raise ValueError(f"target offset {target} is outside [{low}, {high}]")
+        return {"group_id": group_id, "topic": topic, "partition": partition,
+                "current": current, "target": target, "earliest": low, "latest": high,
+                "group_state": str(description.state)}
+
+    async def alter_offset(self, plan: dict[str, Any]) -> dict[str, Any]:
+        return await asyncio.to_thread(self._alter_offset, plan)
+
+    def _alter_offset(self, plan: dict[str, Any]) -> dict[str, Any]:
+        fresh = self._offset_plan(plan["group_id"], plan["topic"], plan["partition"], "absolute", plan["target"])
+        if fresh["current"] != plan["current"]:
+            raise RuntimeError("消费组 offset 在预览后发生变化")
+        request = ConsumerGroupTopicPartitions(
+            plan["group_id"], [TopicPartition(plan["topic"], plan["partition"], plan["target"])],
+        )
+        self.admin.alter_consumer_group_offsets([request], request_timeout=5)[plan["group_id"]].result(6)
+        return {**plan, "delivery": "ok"}

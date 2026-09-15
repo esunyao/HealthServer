@@ -16,6 +16,14 @@ REQUIRED_TABLES = {
     "nutri.integration_inbox", "nutri.integration_outbox", "nutri.meal_capture_sessions",
 }
 
+REQUIRED_COLUMNS = {
+    "healthmind.ai_tasks": {"task_id", "task_type_id", "workflow_release_id", "status", "lock_version", "context_manifest"},
+    "healthmind.ai_task_attempts": {"attempt_id", "task_id", "attempt_no", "status", "timeout_ms"},
+    "healthmind.workflow_releases": {"release_id", "task_type_id", "status", "input_schema", "output_schema"},
+    "healthmind.integration_outbox": {"event_id", "task_id", "status", "payload", "next_attempt_at"},
+    "nutri.integration_outbox": {"event_id", "aggregate_id", "status", "payload", "next_attempt_at", "locked_at"},
+}
+
 
 class Database:
     """连接池 + 表结构自检。
@@ -31,6 +39,7 @@ class Database:
         self.write_enabled = False
         self.connected = False       # 最近一次数据库交互是否成功（卡片据此显示真实健康度）
         self.schema_error: str | None = None
+        self.write_features: dict[str, bool] = {"recovery": False, "releases": False, "debug": False, "expert": False}
         self._probe_task: asyncio.Task | None = None
         self._down_until = 0.0   # 熔断：连接失败后短时间内直接快速失败，避免多查询叠加超时
 
@@ -40,15 +49,15 @@ class Database:
             return
         self.pool = AsyncConnectionPool(
             self.cfg.database_dsn,
-            min_size=1,
-            max_size=6,
+            min_size=self.cfg.database_pool_min_size,
+            max_size=self.cfg.database_pool_max_size,
             timeout=3,
             # statement_timeout 通过连接 options 下发：每条查询只发一条命令，
             # 避免客户端中途取消时留下 "another command is already in progress"
             kwargs={
                 "autocommit": True,
                 "row_factory": dict_row,
-                "options": "-c statement_timeout=15000",
+                "options": "-c statement_timeout=15000 -c application_name=HealthMindControl",
                 # 连接握手留出余量（跨网/VPN 偶发慢握手），页面响应速度由获取连接的
                 # timeout=3 + 熔断窗口保证，不会因为握手慢而叠加成十几秒
                 "connect_timeout": 10,
@@ -82,6 +91,12 @@ class Database:
                 await self.pool.close()
 
     async def verify_schema(self) -> None:
+        if self.cfg.nutri_database_dsn and self.cfg.nutri_database_dsn != self.cfg.database_dsn:
+            self.connected = True
+            self.write_enabled = False
+            self.write_features = {key: False for key in self.write_features}
+            self.schema_error = "当前版本不允许跨数据库直接写修复；请将 healthmind/nutri 配置为同一 PostgreSQL DSN"
+            return
         rows = await self.fetch_all(
             "SELECT table_schema||'.'||table_name AS name FROM information_schema.tables "
             "WHERE table_schema IN ('healthmind','nutri')",
@@ -89,8 +104,35 @@ class Database:
         )
         self.connected = True
         missing = REQUIRED_TABLES - {row["name"] for row in rows}
-        self.write_enabled = self.pool is not None and not missing
-        self.schema_error = f"缺少数据表: {', '.join(sorted(missing))}" if missing else None
+        column_rows = await self.fetch_all(
+            "SELECT table_schema||'.'||table_name AS name, column_name FROM information_schema.columns "
+            "WHERE table_schema IN ('healthmind','nutri')", strict=True,
+        )
+        existing: dict[str, set[str]] = {}
+        for row in column_rows:
+            existing.setdefault(row["name"], set()).add(row["column_name"])
+        missing_columns = {
+            name: sorted(columns - existing.get(name, set()))
+            for name, columns in REQUIRED_COLUMNS.items() if columns - existing.get(name, set())
+        }
+        audit_check = await self.fetch_one("""
+          SELECT pg_get_constraintdef(c.oid) AS definition
+          FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+          WHERE n.nspname='healthmind' AND t.relname='workflow_release_audits'
+            AND c.contype='c' AND pg_get_constraintdef(c.oid) ILIKE '%%tools_bound%%'
+        """)
+        base_compatible = self.pool is not None and not missing and not missing_columns
+        self.write_enabled = base_compatible
+        self.write_features = {
+            "recovery": base_compatible, "debug": base_compatible,
+            "expert": base_compatible, "releases": base_compatible and bool(audit_check),
+        }
+        if missing:
+            self.schema_error = f"缺少数据表: {', '.join(sorted(missing))}"
+        elif missing_columns:
+            self.schema_error = "字段不兼容: " + "; ".join(f"{k}({','.join(v)})" for k, v in missing_columns.items())
+        else:
+            self.schema_error = None if audit_check else "版本写入已禁用：workflow_release_audits 缺少 tools_bound(V3) 约束"
 
     async def fetch_all(self, sql: str, params: tuple[Any, ...] = (), strict: bool = False) -> list[dict[str, Any]]:
         """执行只读查询。
@@ -135,3 +177,18 @@ class Database:
                     yield conn
         except (OperationalError, InterfaceError, PoolTimeout) as exc:
             raise RuntimeError(f"数据库不可用: {exc}") from exc
+
+    @asynccontextmanager
+    async def preview_transaction(self) -> AsyncIterator[Any]:
+        """Always roll back: used by the expert SQL preview executor."""
+        if not self.pool or not self.write_enabled:
+            raise RuntimeError(self.schema_error or "数据库写入未启用")
+        async with self.pool.connection() as conn:
+            tx = conn.transaction()
+            await tx.__aenter__()
+            try:
+                await conn.execute("SET LOCAL lock_timeout='3s'")
+                await conn.execute("SET LOCAL statement_timeout='15s'")
+                yield conn
+            finally:
+                await tx.__aexit__(RuntimeError, RuntimeError("preview rollback"), None)

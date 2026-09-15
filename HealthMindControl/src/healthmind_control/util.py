@@ -4,10 +4,26 @@ from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 
+JS_SAFE_INTEGER = 9_007_199_254_740_991
+
+
+def json_safe(value: Any) -> Any:
+    """Preserve database/Kafka 64-bit identifiers across JavaScript clients."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, int):
+        return str(value) if abs(value) > JS_SAFE_INTEGER else value
+    if isinstance(value, dict):
+        return {str(k): json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(v) for v in value]
+    return value
+
 
 def serial(value: Any) -> Any:
     """将任意响应值规范化为可 JSON 序列化结构（bytes → UTF-8 文本）。"""
-    return jsonable_encoder(value, custom_encoder={bytes: lambda v: v.decode("utf-8", "replace")})
+    encoded = jsonable_encoder(value, custom_encoder={bytes: lambda v: v.decode("utf-8", "replace")})
+    return json_safe(encoded)
 
 
 def encode_cursor(created_at_iso: str, row_id: str) -> str:

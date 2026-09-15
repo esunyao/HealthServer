@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     auth_url: str = ""
     dify_console_token: str | None = None
     difyctl_path: str = "difyctl"
+    nutri_api_url: str = ""
+    enable_expert_mode: bool = False
+    debug_db_path: Path = ROOT / "var" / "debug" / "control.sqlite3"
     refresh_seconds: int = Field(5, ge=2, le=60)
     stale_minutes: int = Field(5, ge=1, le=1440)
     query_limit: int = Field(100, ge=1, le=100)
@@ -36,6 +39,8 @@ class Settings(BaseSettings):
     kafka_max_scan_messages: int = Field(50000, ge=100, le=500000)
     kafka_metadata_cache_seconds: int = Field(8, ge=2, le=300)
     probe_cache_ttl_seconds: int = Field(15, ge=5, le=300)
+    database_pool_min_size: int = Field(1, ge=0, le=10)
+    database_pool_max_size: int = Field(8, ge=1, le=32)
 
     def missing_external_envs(self) -> tuple[str, ...]:
         required = {

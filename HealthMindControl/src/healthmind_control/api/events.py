@@ -4,7 +4,6 @@ import json
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from ..config import settings
 from ..util import serial
 
 router = APIRouter()
@@ -15,15 +14,16 @@ async def events(request: Request):
     """SSE：仅推送轻量摘要（status_light），昂贵数据由页面按需拉取。"""
 
     async def stream():
-        while True:
-            if await request.is_disconnected():
-                break
-            try:
-                payload = await request.app.state.repo.status_light()
-            except Exception as exc:
-                payload = {"error": str(exc)}
-            yield f"event: status\ndata: {json.dumps(serial(payload), ensure_ascii=False)}\n\n"
-            await asyncio.sleep(settings.refresh_seconds)
+        queue = request.app.state.status_events.subscribe()
+        try:
+            while not await request.is_disconnected():
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=20)
+                    yield f"event: status\ndata: {json.dumps(serial(payload), ensure_ascii=False)}\n\n"
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            request.app.state.status_events.unsubscribe(queue)
 
     return StreamingResponse(
         stream(),

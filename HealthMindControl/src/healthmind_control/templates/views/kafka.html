@@ -79,5 +79,19 @@
     </div>
   </div>
 </div>
+{% if request.app.state.settings.enable_expert_mode %}
+<div class="card danger">
+  <h2 class="section">专家：inactive 消费组 Offset <span class="hint">在线成员存在时服务端拒绝执行</span></h2>
+  <div class="filterbar">
+    <div class="field"><label>Group</label><input id="o-group" list="group-list"><datalist id="group-list"></datalist></div>
+    <div class="field"><label>Topic</label><input id="o-topic" list="topic-list"></div>
+    <div class="field"><label>Partition</label><input id="o-partition" type="number" min="0" value="0"></div>
+    <div class="field"><label>位置</label><select id="o-position"><option value="absolute">绝对 offset</option><option value="earliest">earliest</option><option value="latest">latest</option><option value="timestamp">时间戳(ms)</option><option value="delta">相对增量</option></select></div>
+    <div class="field"><label>值</label><input id="o-value" type="number" value="0"></div>
+    <div class="field"><label>原因</label><input id="o-reason" placeholder="至少 3 字符"></div>
+  </div>
+  <button id="o-preview" class="btn danger sm">预览 Offset 变更</button><div id="o-flow" style="margin-top:8px"></div>
+</div>
+{% endif %}
 {% endblock %}
 {% block scripts %}<script type="module" src="/static/js/views/kafka.js"></script>{% endblock %}

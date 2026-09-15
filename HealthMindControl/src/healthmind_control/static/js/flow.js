@@ -60,10 +60,9 @@ export function startMutation(container, opts) {
       const run = document.getElementById("flow-run");
       run.disabled = true;
       postJson(opts.executeUrl, {
-        ...body,
         preview_token: res.preview_token,
         confirmation: confirmText,
-        force: force,
+        accept_warnings: force,
       }).then(function (result) {
         container.innerHTML = '<div class="row"><span class="badge b-ok">执行成功</span><span class="mono small ellip">' + esc(JSON.stringify(result).slice(0, 220)) + "</span></div>";
         toast("执行成功", "ok");

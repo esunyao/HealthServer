@@ -1,5 +1,6 @@
 import asyncio
 import json
+import subprocess
 import time
 from typing import Any
 
@@ -14,6 +15,10 @@ class DifyService:
     def __init__(self, cfg: Settings):
         self.cfg = cfg
         self._probe_cache: dict[str, dict[str, Any]] = {}
+        self.client = httpx.AsyncClient(timeout=10, follow_redirects=True)
+
+    async def close(self) -> None:
+        await self.client.aclose()
 
     async def probe(self, url: str, expected_401: bool = False, auth_ok: bool = False) -> dict[str, Any]:
         """可达性探活（不带凭据）。
@@ -26,8 +31,7 @@ class DifyService:
         if cached and now - cached["at"] < self.cfg.probe_cache_ttl_seconds:
             return cached["value"]
         try:
-            async with httpx.AsyncClient(timeout=5, follow_redirects=True) as client:
-                response = await client.get(url)
+            response = await self.client.get(url, timeout=5)
             status = response.status_code
             ok = response.is_success or (
                 expected_401 and status == 401
@@ -40,12 +44,13 @@ class DifyService:
         return value
 
     async def _run_difyctl(self, args: list[str], timeout: float = 20) -> tuple[int, str]:
-        proc = await asyncio.create_subprocess_exec(
-            self.cfg.difyctl_path, *args,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout)
-        return proc.returncode, (stdout or b"").decode("utf-8", "replace")
+        def run() -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [self.cfg.difyctl_path, *args], capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=timeout, check=False,
+            )
+        completed = await asyncio.to_thread(run)
+        return completed.returncode, completed.stdout or completed.stderr
 
     async def discover(self, app_id: str | None = None, with_dsl: bool = False) -> dict[str, Any]:
         """探测序列：workspaces → apps →（可选）describe app →（可选）export studio-app DSL。"""
@@ -76,7 +81,6 @@ class DifyService:
         if not self.cfg.dify_console_token:
             raise RuntimeError("未配置 HMC_DIFY_CONSOLE_TOKEN；请粘贴 workflows/publish JSON")
         url = f"{self.cfg.dify_url.rstrip('/')}/console/api/apps/{app_id}/workflows/publish"
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(url, headers={"Authorization": f"Bearer {self.cfg.dify_console_token}"})
-            response.raise_for_status()
-            return response.json()
+        response = await self.client.get(url, headers={"Authorization": f"Bearer {self.cfg.dify_console_token}"})
+        response.raise_for_status()
+        return response.json()

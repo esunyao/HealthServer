@@ -40,6 +40,7 @@ class OverviewMixin:
             "database": {
                 "ok": self.db.connected,       # 连接可用且最近一次查询成功
                 "write_enabled": self.db.write_enabled,
+                "write_features": self.db.write_features,
                 "schema_error": self.db.schema_error,
             },
             "tasks": tasks,
