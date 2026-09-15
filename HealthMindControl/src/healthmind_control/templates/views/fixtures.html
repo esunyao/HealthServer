@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block subtitle %}从现有任务构造可控数据库记录；无需先发 Kafka 或调用 Dify{% endblock %}
+{% block content %}
+<section class="fixture-grid">
+  <div class="card fixture-mcp-card">
+    <div class="section-head">
+      <div><h2>MCP 手动测试</h2><p class="sub">生成真实 running task + attempt，直接复制三组 ID 到 Dify 草稿测试。</p></div>
+      <span class="badge b-accent">0 Kafka · 0 Nutri 写入</span>
+    </div>
+    <div class="form-grid">
+      <div class="field wide"><label>源任务 ID</label><input id="fx-mcp-source" type="text" placeholder="现有 task UUID"></div>
+      <div class="field"><label>操作原因</label><input id="fx-mcp-reason" type="text" value="Dify MCP 草稿手动测试"></div>
+      <label class="check-line"><input id="fx-mcp-trace" type="checkbox" checked> 继承原 trace_id</label>
+      <div class="field wide"><button id="fx-mcp-create" class="btn primary" type="button">预览并创建测试 ID</button></div>
+    </div>
+    <div id="fx-mcp-flow" class="flow-box"></div>
+    <div id="fx-mcp-session"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-head"><div><h2>高级字段映射</h2><p class="sub">白名单运行表；支持继承、关联、生成和手动字段。</p></div></div>
+    <div class="form-grid">
+      <div class="field"><label>常用场景</label><select id="fx-preset">
+        <option value="">自定义表</option>
+        <option value="hm_inbox">HealthMind inbox</option>
+        <option value="task_queued">queued 任务</option><option value="task_running">running 任务</option><option value="task_failed">failed 任务</option>
+        <option value="attempt_running">running attempt</option><option value="attempt_succeeded">succeeded attempt</option><option value="attempt_failed">failed attempt</option>
+        <option value="result">AI 结果</option><option value="hm_outbox">HealthMind 隔离 outbox</option>
+        <option value="nutri_inbox">Nutri inbox</option><option value="nutri_outbox">Nutri 隔离 outbox</option>
+      </select></div>
+      <div class="field"><label>目标表</label><select id="fx-table"></select></div>
+      <div class="field"><label>操作</label><select id="fx-operation"><option value="insert">新增</option><option value="update">更新</option></select></div>
+      <div class="field"><label>源业务 ID（可空）</label><input id="fx-source" type="text" placeholder="task / attempt / event / meal / trace"></div>
+      <div class="field"><label>操作原因</label><input id="fx-reason" type="text" value="构造 AI 链路测试数据"></div>
+      <div class="field wide"><label>更新目标主键 JSON</label><input id="fx-target" type="text" value="{}" disabled></div>
+      <div class="field wide"><button id="fx-load" class="btn" type="button">加载字段与推荐映射</button></div>
+    </div>
+    <div id="fx-table-note" class="small muted"></div>
+    <div id="fx-fields" class="fixture-fields"><div class="muted">请先加载目标表。</div></div>
+    <div class="row" style="margin-top:12px"><button id="fx-preview" class="btn primary" type="button" disabled>预览数据库写入</button></div>
+    <div id="fx-flow" class="flow-box"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-head"><div><h2>隔离 outbox 放行</h2><p class="sub">构造的 pending/failed outbox 默认保持到 2099；这里只解除保持，真实发布器随后发送 Kafka。</p></div></div>
+    <div class="form-grid">
+      <div class="field"><label>Schema</label><select id="fx-out-schema"><option>healthmind</option><option>nutri</option></select></div>
+      <div class="field"><label>event_id</label><input id="fx-out-event" type="text"></div>
+      <div class="field"><label>操作原因</label><input id="fx-out-reason" type="text" value="放行测试 outbox"></div>
+      <div class="field"><label>&nbsp;</label><button id="fx-out-release" class="btn danger" type="button">预览放行</button></div>
+    </div>
+    <div id="fx-out-flow" class="flow-box"></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/views/fixtures.js"></script>{% endblock %}

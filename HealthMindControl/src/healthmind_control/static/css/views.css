@@ -31,3 +31,10 @@ json-tree { display: block; min-width: 0; }
 .lab-evidence details{border-bottom:1px solid var(--line-soft);padding:6px 0}.lab-evidence pre{max-height:230px;overflow:auto}
 @media(max-width:1400px){.lab-shell{grid-template-columns:220px minmax(0,1fr)}.lab-evidence{grid-column:1/-1;position:static;max-height:none}}
 @media(max-width:780px){.lab-shell{display:block}.lab-shell>.panel{margin-bottom:10px;position:static;max-height:none}.stage{grid-template-columns:38px 1fr}.stage-id,.stage .btn,.stage textarea{grid-column:2}.stage-flow{grid-column:1/-1}}
+
+/* 数据构造器 */
+.fixture-grid{display:grid;gap:14px}.fixture-mcp-card{border-color:color-mix(in srgb,var(--accent) 42%,var(--line))}
+.fixture-fields{margin-top:12px;max-height:560px;overflow:auto}.fixture-map{min-width:900px}
+.fixture-map textarea{min-height:34px;font-family:var(--mono);font-size:12px;resize:vertical}
+.session-card{margin-top:14px;padding:14px;border:1px solid color-mix(in srgb,var(--ok) 45%,var(--line));border-radius:var(--radius);background:color-mix(in srgb,var(--ok) 6%,var(--bg-3))}
+.session-card pre{margin:10px 0}.flow-box:not(:empty){margin-top:12px;padding:10px;border:1px dashed var(--line);border-radius:var(--radius-s)}

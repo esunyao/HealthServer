@@ -1,4 +1,5 @@
 from .base import BaseRepository
+from .fixtures import FixturesMixin
 from .overview import OverviewMixin
 from .recovery import RecoveryMixin
 from .releases import ReleasesMixin
@@ -15,5 +16,6 @@ class Repository(
     RowsMixin,
     ReleasesMixin,
     RecoveryMixin,
+    FixturesMixin,
 ):
     """领域仓库门面：按领域分文件实现，单实例注入 app.state。"""

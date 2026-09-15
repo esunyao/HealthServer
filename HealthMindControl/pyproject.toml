@@ -1,6 +1,6 @@
 [project]
 name = "healthmind-control"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local operations console for HealthMind, NutriMemo, Kafka and Dify"
 requires-python = ">=3.12,<3.13"
 dependencies = [

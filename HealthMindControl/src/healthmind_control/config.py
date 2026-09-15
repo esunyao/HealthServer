@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     probe_cache_ttl_seconds: int = Field(15, ge=5, le=300)
     database_pool_min_size: int = Field(1, ge=0, le=10)
     database_pool_max_size: int = Field(8, ge=1, le=32)
+    fixture_mcp_lease_minutes: int = Field(50, ge=5, le=55)
+    fixture_reaper_seconds: int = Field(10, ge=5, le=60)
 
     def missing_external_envs(self) -> tuple[str, ...]:
         required = {

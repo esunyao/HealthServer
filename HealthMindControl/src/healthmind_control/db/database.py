@@ -39,7 +39,9 @@ class Database:
         self.write_enabled = False
         self.connected = False       # 最近一次数据库交互是否成功（卡片据此显示真实健康度）
         self.schema_error: str | None = None
-        self.write_features: dict[str, bool] = {"recovery": False, "releases": False, "debug": False, "expert": False}
+        self.write_features: dict[str, bool] = {
+            "recovery": False, "releases": False, "debug": False, "expert": False, "fixtures": False,
+        }
         self._probe_task: asyncio.Task | None = None
         self._down_until = 0.0   # 熔断：连接失败后短时间内直接快速失败，避免多查询叠加超时
 
@@ -125,7 +127,8 @@ class Database:
         self.write_enabled = base_compatible
         self.write_features = {
             "recovery": base_compatible, "debug": base_compatible,
-            "expert": base_compatible, "releases": base_compatible and bool(audit_check),
+            "expert": base_compatible, "fixtures": base_compatible,
+            "releases": base_compatible and bool(audit_check),
         }
         if missing:
             self.schema_error = f"缺少数据表: {', '.join(sorted(missing))}"

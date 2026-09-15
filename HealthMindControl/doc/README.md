@@ -1,6 +1,6 @@
 # HealthMindControl — 模块大体说明
 
-HealthMind 的本地运维控制台，默认监听 `127.0.0.1:8765`。它通过 FastAPI、Jinja2 和原生 ES modules 提供诊断、链路实验台、任务、Kafka、Dify Workflow Release 与审计视图。
+HealthMind 的本地运维控制台，默认监听 `127.0.0.1:8765`。它通过 FastAPI、Jinja2 和原生 ES modules 提供诊断、数据构造、链路实验台、任务、Kafka、Dify Workflow Release 与审计视图。
 
 运行时依赖由 `.env` 注入；公开模板只提供不可连接的占位符。Python 版本范围是 `>=3.12,<3.13`。
 
@@ -8,6 +8,8 @@ HealthMind 的本地运维控制台，默认监听 `127.0.0.1:8765`。它通过 
 
 - 只面向本机运维，不作为公网管理 API。
 - 写操作采用预览、确认令牌、执行和审计链路。
+- 数据构造器只开放运行期白名单表；不提供物理删除或任意 SQL。
+- MCP 手测只构造 task/attempt 并返回 Dify 输入，不调用 Dify、不发送 Kafka、不修改 Nutri。
 - 数据库写入与本地 JSONL 审计分别记录操作结果。
 - 专家模式默认关闭；启用后只允许单条 SQL 和 inactive Kafka 消费组 offset 调整，并仍要求预览、确认与审计。
 
@@ -35,4 +37,5 @@ uv run --project HealthMindControl pytest -q
 ## 进一步阅读
 
 - [AI 分析链路](./analysis-chain.md)：从 NutriMemo 提交到结果回写的时序、表状态和 Kafka 变化。
+- [数据构造与 MCP 手测](./fixture.md)：如何跳过 Kafka 直接准备 Dify 草稿所需 ID。
 - [需求与合规状态](./requirements.md)：当前实现边界和验收状态。

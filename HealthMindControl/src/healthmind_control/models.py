@@ -84,6 +84,35 @@ class DebugStepRequest(MutationRequest):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class FixtureFieldMapping(BaseModel):
+    mode: Literal["omit", "inherit", "related", "generate", "manual"] = "omit"
+    source_field: str | None = None
+    generator: Literal["uuid", "now", "hold_until", "retention_until", "sha256"] | None = None
+    value: Any = None
+
+
+class FixturePreviewRequest(MutationRequest):
+    operation: Literal["insert", "update"] = "insert"
+    table_name: str
+    source_identifier: str | None = None
+    target: dict[str, Any] = Field(default_factory=dict)
+    mappings: dict[str, FixtureFieldMapping] = Field(default_factory=dict)
+
+
+class McpSessionRequest(MutationRequest):
+    source_task_id: str
+    inherit_trace_id: bool = True
+
+
+class FixtureLifecycleRequest(MutationRequest):
+    task_id: str
+
+
+class OutboxReleaseRequest(MutationRequest):
+    schema_name: Literal["healthmind", "nutri"]
+    event_id: str
+
+
 class SqlPreviewRequest(MutationRequest):
     sql: str = Field(min_length=1, max_length=200_000)
     database: Literal["primary"] = "primary"

@@ -16,6 +16,8 @@
 - ✅ 本机真实配置下，PostgreSQL、Kafka 元数据/消费组和现有只读 Web API 已完成冒烟；实验台经过浏览器渲染检查。
 - ✅ 克隆任务校验 release/task type、同餐食活动任务与稳定幂等键；attempt 恢复要求最新 attempt 和服务端锁版本；取消 queued 任务会产生下游失败事件。
 - ✅ 专家 SQL 使用 PostgreSQL parser 限定单语句，预览强制回滚；消费组 offset 仅允许无在线成员时变更。两者默认关闭。
+- ✅ 数据构造器使用固定运行表白名单、数据库回滚预检、服务端冻结值和快照并发校验；不提供物理删除。
+- ✅ MCP 手测能够从源任务构造隔离的 running task/attempt，并提供续期、关闭、到期回收与工具调用观察接口。
 - ⚠️ 真实生产数据库的写操作、Dify/MCP 直调、Kafka offset 变更以及故障注入不会由自动测试执行，必须由操作者在实验台逐步预览后验收。
 - ❓ Redpanda/Testcontainers 并发集成套件和全链路自动化浏览器写操作尚未加入持续集成。
 

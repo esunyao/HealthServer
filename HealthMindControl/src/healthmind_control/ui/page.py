@@ -5,10 +5,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 router = APIRouter()
 
-VIEWS = ("dashboard", "debug", "tasks", "rows", "trace", "kafka", "releases", "repair", "audit", "about")
+VIEWS = ("dashboard", "debug", "fixtures", "tasks", "rows", "trace", "kafka", "releases", "repair", "audit", "about")
 VIEW_TITLES = {
     "dashboard": "运行总览", "tasks": "AI 任务", "rows": "数据浏览", "trace": "链路追踪",
-    "debug": "链路实验台", "kafka": "Kafka 管理", "releases": "Dify 版本", "repair": "受控修复",
+    "debug": "链路实验台", "fixtures": "数据构造", "kafka": "Kafka 管理", "releases": "Dify 版本", "repair": "受控修复",
     "audit": "审计记录", "about": "关于",
 }
 

@@ -10,9 +10,9 @@ import healthmind_control.app as hmc  # noqa: E402
 
 client = TestClient(hmc.app)
 with client:
-    paths = ("/", "/ui/dashboard", "/ui/tasks", "/ui/rows", "/ui/kafka", "/ui/releases",
+    paths = ("/", "/ui/dashboard", "/ui/tasks", "/ui/fixtures", "/ui/rows", "/ui/kafka", "/ui/releases",
              "/ui/repair", "/ui/audit", "/ui/about", "/api/summary", "/api/backlogs",
-             "/api/rows/meta", "/api/releases", "/api/kafka/groups", "/api/audit/actions",
+             "/api/rows/meta", "/api/fixtures/tables", "/api/releases", "/api/kafka/groups", "/api/audit/actions",
              "/api/repair/plan?query=meal")
     for path in paths:
         r = client.get(path)

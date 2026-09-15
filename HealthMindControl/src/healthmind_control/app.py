@@ -10,6 +10,7 @@ from .api import auditlog as auditlog_api
 from .api import events as events_api
 from .api import debug as debug_api
 from .api import expert as expert_api
+from .api import fixtures as fixtures_api
 from .api import kafka as kafka_api
 from .api import overview as overview_api
 from .api import recovery as recovery_api
@@ -27,6 +28,7 @@ from .services import DifyService, KafkaService
 from .services.debug import DebugService
 from .services.expert import ExpertSqlService
 from .services.events import StatusBroadcaster
+from .services.fixture_reaper import FixtureSessionReaper
 from .ui import fmt as ui_fmt
 from .ui import parts_router, ui_router
 
@@ -44,6 +46,7 @@ ROUTERS = (
     events_api.router,
     debug_api.router,
     expert_api.router,
+    fixtures_api.router,
     parts_router,
     ui_router,
 )
@@ -74,12 +77,17 @@ def create_app() -> FastAPI:
         app.state.expert = ExpertSqlService(app.state.db)
         app.state.status_events = StatusBroadcaster(app.state.repo, settings.refresh_seconds)
         app.state.status_events.start()
+        app.state.fixture_reaper = FixtureSessionReaper(
+            app.state.repo, app.state.audit, settings.fixture_reaper_seconds,
+        )
+        app.state.fixture_reaper.start()
         yield
+        await app.state.fixture_reaper.stop()
         await app.state.status_events.stop()
         await app.state.dify.close()
         await app.state.db.close()
 
-    application = FastAPI(title="HealthMindControl", version="0.3.0", lifespan=lifespan)
+    application = FastAPI(title="HealthMindControl", version="0.4.0", lifespan=lifespan)
     application.mount("/static", StaticFiles(directory=PACKAGE / "static"), name="static")
     templates = Jinja2Templates(directory=PACKAGE / "templates")
     templates.env.globals.update(

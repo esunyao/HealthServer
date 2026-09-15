@@ -1,10 +1,11 @@
-# HealthMindControl v0.3
+# HealthMindControl v0.4
 
 HealthMind、NutriMemo、Kafka 与 Dify 的本地 Web 运维控制台。只监听 127.0.0.1:8765，不开放到局域网/公网；
 所有数据库与 Kafka 写操作都必须「预览 → 输入确认文本 → 事务执行」，并双写审计（DB + JSONL）。
 
-v0.3 新增链路实验台、原始 Kafka JSON 无损投递、服务端绑定的写操作预览、专家 SQL 与离线消费组
-offset 工具，并强化任务重试、attempt 恢复和取消任务的业务闭环。
+v0.4 新增白名单数据构造器和 MCP 手动测试数据生成。可从已有任务直接生成一组真实的
+`running task + running attempt`，复制三组 ID 到 Dify 草稿测试；该过程不调用 Dify、不发送 Kafka，
+也不修改 Nutri 数据。原有链路实验台、Kafka、版本、修复和专家功能保持不变。
 
 ## 1. 环境准备（模块自己的 `.venv`）
 
@@ -40,6 +41,8 @@ Copy-Item HealthMindControl\.env.example HealthMindControl\.env   # 然后编辑
 | HMC_QUERY_LIMIT | 受控列表默认查询上限 |
 | HMC_AUDIT_PATH | JSONL 审计文件路径 |
 | HMC_PREVIEW_TTL_SECONDS / HMC_TASK_RETENTION_DAYS | 预览令牌 / 克隆保留期 |
+| HMC_FIXTURE_MCP_LEASE_MINUTES | MCP 测试数据租期，默认 50 分钟，范围 5–55 分钟 |
+| HMC_FIXTURE_REAPER_SECONDS | 到期测试任务扫描间隔，默认 10 秒 |
 
 ## 3. 启动与访问
 
@@ -52,7 +55,7 @@ uv run --project HealthMindControl healthmind-control
 
 ## 4. 页面
 
-总览（SSE 5s 轻量 + 昂贵按需）、链路实验台（逐步暂停/放行/直调/观察）、任务、数据浏览（healthmind/nutri 受控行浏览器，keyset 分页 ≤100、
+总览（SSE 5s 轻量 + 昂贵按需）、链路实验台（逐步暂停/放行/直调/观察）、数据构造（MCP 测试 ID + 白名单字段映射）、任务、数据浏览（healthmind/nutri 受控行浏览器，keyset 分页 ≤100、
 payload 延迟、脱敏）、链路（关系优先时间线 + 模糊命中标注）、Kafka（分区健康/成员/offsets/只读消息
 含时间与结构化过滤/受控生产）、Dify 版本（candidate→绑定工具→production→退役/回滚，含审计）、
 受控修复（一键诊断 + 手动 + 克隆 + attempt 恢复语义闭环）、审计（JSONL + DB）、关于。
@@ -75,8 +78,8 @@ src/healthmind_control/
 ├─ config.py security.py audit.py models.py util.py debug_store.py
 ├─ db/database.py          # 连接池 + 表结构自检 + 15s statement_timeout
 ├─ services/               # kafka / dify / debug / expert
-├─ repositories/           # overview tasks rows trace releases recovery → 门面 Repository
-├─ api/                    # overview tasks rows trace kafka releases recovery auditlog events
+├─ repositories/           # overview/tasks/fixtures/rows/trace/releases/recovery → 门面 Repository
+├─ api/                    # overview/tasks/fixtures/rows/trace/kafka/releases/recovery/audit/events
 ├─ ui/                     # page（视图路由）/ parts（片段）/ fmt（模板辅助）
 ├─ templates/              # base + views/* + partials/*
 └─ static/                 # css（tokens/theme/base/components/views） js（模块 + views/*） img
@@ -97,7 +100,7 @@ uv run --project HealthMindControl python HealthMindControl\tests\_smoke.py
 
 JS 语法由 pytest 用 node --check 递归校验（node 缺失自动跳过）。
 
-## 7. 安全与边界（v0.3）
+## 7. 安全与边界（v0.4）
 
 - Kafka 消息查看绝不提交业务消费组 offset；控制台自身诊断组（healthmind-control-*）不在列表中展示。
 - 所有写操作经过预览令牌和确认链路；执行请求不能覆盖预览时保存的参数。
@@ -107,3 +110,18 @@ JS 语法由 pytest 用 node --check 递归校验（node 缺失自动跳过）�
 - 专家模式允许单条 SQL 和离线消费组 offset 调整；默认关闭，仍不提供 topic 创建/删除、物理删除向导或修改历史成功记录的普通表单。
 - Kafka payload 始终以编辑器原始 UTF-8 文本发送；服务端负责 JSON 校验，避免浏览器把 BIGINT 四舍五入。
 - 详细链路与每阶段数据库/Kafka 变化见 [AI 分析链路](doc/analysis-chain.md)。
+
+## 8. 最短 MCP 草稿测试
+
+1. 进入“任务”，在任意已有任务右侧点击“**MCP 测试**”。
+2. 在“数据构造”确认源任务，点击“预览并创建测试 ID”。
+3. 输入预览给出的确认文本并执行。
+4. 复制页面生成的 `task_id`、`attempt_id`、`trace_id` 到 Dify 草稿测试输入。
+5. Dify 调用 MCP 后，页面每 3 秒显示一次 `ai_tool_invocations` 工具调用流。
+6. 完成后点击“结束测试”；记录标记为 cancelled 并保留，不会删除历史。
+
+测试记录最长运行 55 分钟。默认租期为 50 分钟，可续期；HMC 会在 HealthMind 的一小时
+attempt 超时恢复前自动关闭到期记录。HMC 意外退出时，应在重新启动后确认调试记录已关闭。
+
+高级构造器只开放运行期白名单表，写入前会在回滚事务中真实验证 PostgreSQL 约束。
+构造出的 outbox 默认将 `next_attempt_at` 保持到 2099，必须使用“隔离 outbox 放行”才会进入真实发布流程。

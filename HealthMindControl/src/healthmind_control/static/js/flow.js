@@ -38,26 +38,26 @@ export function startMutation(container, opts) {
       html += '<div class="row" style="margin-top:4px"><span class="badge b-info">将发送到 ' + esc(res.message.topic || "") + " key=" + esc(res.message.key || "-") + "</span></div>";
     }
     if (snapshot) {
-      html += '<div class="row" style="margin-top:4px"><button class="btn sm ghost" id="flow-snap" type="button">查看将变更的记录快照</button></div>';
+      html += '<div class="row" style="margin-top:4px"><button class="btn sm ghost" data-flow-role="snapshot" type="button">查看将变更的记录快照</button></div>';
     }
     if (warnings.length && res.requires_force) {
-      html += '<label class="check-line" style="margin:8px 0"><input type="checkbox" id="flow-force"> 强制执行带警告的操作</label>';
+      html += '<label class="check-line" style="margin:8px 0"><input type="checkbox" data-flow-role="force"> 强制执行带警告的操作</label>';
     }
     html += '<div class="field" style="margin:8px 0"><label>输入确认文本（预览后 2 分钟内有效，记录若被改动会要求重新预览）</label>'
-      + '<input type="text" id="flow-confirm" placeholder="' + esc(res.confirmation || "") + '" autocomplete="off"></div>';
-    html += '<div class="row"><button class="btn danger" id="flow-run" type="button">执行</button>'
-      + '<button class="btn ghost" id="flow-cancel" type="button">取消</button>'
+      + '<input type="text" data-flow-role="confirm" placeholder="' + esc(res.confirmation || "") + '" autocomplete="off"></div>';
+    html += '<div class="row"><button class="btn danger" data-flow-role="run" type="button">执行</button>'
+      + '<button class="btn ghost" data-flow-role="cancel" type="button">取消</button>'
       + '<span class="small muted">预览过期于 ' + fmtTs(res.expires_at) + "</span></div>";
     container.innerHTML = html;
     if (snapshot) {
-      document.getElementById("flow-snap").addEventListener("click", function () { openDrawer("预览快照（已脱敏）", snapshot); });
+      container.querySelector('[data-flow-role="snapshot"]').addEventListener("click", function () { openDrawer("预览快照（已脱敏）", snapshot); });
     }
-    document.getElementById("flow-cancel").addEventListener("click", function () { container.innerHTML = ""; });
-    document.getElementById("flow-run").addEventListener("click", function () {
-      const confirmText = document.getElementById("flow-confirm").value;
-      const forceEl = document.getElementById("flow-force");
+    container.querySelector('[data-flow-role="cancel"]').addEventListener("click", function () { container.innerHTML = ""; });
+    container.querySelector('[data-flow-role="run"]').addEventListener("click", function () {
+      const confirmText = container.querySelector('[data-flow-role="confirm"]').value;
+      const forceEl = container.querySelector('[data-flow-role="force"]');
       const force = !!(forceEl && forceEl.checked);
-      const run = document.getElementById("flow-run");
+      const run = container.querySelector('[data-flow-role="run"]');
       run.disabled = true;
       postJson(opts.executeUrl, {
         preview_token: res.preview_token,
