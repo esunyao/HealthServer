@@ -38,12 +38,16 @@ export async function postJson(url, body) {
   if (!r.ok) throw new Error(await errText(r));
   return r.json();
 }
-async function errText(r) {
+export async function errText(r) {
+  // Response body is a one-shot stream. Read it exactly once, then interpret the
+  // captured text as JSON when possible. Calling r.json() and falling back to
+  // r.text() leaves the stream consumed when a proxy returns HTML/plain text.
+  const raw = await r.text();
   try {
-    const data = await r.json();
+    const data = JSON.parse(raw);
     return data && (data.detail || data.error) ? String(data.detail || data.error) : r.status + ": " + JSON.stringify(data).slice(0, 300);
   } catch {
-    return r.status + ": " + (await r.text()).slice(0, 300);
+    return r.status + ": " + raw.slice(0, 300);
   }
 }
 

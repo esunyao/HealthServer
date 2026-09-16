@@ -1,7 +1,7 @@
 // hx.js —— htmx 风格轻量驱动（属性与官方 htmx 同名，可无痛替换 vendor/htmx.min.js）
 // 支持：hx-get / hx-trigger(click|load|change) / hx-target / hx-swap(innerHTML|append|outerHTML)
 //       hx-include(选择器或 closest form) / hx-indicator('self' 或选择器) / hx-push-url
-import { toast } from "./main.js";
+import { errText, toast } from "./main.js";
 
 function valueOf(input) {
   if (input.type === "checkbox") return input.checked ? (input.value || "on") : null;
@@ -56,9 +56,7 @@ async function perform(el) {
   try {
     const r = await fetch(url, { headers: { Accept: "text/html" } });
     if (!r.ok) {
-      let msg = "HTTP " + r.status;
-      try { const j = await r.json(); msg = j.detail || j.error || msg; } catch { /* ignore */ }
-      throw new Error(msg);
+      throw new Error(await errText(r));
     }
     const html = await r.text();
     if (swap === "none") return;
