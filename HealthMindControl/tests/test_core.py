@@ -2,6 +2,8 @@ import json
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -21,12 +23,61 @@ def test_redaction():
     assert redact({"Authorization": "Bearer secret", "url": "https://x/a?X-Amz-Signature=secret"}) == {"Authorization": "***", "url": "https://x/a?REDACTED"}
 
 
-def test_preview_single_use_and_action_bound():
+def test_preview_state_machine_replays_success_and_blocks_duplicate_execution():
     store = PreviewStore(120)
     token, preview = store.create("task.retry", {"id": "1"}, {"status": "failed"})
-    assert store.consume(token, "task.retry") == preview
+    claimed, replayed, result = store.begin(token, "task.retry")
+    assert claimed == preview and replayed is False and result is None
     with pytest.raises(HTTPException):
-        store.consume(token, "task.retry")
+        store.begin(token, "task.retry")
+    store.succeed(token, {"task_id": "new"})
+    _, replayed, result = store.begin(token, "task.retry")
+    assert replayed is True and result == {"task_id": "new"}
+
+
+def test_preview_release_allows_retry_but_indeterminate_does_not():
+    store = PreviewStore(120)
+    token, preview = store.create("fixture.write", {}, {})
+    store.begin(token, "fixture.write")
+    store.release(token, "preflight failed")
+    assert store.begin(token, "fixture.write")[0] == preview
+    store.indeterminate(token, "commit outcome unknown")
+    with pytest.raises(HTTPException) as caught:
+        store.begin(token, "fixture.write")
+    assert caught.value.detail["code"] == "EXECUTION_INDETERMINATE"
+
+
+def test_preview_claim_is_atomic_across_threads():
+    store = PreviewStore(120)
+    token, _ = store.create("fixture.write", {}, {})
+    barrier = threading.Barrier(3)
+    outcomes = []
+
+    def claim():
+        barrier.wait()
+        try:
+            store.begin(token, "fixture.write")
+            outcomes.append("claimed")
+        except HTTPException as exc:
+            outcomes.append(exc.detail["code"])
+
+    threads = [threading.Thread(target=claim) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join()
+    assert sorted(outcomes) == ["PREVIEW_EXECUTING", "claimed"]
+
+
+def test_preview_expiry_requires_new_preview():
+    store = PreviewStore(120)
+    token, preview = store.create("fixture.write", {}, {})
+    preview.expires_at = time.time() - 1
+    with pytest.raises(HTTPException) as caught:
+        store.inspect(token, "fixture.write")
+    assert caught.value.detail["code"] == "PREVIEW_EXPIRED"
+    assert caught.value.detail["requires_repreview"] is True
 
 
 def test_business_event_validation():

@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import time
 
 import pytest
 
@@ -56,3 +57,26 @@ def test_kafka_client_config_missing_sasl_creds_raises():
     cfg = _fake_cfg(kafka_security_protocol="SASL_PLAINTEXT", kafka_sasl_username=None)
     with pytest.raises(RuntimeError, match="SASL_USERNAME"):
         kmod.build_client_config(cfg)
+
+
+@pytest.mark.asyncio
+async def test_metadata_failure_discards_stale_cache_and_recovers_with_same_client():
+    service = object.__new__(kmod.KafkaService)
+    service.cfg = SimpleNamespace(kafka_metadata_cache_seconds=1)
+    service._metadata_cache = {"at": time.monotonic() - 10, "value": {"brokers": [{"id": 1}]}}
+    attempts = 0
+
+    def metadata():
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("broker down")
+        return {"brokers": [{"id": 2}], "topics": []}
+
+    service._metadata = metadata
+    with pytest.raises(RuntimeError, match="broker down"):
+        await service.metadata()
+    assert service._metadata_cache == {"at": 0.0, "value": None}
+    recovered = await service.metadata()
+    assert recovered["brokers"] == [{"id": 2}]
+    assert service._available is True

@@ -100,3 +100,53 @@ def test_kafka_execute_uses_server_side_preview_intent():
         })
     assert response.status_code == 200
     assert app.state.kafka.sent[:3] == ("topic-a", "original", "2097632617381867522")
+
+
+def test_kafka_warning_rejection_keeps_preview_reusable():
+    class FakeKafka:
+        calls = 0
+
+        async def metadata(self, force=False):
+            return {"topics": [{"name": "custom-topic"}], "brokers": [{"id": 1}]}
+
+        @staticmethod
+        def parse_payload(text):
+            import json
+            return json.loads(text)
+
+        @staticmethod
+        def validate_event(topic, payload):
+            return ["non-standard event"]
+
+        async def produce(self, *args):
+            self.calls += 1
+            return {"offset": 7, "partition": 0}
+
+    class FakeAudit:
+        def write(self, *args, **kwargs):
+            return kwargs.get("operation_id", "op")
+
+    app = FastAPI()
+    app.include_router(kafka_router)
+    app.state.csrf_token = "csrf"
+    app.state.previews = PreviewStore(120)
+    app.state.kafka = FakeKafka()
+    app.state.audit = FakeAudit()
+    app.state.settings = SimpleNamespace(enable_expert_mode=False)
+    with TestClient(app) as client:
+        preview = client.post("/api/kafka/produce/preview", json={
+            "csrf_token": "csrf", "reason": "warning retry", "topic": "custom-topic",
+            "payload_text": "{}",
+        }).json()
+        rejected = client.post("/api/kafka/produce/execute", json={
+            "csrf_token": "csrf", "preview_token": preview["preview_token"],
+            "confirmation": "PRODUCE custom-topic", "accept_warnings": False,
+        })
+        accepted = client.post("/api/kafka/produce/execute", json={
+            "csrf_token": "csrf", "preview_token": preview["preview_token"],
+            "confirmation": "PRODUCE custom-topic", "accept_warnings": True,
+        })
+    assert rejected.status_code == 409
+    assert rejected.json()["detail"]["code"] == "WARNINGS_NOT_ACCEPTED"
+    assert accepted.status_code == 200
+    assert app.state.kafka.calls == 1
