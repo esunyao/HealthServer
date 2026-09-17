@@ -5,25 +5,36 @@ from ..models import (
     ExecuteRequest, FixtureLifecycleRequest, FixturePreviewRequest,
     McpSessionRequest, OutboxReleaseRequest,
 )
-from ..security import redact, require_csrf, sha256_json
+from ..security import (
+    control_error, redact, replayed_result, require_csrf, require_database_available, sha256_json,
+    write_failed_audit, write_started_audit,
+)
 from ..util import serial
 
 
 router = APIRouter()
 
 
-def _require_writes(request: Request) -> None:
+def _require_writes(request: Request, operation_id: str | None = None) -> None:
+    if not getattr(request.app.state.db, "connected", True):
+        raise control_error(503, "DEPENDENCY_UNAVAILABLE",
+                            request.app.state.db.schema_error or "数据库暂不可用，后台正在自动重连",
+                            can_retry=True, operation_id=operation_id)
     if not request.app.state.db.write_features.get("fixtures"):
-        raise HTTPException(409, request.app.state.db.schema_error or "数据构造写入已禁用")
+        raise control_error(409, "WRITE_DISABLED",
+                            request.app.state.db.schema_error or "数据构造写入已禁用",
+                            operation_id=operation_id)
 
 
 @router.get("/api/fixtures/tables")
 async def tables(request: Request):
+    require_database_available(request)
     return serial(await request.app.state.repo.fixture_tables())
 
 
 @router.get("/api/fixtures/sources/{identifier}")
 async def source(request: Request, identifier: str, table_name: str | None = Query(None)):
+    require_database_available(request)
     try:
         if table_name:
             return serial(redact(await request.app.state.repo.fixture_draft(table_name, identifier)))
@@ -34,6 +45,7 @@ async def source(request: Request, identifier: str, table_name: str | None = Que
 
 @router.get("/api/fixtures/draft")
 async def draft(request: Request, table_name: str, source_identifier: str | None = None):
+    require_database_available(request)
     try:
         return serial(redact(await request.app.state.repo.fixture_draft(table_name, source_identifier)))
     except (ValueError, RuntimeError) as exc:
@@ -63,6 +75,7 @@ async def fixture_preview(request: Request, body: FixturePreviewRequest):
     token, preview = request.app.state.previews.create("fixture.mutate", intent, snapshot)
     return serial({
         "preview_token": token, "expires_at": preview.expires_at * 1000,
+        "operation_id": preview.operation_id,
         "confirmation": f"WRITE {body.table_name}", "operation": body.operation,
         "table_name": body.table_name, "values": redact(proposal["values"]),
         "result": redact(proposal["result"]), "warnings": proposal["warnings"],
@@ -74,22 +87,32 @@ async def fixture_preview(request: Request, body: FixturePreviewRequest):
 @router.post("/api/fixtures/execute")
 async def fixture_execute(request: Request, body: ExecuteRequest):
     require_csrf(request, body.csrf_token)
-    _require_writes(request)
-    preview = request.app.state.previews.consume(body.preview_token, "fixture.mutate")
+    preview = request.app.state.previews.inspect(body.preview_token, "fixture.mutate")
     intent = preview.payload
     if body.confirmation != f"WRITE {intent['table_name']}":
-        raise HTTPException(409, "确认文本不匹配")
+        raise control_error(409, "CONFIRMATION_MISMATCH", "确认文本不匹配", can_retry=True,
+                            operation_id=preview.operation_id)
     if intent["warnings"] and not body.accept_warnings:
-        raise HTTPException(409, "该操作存在警告，必须在预览中明确接受")
+        raise control_error(409, "WARNINGS_NOT_ACCEPTED", "该操作存在警告，必须在预览中明确接受",
+                            can_retry=True, operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.replay(body.preview_token, "fixture.mutate")
+    if replayed:
+        return serial(replayed_result(cached))
+    _require_writes(request, preview.operation_id)
     snapshot = {
         "source": await request.app.state.repo.fixture_source_snapshot(intent["source_identifier"]),
         "target": await request.app.state.repo.fixture_target_snapshot(intent["table_name"], intent["target"]),
     }
     if sha256_json(snapshot) != preview.snapshot_hash:
-        raise HTTPException(409, "源记录或目标记录在预览后发生变化，请重新预览")
-    op = request.app.state.audit.write(
-        "fixture." + intent["operation"], intent["table_name"], intent["reason"], "started",
-        before=redact(snapshot), proposed=redact(intent["values"]),
+        raise control_error(409, "PREVIEW_STALE", "源记录或目标记录在预览后发生变化，请重新预览",
+                            requires_repreview=True, operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.begin(body.preview_token, "fixture.mutate")
+    if replayed:
+        return serial(replayed_result(cached))
+    op = preview.operation_id
+    write_started_audit(
+        request, body.preview_token, "fixture." + intent["operation"], intent["table_name"],
+        intent["reason"], op, before=redact(snapshot), proposed=redact(intent["values"]),
     )
     try:
         result = await request.app.state.repo.execute_fixture(
@@ -99,13 +122,16 @@ async def fixture_execute(request: Request, body: ExecuteRequest):
             "fixture." + intent["operation"], intent["table_name"], intent["reason"], "succeeded",
             operation_id=op, after=redact(result),
         )
-        return serial(redact(result))
+        final = serial(redact(result))
+        request.app.state.previews.succeed(body.preview_token, final)
+        return final
     except Exception as exc:
-        request.app.state.audit.write(
-            "fixture." + intent["operation"], intent["table_name"], intent["reason"], "failed",
-            operation_id=op, error=str(exc),
-        )
-        raise
+        write_failed_audit(request, "fixture." + intent["operation"], intent["table_name"],
+                           intent["reason"], op, exc)
+        request.app.state.previews.indeterminate(body.preview_token, str(exc))
+        raise control_error(503, "EXECUTION_INDETERMINATE",
+                            "写入结果无法确认，请通过操作编号检查审计和目标记录",
+                            operation_id=op) from exc
 
 
 @router.post("/api/fixtures/mcp-session/preview")
@@ -129,6 +155,7 @@ async def mcp_session_preview(request: Request, body: McpSessionRequest):
     token, preview = request.app.state.previews.create("fixture.mcp.create", frozen, source_snapshot)
     return serial({
         "preview_token": token, "expires_at": preview.expires_at * 1000,
+        "operation_id": preview.operation_id,
         "confirmation": f"MCP TEST {body.source_task_id}",
         "source_task_id": body.source_task_id,
         "dify_inputs": {key: proposal[key] for key in ("task_id", "attempt_id", "trace_id")},
@@ -141,16 +168,25 @@ async def mcp_session_preview(request: Request, body: McpSessionRequest):
 @router.post("/api/fixtures/mcp-session/execute")
 async def mcp_session_execute(request: Request, body: ExecuteRequest):
     require_csrf(request, body.csrf_token)
-    _require_writes(request)
-    preview = request.app.state.previews.consume(body.preview_token, "fixture.mcp.create")
+    preview = request.app.state.previews.inspect(body.preview_token, "fixture.mcp.create")
     intent = preview.payload
     if body.confirmation != f"MCP TEST {intent['source_task_id']}":
-        raise HTTPException(409, "确认文本不匹配")
+        raise control_error(409, "CONFIRMATION_MISMATCH", "确认文本不匹配", can_retry=True,
+                            operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.replay(body.preview_token, "fixture.mcp.create")
+    if replayed:
+        return serial(replayed_result(cached))
+    _require_writes(request, preview.operation_id)
     current = await request.app.state.repo.fixture_source_snapshot(intent["source_task_id"])
     if not current or sha256_json(current) != preview.snapshot_hash:
-        raise HTTPException(409, "源任务在预览后发生变化，请重新预览")
-    op = request.app.state.audit.write(
-        "fixture.mcp.create", intent["source_task_id"], intent["reason"], "started",
+        raise control_error(409, "PREVIEW_STALE", "源任务在预览后发生变化，请重新预览",
+                            requires_repreview=True, operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.begin(body.preview_token, "fixture.mcp.create")
+    if replayed:
+        return serial(replayed_result(cached))
+    op = preview.operation_id
+    write_started_audit(
+        request, body.preview_token, "fixture.mcp.create", intent["source_task_id"], intent["reason"], op,
         generated={key: intent[key] for key in ("task_id", "attempt_id", "trace_id")},
     )
     try:
@@ -169,13 +205,15 @@ async def mcp_session_execute(request: Request, body: ExecuteRequest):
             "fixture.mcp.create", intent["source_task_id"], intent["reason"], "succeeded",
             operation_id=op, result=result,
         )
-        return serial(result)
+        final = serial(result)
+        request.app.state.previews.succeed(body.preview_token, final)
+        return final
     except Exception as exc:
-        request.app.state.audit.write(
-            "fixture.mcp.create", intent["source_task_id"], intent["reason"], "failed",
-            operation_id=op, error=str(exc),
-        )
-        raise
+        write_failed_audit(request, "fixture.mcp.create", intent["source_task_id"], intent["reason"], op, exc)
+        request.app.state.previews.indeterminate(body.preview_token, str(exc))
+        raise control_error(503, "EXECUTION_INDETERMINATE",
+                            "MCP 测试记录写入结果无法确认，请通过操作编号检查审计",
+                            operation_id=op) from exc
 
 
 async def _lifecycle_preview(request: Request, task_id: str, reason: str, action: str):
@@ -187,21 +225,35 @@ async def _lifecycle_preview(request: Request, task_id: str, reason: str, action
     )
     return serial({
         "preview_token": token, "expires_at": preview.expires_at * 1000,
+        "operation_id": preview.operation_id,
         "confirmation": f"{action.upper()} {task_id}", "snapshot": redact(session),
     })
 
 
 async def _lifecycle_execute(request: Request, task_id: str, body: ExecuteRequest, action: str):
     require_csrf(request, body.csrf_token)
-    _require_writes(request)
-    preview = request.app.state.previews.consume(body.preview_token, f"fixture.mcp.{action}")
+    preview = request.app.state.previews.inspect(body.preview_token, f"fixture.mcp.{action}")
     if preview.payload["task_id"] != task_id or body.confirmation != f"{action.upper()} {task_id}":
-        raise HTTPException(409, "预览目标或确认文本不匹配")
+        raise control_error(409, "CONFIRMATION_MISMATCH", "预览目标或确认文本不匹配", can_retry=True,
+                            operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.replay(
+        body.preview_token, f"fixture.mcp.{action}",
+    )
+    if replayed:
+        return serial(replayed_result(cached))
+    _require_writes(request, preview.operation_id)
     current = await request.app.state.repo.mcp_session(task_id)
     if not current or sha256_json(current) != preview.snapshot_hash:
-        raise HTTPException(409, "调试任务在预览后发生变化，请重新预览")
+        raise control_error(409, "PREVIEW_STALE", "调试任务在预览后发生变化，请重新预览",
+                            requires_repreview=True, operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.begin(
+        body.preview_token, f"fixture.mcp.{action}",
+    )
+    if replayed:
+        return serial(replayed_result(cached))
     reason = preview.payload["reason"]
-    op = request.app.state.audit.write(f"fixture.mcp.{action}", task_id, reason, "started")
+    op = preview.operation_id
+    write_started_audit(request, body.preview_token, f"fixture.mcp.{action}", task_id, reason, op)
     try:
         result = (await request.app.state.repo.renew_mcp_session(
             task_id, request.app.state.settings.fixture_mcp_lease_minutes,
@@ -209,12 +261,20 @@ async def _lifecycle_execute(request: Request, task_id: str, body: ExecuteReques
         request.app.state.audit.write(
             f"fixture.mcp.{action}", task_id, reason, "succeeded", operation_id=op, result=result,
         )
-        return serial(result)
+        final = serial(result)
+        request.app.state.previews.succeed(body.preview_token, final)
+        return final
+    except RuntimeError as exc:
+        request.app.state.previews.release(body.preview_token, str(exc))
+        write_failed_audit(request, f"fixture.mcp.{action}", task_id, reason, op, exc)
+        raise control_error(409, "EXECUTION_REJECTED", str(exc), can_retry=True,
+                            operation_id=op) from exc
     except Exception as exc:
-        request.app.state.audit.write(
-            f"fixture.mcp.{action}", task_id, reason, "failed", operation_id=op, error=str(exc),
-        )
-        raise
+        write_failed_audit(request, f"fixture.mcp.{action}", task_id, reason, op, exc)
+        request.app.state.previews.indeterminate(body.preview_token, str(exc))
+        raise control_error(503, "EXECUTION_INDETERMINATE",
+                            "会话操作结果无法确认，请通过操作编号检查审计和目标记录",
+                            operation_id=op) from exc
 
 
 @router.post("/api/fixtures/mcp-session/{task_id}/renew/preview")
@@ -263,28 +323,43 @@ async def outbox_release_preview(request: Request, body: OutboxReleaseRequest):
     intent = {"schema_name": body.schema_name, "event_id": body.event_id, "reason": body.reason}
     token, preview = request.app.state.previews.create("fixture.outbox.release", intent, snapshot)
     return serial({"preview_token": token, "expires_at": preview.expires_at * 1000,
+                   "operation_id": preview.operation_id,
                    "confirmation": f"RELEASE {body.event_id}", "snapshot": redact(snapshot)})
 
 
 @router.post("/api/fixtures/outbox/release")
 async def outbox_release_execute(request: Request, body: ExecuteRequest):
     require_csrf(request, body.csrf_token)
-    _require_writes(request)
-    preview = request.app.state.previews.consume(body.preview_token, "fixture.outbox.release")
+    preview = request.app.state.previews.inspect(body.preview_token, "fixture.outbox.release")
     intent = preview.payload
     if body.confirmation != f"RELEASE {intent['event_id']}":
-        raise HTTPException(409, "确认文本不匹配")
+        raise control_error(409, "CONFIRMATION_MISMATCH", "确认文本不匹配", can_retry=True,
+                            operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.replay(body.preview_token, "fixture.outbox.release")
+    if replayed:
+        return serial(replayed_result(cached))
+    _require_writes(request, preview.operation_id)
     table = f"{intent['schema_name']}.integration_outbox"
     current = await request.app.state.repo.fixture_target_snapshot(table, {"event_id": intent["event_id"]})
     if not current or sha256_json(current) != preview.snapshot_hash:
-        raise HTTPException(409, "outbox 在预览后发生变化，请重新预览")
-    op = request.app.state.audit.write("fixture.outbox.release", intent["event_id"], intent["reason"], "started")
+        raise control_error(409, "PREVIEW_STALE", "outbox 在预览后发生变化，请重新预览",
+                            requires_repreview=True, operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.begin(body.preview_token, "fixture.outbox.release")
+    if replayed:
+        return serial(replayed_result(cached))
+    op = preview.operation_id
+    write_started_audit(request, body.preview_token, "fixture.outbox.release", intent["event_id"],
+                        intent["reason"], op)
     try:
         result = await request.app.state.repo.release_fixture_outbox(intent["schema_name"], intent["event_id"])
         request.app.state.audit.write("fixture.outbox.release", intent["event_id"], intent["reason"],
                                       "succeeded", operation_id=op, result=result)
-        return serial(redact(result))
+        final = serial(redact(result))
+        request.app.state.previews.succeed(body.preview_token, final)
+        return final
     except Exception as exc:
-        request.app.state.audit.write("fixture.outbox.release", intent["event_id"], intent["reason"],
-                                      "failed", operation_id=op, error=str(exc))
-        raise
+        write_failed_audit(request, "fixture.outbox.release", intent["event_id"], intent["reason"], op, exc)
+        request.app.state.previews.indeterminate(body.preview_token, str(exc))
+        raise control_error(503, "EXECUTION_INDETERMINATE",
+                            "outbox 放行结果无法确认，请通过操作编号检查审计和目标记录",
+                            operation_id=op) from exc

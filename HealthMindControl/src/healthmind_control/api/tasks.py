@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from ..security import redact
+from ..security import redact, require_database_available
 from ..util import decode_cursor, serial
 
 router = APIRouter()
@@ -11,6 +11,7 @@ async def list_tasks(request: Request, status: str | None = None, task_type: str
                      service: str | None = None, code: str | None = None, subject: str | None = None,
                      since: str | None = None, until: str | None = None,
                      cursor: str | None = None, limit: int = Query(50, ge=1, le=100)):
+    require_database_available(request)
     if cursor and decode_cursor(cursor) is None:
         raise HTTPException(400, "cursor 无效")
     return serial(await request.app.state.repo.list_tasks(
@@ -20,6 +21,7 @@ async def list_tasks(request: Request, status: str | None = None, task_type: str
 
 @router.get("/api/tasks/{task_id}")
 async def task_detail(request: Request, task_id: str):
+    require_database_available(request)
     bundle = await request.app.state.repo.task_bundle(task_id)
     if bundle["task"] is None:
         raise HTTPException(404, "task not found")

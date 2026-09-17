@@ -526,7 +526,7 @@ class FixturesMixin:
             cur = await conn.execute("""UPDATE healthmind.ai_task_attempts a
               SET status='cancelled',finished_at=now(),failure_category='cancelled',failure_code=%s,
                   failure_message='HealthMindControl MCP test session closed',
-                  duration_ms=GREATEST(0,EXTRACT(EPOCH FROM (now()-started_at))*1000)::bigint
+                  duration_ms=GREATEST(0,EXTRACT(EPOCH FROM (now()-a.started_at))*1000)::bigint
               FROM healthmind.ai_tasks t
               WHERE a.task_id=t.task_id AND t.task_id=%s AND t.status='running' AND a.status='running'
                 AND t.context_manifest->>'hmc_mcp_session'='true' RETURNING a.attempt_id""", (code, task_id))
@@ -538,6 +538,8 @@ class FixturesMixin:
                   lock_version=lock_version+1,updated_at=now()
               WHERE task_id=%s AND status='running' RETURNING task_id,status,trace_id""", (code, task_id))
             task = await cur.fetchone()
+            if not task:
+                raise RuntimeError("调试任务状态已变化，关闭操作已回滚")
         return {**dict(task), "attempt_id": attempt["attempt_id"]}
 
     async def close_expired_mcp_sessions(self) -> list[str]:

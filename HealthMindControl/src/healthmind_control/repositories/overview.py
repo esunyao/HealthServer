@@ -7,7 +7,17 @@ class OverviewMixin:
     # ---------------------------------------------------------------- 摘要
     async def status_light(self) -> dict[str, Any]:
         if not self.db.pool:
-            return {"database": {"ok": False, "error": self.db.schema_error}}
+            return {"database": {"ok": False, "available": False, "error": self.db.schema_error}}
+        if not self.db.connected:
+            return {
+                "database": {
+                    "ok": False, "available": False, "write_enabled": False,
+                    "write_features": self.db.write_features,
+                    "schema_error": self.db.schema_error,
+                    "error": self.db.schema_error or "数据库暂不可用（后台自动重连中）",
+                },
+                "tasks": None, "production": None, "recent_failures": None,
+            }
         tasks = await self.db.fetch_all(
             "SELECT status, count(*)::int AS count FROM healthmind.ai_tasks GROUP BY status ORDER BY status"
         )
@@ -39,6 +49,7 @@ class OverviewMixin:
         return {
             "database": {
                 "ok": self.db.connected,       # 连接可用且最近一次查询成功
+                "available": self.db.connected,
                 "write_enabled": self.db.write_enabled,
                 "write_features": self.db.write_features,
                 "schema_error": self.db.schema_error,
@@ -57,6 +68,11 @@ class OverviewMixin:
 
     # ---------------------------------------------------------------- 滞留与不一致
     async def backlogs(self) -> dict[str, Any]:
+        if not self.db.connected:
+            return {
+                "available": False,
+                "error": self.db.schema_error or "数据库暂不可用（后台自动重连中）",
+            }
         stale_after = self.stale_minutes
         stale = await self.db.fetch_all("""
           SELECT 'task.queued_or_running' AS source, task_id::text AS id, status,
@@ -135,7 +151,13 @@ class OverviewMixin:
             UNION ALL SELECT 'nutri.outbox', status, count(*)::int FROM nutri.integration_outbox GROUP BY status
             ORDER BY 1, 2
         """)
+        if not self.db.connected:
+            return {
+                "available": False,
+                "error": self.db.schema_error or "数据库暂不可用（后台自动重连中）",
+            }
         return {
+            "available": True,
             "counts": counts,
             "stale": stale,
             "attempts_stale": attempts_stale,

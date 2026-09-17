@@ -6,10 +6,24 @@ from fastapi import APIRouter, HTTPException, Request
 from jsonschema import Draft202012Validator, SchemaError
 
 from ..models import BindToolsRequest, ExecuteRequest, ReleaseRequest
-from ..security import redact, require_csrf, sha256_json
+from ..security import (
+    control_error, redact, replayed_result, require_csrf, require_database_available, sha256_json,
+    write_failed_audit, write_started_audit,
+)
 from ..util import serial
 
 router = APIRouter()
+
+
+def _require_release_writes(request: Request, operation_id: str | None = None) -> None:
+    if not getattr(request.app.state.db, "connected", True):
+        raise control_error(503, "DEPENDENCY_UNAVAILABLE",
+                            request.app.state.db.schema_error or "数据库暂不可用，后台正在自动重连",
+                            can_retry=True, operation_id=operation_id)
+    if not request.app.state.db.write_features.get("releases"):
+        raise control_error(409, "WRITE_DISABLED",
+                            request.app.state.db.schema_error or "release writes are disabled",
+                            operation_id=operation_id)
 
 
 def _release_snapshot(body: ReleaseRequest) -> dict[str, Any]:
@@ -23,11 +37,13 @@ def _release_snapshot(body: ReleaseRequest) -> dict[str, Any]:
 # ---------------------------------------------------------------- 查询
 @router.get("/api/releases")
 async def releases(request: Request):
+    require_database_available(request)
     return serial(await request.app.state.repo.list_releases())
 
 
 @router.get("/api/releases/{release_id}")
 async def release_detail(request: Request, release_id: str):
+    require_database_available(request)
     row = await request.app.state.repo.release_detail(release_id)
     if not row:
         raise HTTPException(404, "release not found")
@@ -36,16 +52,19 @@ async def release_detail(request: Request, release_id: str):
 
 @router.get("/api/releases/{release_id}/audits")
 async def release_audits(request: Request, release_id: str, limit: int = 200):
+    require_database_available(request)
     return serial(await request.app.state.repo.release_audits(release_id, limit))
 
 
 @router.get("/api/audits/releases")
 async def all_release_audits(request: Request, limit: int = 200):
+    require_database_available(request)
     return serial(await request.app.state.repo.release_audits(None, limit))
 
 
 @router.get("/api/dify/tool-definitions")
 async def tool_definitions(request: Request):
+    require_database_available(request)
     return serial(await request.app.state.repo.tool_definitions())
 
 
@@ -146,7 +165,7 @@ async def release_preview(request: Request, body: ReleaseRequest):
         "release." + body.operation, body.model_dump(exclude={"preview_token"}), snapshot,
     )
     return {
-        "preview_token": token, "expires_at": preview.expires_at,
+        "preview_token": token, "expires_at": preview.expires_at, "operation_id": preview.operation_id,
         "snapshot": serial(redact(snapshot)), "confirmation": f"RELEASE {body.operation.upper()}",
     }
 
@@ -154,19 +173,28 @@ async def release_preview(request: Request, body: ReleaseRequest):
 @router.post("/api/releases/execute")
 async def release_execute(request: Request, body: ExecuteRequest):
     require_csrf(request, body.csrf_token)
-    if not request.app.state.db.write_features.get("releases"):
-        raise HTTPException(409, request.app.state.db.schema_error or "release writes are disabled")
-    preview = request.app.state.previews.consume_for_prefix(body.preview_token, "release.")
+    preview = request.app.state.previews.inspect(body.preview_token, "release.", prefix=True)
     intent = ReleaseRequest.model_validate(preview.payload)
     if body.confirmation != f"RELEASE {intent.operation.upper()}":
-        raise HTTPException(409, "confirmation text mismatch")
+        raise control_error(409, "CONFIRMATION_MISMATCH", "确认文本不匹配", can_retry=True,
+                            operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.replay(body.preview_token, "release.", prefix=True)
+    if replayed:
+        return replayed_result(cached)
+    _require_release_writes(request, preview.operation_id)
     if intent.operation != "create":
         current = await request.app.state.repo.snapshot("healthmind.workflow_releases", "release_id", intent.release_id or "")
         if not current or sha256_json(current) != preview.snapshot_hash:
-            raise HTTPException(409, "版本在预览后发生变化，请重新预览")
+            raise control_error(409, "PREVIEW_STALE", "版本在预览后发生变化，请重新预览",
+                                requires_repreview=True, operation_id=preview.operation_id)
     before = None if intent.operation == "create" else current
-    op = request.app.state.audit.write(
-        "release." + intent.operation, intent.release_id or intent.release_version or "new", intent.reason, "started",
+    preview, replayed, cached = request.app.state.previews.begin(body.preview_token, "release.", prefix=True)
+    if replayed:
+        return replayed_result(cached)
+    op = preview.operation_id
+    write_started_audit(
+        request, body.preview_token, "release." + intent.operation,
+        intent.release_id or intent.release_version or "new", intent.reason, op,
         before=redact(before),
     )
     try:
@@ -178,12 +206,16 @@ async def release_execute(request: Request, body: ExecuteRequest):
         after = await request.app.state.repo.release_detail(str(rid))
         request.app.state.audit.write("release." + intent.operation, rid, intent.reason, "succeeded", operation_id=op,
                                       before=redact(before), after=redact(after))
-        return {"release_id": rid, "status": "ok"}
+        result = {"release_id": rid, "status": "ok"}
+        request.app.state.previews.succeed(body.preview_token, result)
+        return result
     except Exception as exc:
-        request.app.state.audit.write(
-            "release." + intent.operation, intent.release_id or "new", intent.reason, "failed", operation_id=op, error=str(exc),
-        )
-        raise
+        write_failed_audit(request, "release." + intent.operation,
+                           intent.release_id or "new", intent.reason, op, exc)
+        request.app.state.previews.indeterminate(body.preview_token, str(exc))
+        raise control_error(503, "EXECUTION_INDETERMINATE",
+                            "版本变更结果无法确认，请通过操作编号检查审计和版本记录",
+                            operation_id=op) from exc
 
 
 # ---------------------------------------------------------------- 候选绑定工具（预览 + 执行）
@@ -200,7 +232,7 @@ async def bind_tools_preview(request: Request, release_id: str, body: BindToolsR
         "release.bind_tools", body.model_dump(exclude={"preview_token"}), snapshot,
     )
     return {
-        "preview_token": token, "expires_at": preview.expires_at,
+        "preview_token": token, "expires_at": preview.expires_at, "operation_id": preview.operation_id,
         "snapshot": serial(snapshot), "confirmation": "RELEASE BIND_TOOLS",
     }
 
@@ -208,26 +240,41 @@ async def bind_tools_preview(request: Request, release_id: str, body: BindToolsR
 @router.post("/api/releases/{release_id}/tools/execute")
 async def bind_tools_execute(request: Request, release_id: str, body: ExecuteRequest):
     require_csrf(request, body.csrf_token)
-    if not request.app.state.db.write_features.get("releases"):
-        raise HTTPException(409, request.app.state.db.schema_error or "release writes are disabled")
-    preview = request.app.state.previews.consume(body.preview_token or "", "release.bind_tools")
+    token = body.preview_token or ""
+    preview = request.app.state.previews.inspect(token, "release.bind_tools")
     intent = BindToolsRequest.model_validate(preview.payload)
     if intent.release_id != release_id:
-        raise HTTPException(409, "preview target mismatch")
+        raise control_error(409, "PREVIEW_TARGET_MISMATCH", "预览目标不匹配",
+                            requires_repreview=True, operation_id=preview.operation_id)
     if body.confirmation != "RELEASE BIND_TOOLS":
-        raise HTTPException(409, "confirmation text mismatch")
+        raise control_error(409, "CONFIRMATION_MISMATCH", "确认文本不匹配", can_retry=True,
+                            operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.replay(token, "release.bind_tools")
+    if replayed:
+        return serial(replayed_result(cached))
+    _require_release_writes(request, preview.operation_id)
     current = await request.app.state.repo.release_detail(release_id)
     snapshot = {"release_id": release_id, "status": current["status"] if current else None,
                 "bound": [t.get("tool_code") for t in current["tools"]] if current else []}
     if not current or sha256_json(snapshot) != preview.snapshot_hash:
-        raise HTTPException(409, "版本在预览后发生变化，请重新预览")
-    op = request.app.state.audit.write("release.bind_tools", release_id, intent.reason, "started")
+        raise control_error(409, "PREVIEW_STALE", "版本在预览后发生变化，请重新预览",
+                            requires_repreview=True, operation_id=preview.operation_id)
+    preview, replayed, cached = request.app.state.previews.begin(token, "release.bind_tools")
+    if replayed:
+        return serial(replayed_result(cached))
+    op = preview.operation_id
+    write_started_audit(request, token, "release.bind_tools", release_id, intent.reason, op)
     try:
         result = await request.app.state.repo.bind_tools(
             release_id, [b.model_dump() for b in intent.bindings], intent.reason,
         )
         request.app.state.audit.write("release.bind_tools", release_id, intent.reason, "succeeded", operation_id=op)
-        return serial(result)
+        final = serial(result)
+        request.app.state.previews.succeed(token, final)
+        return final
     except Exception as exc:
-        request.app.state.audit.write("release.bind_tools", release_id, intent.reason, "failed", operation_id=op, error=str(exc))
-        raise
+        write_failed_audit(request, "release.bind_tools", release_id, intent.reason, op, exc)
+        request.app.state.previews.indeterminate(token, str(exc))
+        raise control_error(503, "EXECUTION_INDETERMINATE",
+                            "工具绑定结果无法确认，请通过操作编号检查审计和版本记录",
+                            operation_id=op) from exc

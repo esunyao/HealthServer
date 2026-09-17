@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 from datetime import datetime
 from typing import Any
@@ -10,6 +11,9 @@ from confluent_kafka.admin import AdminClient
 from ..config import Settings
 from ..security import canonical_json
 from ..util import json_safe
+
+
+logger = logging.getLogger(__name__)
 
 
 BUSINESS_TOPICS = {
@@ -70,6 +74,8 @@ class KafkaService:
         self.admin = AdminClient(self._base)
         self.producer = Producer(self._base)
         self._metadata_cache: dict[str, Any] = {"at": 0.0, "value": None}
+        self._available: bool | None = None
+        self._last_unavailable_log_at = 0.0
 
     def _ready(self) -> None:
         if self._auth_error:
@@ -92,7 +98,25 @@ class KafkaService:
             age = time.monotonic() - self._metadata_cache["at"]
             if age < self.cfg.kafka_metadata_cache_seconds:
                 return self._metadata_cache["value"]
-        value = await asyncio.to_thread(self._metadata)
+        try:
+            value = await asyncio.to_thread(self._metadata)
+        except Exception as exc:
+            # Never serve metadata captured before a broker outage.  The long-lived
+            # librdkafka clients reconnect themselves; the next request pulls fresh data.
+            self._metadata_cache = {"at": 0.0, "value": None}
+            now = time.monotonic()
+            if getattr(self, "_available", None) is not False:
+                logger.warning("Kafka metadata unavailable; librdkafka will reconnect automatically: %s", exc)
+                self._last_unavailable_log_at = now
+            elif now - getattr(self, "_last_unavailable_log_at", 0.0) >= 30:
+                logger.warning("Kafka is still unavailable; librdkafka retry continues: %s", exc)
+                self._last_unavailable_log_at = now
+            self._available = False
+            raise
+        if getattr(self, "_available", None) is False:
+            logger.info("Kafka metadata connection recovered")
+        self._available = True
+        self._last_unavailable_log_at = 0.0
         self._metadata_cache = {"at": time.monotonic(), "value": value}
         return value
 

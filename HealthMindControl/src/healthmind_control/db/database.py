@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from contextlib import asynccontextmanager, suppress
 from typing import Any, AsyncIterator
@@ -8,6 +9,9 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool, PoolTimeout
 
 from ..config import Settings
+
+
+logger = logging.getLogger(__name__)
 
 
 REQUIRED_TABLES = {
@@ -36,18 +40,57 @@ class Database:
     def __init__(self, cfg: Settings):
         self.cfg = cfg
         self.pool: AsyncConnectionPool | None = None
-        self.write_enabled = False
         self.connected = False       # 最近一次数据库交互是否成功（卡片据此显示真实健康度）
-        self.schema_error: str | None = None
-        self.write_features: dict[str, bool] = {
+        self._schema_compatible = False
+        self._schema_error: str | None = None
+        self._connection_error: str | None = None
+        self._write_features: dict[str, bool] = {
             "recovery": False, "releases": False, "debug": False, "expert": False, "fixtures": False,
         }
         self._probe_task: asyncio.Task | None = None
         self._down_until = 0.0   # 熔断：连接失败后短时间内直接快速失败，避免多查询叠加超时
+        self._outage_reported = False
+        self._last_outage_log_at = 0.0
+
+    @property
+    def write_enabled(self) -> bool:
+        return bool(self.pool and self.connected and self._schema_compatible)
+
+    @property
+    def write_features(self) -> dict[str, bool]:
+        return {name: enabled and self.connected for name, enabled in self._write_features.items()}
+
+    @property
+    def schema_error(self) -> str | None:
+        return self._connection_error or self._schema_error
+
+    def _mark_down(self, exc: Exception | str) -> None:
+        message = str(exc)
+        now = time.monotonic()
+        self.connected = False
+        self._connection_error = f"数据库暂不可用（后台自动重连中）: {message}"
+        self._down_until = now + 5
+        if not self._outage_reported:
+            logger.warning("PostgreSQL connection lost; writes are temporarily disabled: %s", message)
+            self._outage_reported = True
+            self._last_outage_log_at = now
+        elif now - self._last_outage_log_at >= 30:
+            logger.warning("PostgreSQL is still unavailable; background retry continues: %s", message)
+            self._last_outage_log_at = now
+
+    def _mark_up(self) -> None:
+        recovered = self._outage_reported
+        self.connected = True
+        self._connection_error = None
+        self._down_until = 0.0
+        self._outage_reported = False
+        self._last_outage_log_at = 0.0
+        if recovered:
+            logger.info("PostgreSQL connection recovered")
 
     async def open(self) -> None:
         if not self.cfg.database_dsn:
-            self.schema_error = "HMC_DATABASE_DSN 未配置"
+            self._schema_error = "HMC_DATABASE_DSN 未配置"
             return
         self.pool = AsyncConnectionPool(
             self.cfg.database_dsn,
@@ -64,23 +107,31 @@ class Database:
                 # timeout=3 + 熔断窗口保证，不会因为握手慢而叠加成十几秒
                 "connect_timeout": 10,
             },
+            check=AsyncConnectionPool.check_connection,
             open=False,
         )
         await self.pool.open(wait=False)
         self._probe_task = asyncio.create_task(self._verify_schema_loop())
 
     async def _verify_schema_loop(self) -> None:
-        """后台自检：连接成功后校验表结构；连接失败则每 5 秒重试（控制台照常可用）。"""
+        """Single background probe: reconnect and revalidate schema without a restart."""
+        delay = 1.0
         while True:
             try:
-                await self.verify_schema()
-                return
+                if not self.connected:
+                    await self.verify_schema()
+                    delay = 1.0
+                else:
+                    # Keep one cheap probe alive even without SSE subscribers so an
+                    # outage is detected and all page queries can fail fast together.
+                    await self.fetch_one("SELECT 1 AS ok", strict=True)
+                await asyncio.sleep(5)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self.write_enabled = False
-                self.schema_error = f"数据库连接失败（自动重试中）: {exc}"
-                await asyncio.sleep(5)
+                self._mark_down(exc)
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 30.0)
 
     async def close(self) -> None:
         if self._probe_task:
@@ -94,17 +145,16 @@ class Database:
 
     async def verify_schema(self) -> None:
         if self.cfg.nutri_database_dsn and self.cfg.nutri_database_dsn != self.cfg.database_dsn:
-            self.connected = True
-            self.write_enabled = False
-            self.write_features = {key: False for key in self.write_features}
-            self.schema_error = "当前版本不允许跨数据库直接写修复；请将 healthmind/nutri 配置为同一 PostgreSQL DSN"
+            self._mark_up()
+            self._schema_compatible = False
+            self._write_features = {key: False for key in self._write_features}
+            self._schema_error = "当前版本不允许跨数据库直接写修复；请将 healthmind/nutri 配置为同一 PostgreSQL DSN"
             return
         rows = await self.fetch_all(
             "SELECT table_schema||'.'||table_name AS name FROM information_schema.tables "
             "WHERE table_schema IN ('healthmind','nutri')",
             strict=True,
         )
-        self.connected = True
         missing = REQUIRED_TABLES - {row["name"] for row in rows}
         column_rows = await self.fetch_all(
             "SELECT table_schema||'.'||table_name AS name, column_name FROM information_schema.columns "
@@ -122,20 +172,21 @@ class Database:
           FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
           WHERE n.nspname='healthmind' AND t.relname='workflow_release_audits'
             AND c.contype='c' AND pg_get_constraintdef(c.oid) ILIKE '%%tools_bound%%'
-        """)
+        """, strict=True)
         base_compatible = self.pool is not None and not missing and not missing_columns
-        self.write_enabled = base_compatible
-        self.write_features = {
+        self._schema_compatible = base_compatible
+        self._write_features = {
             "recovery": base_compatible, "debug": base_compatible,
             "expert": base_compatible, "fixtures": base_compatible,
             "releases": base_compatible and bool(audit_check),
         }
         if missing:
-            self.schema_error = f"缺少数据表: {', '.join(sorted(missing))}"
+            self._schema_error = f"缺少数据表: {', '.join(sorted(missing))}"
         elif missing_columns:
-            self.schema_error = "字段不兼容: " + "; ".join(f"{k}({','.join(v)})" for k, v in missing_columns.items())
+            self._schema_error = "字段不兼容: " + "; ".join(f"{k}({','.join(v)})" for k, v in missing_columns.items())
         else:
-            self.schema_error = None if audit_check else "版本写入已禁用：workflow_release_audits 缺少 tools_bound(V3) 约束"
+            self._schema_error = None if audit_check else "版本写入已禁用：workflow_release_audits 缺少 tools_bound(V3) 约束"
+        self._mark_up()
 
     async def fetch_all(self, sql: str, params: tuple[Any, ...] = (), strict: bool = False) -> list[dict[str, Any]]:
         """执行只读查询。
@@ -145,27 +196,24 @@ class Database:
         """
         if not self.pool:
             return []
-        if not strict and time.monotonic() < self._down_until:
-            return []      # 熔断窗口内直接返回空结果，避免每个查询各等一次连接超时
+        if not strict and not self.connected:
+            return []      # 断线期间只有后台探针访问连接池，避免页面/SSE 制造连接风暴
         try:
             async with self.pool.connection() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(sql, params)
                     rows = list(await cur.fetchall())
-            self._down_until = 0.0
-            self.connected = True
+            if not strict:
+                self._mark_up()
             return rows
         except (OperationalError, InterfaceError, PoolTimeout) as exc:
+            self._mark_down(exc)
             if strict:
                 raise
-            self.write_enabled = False
-            self.connected = False
-            self._down_until = time.monotonic() + 5
-            self.schema_error = f"数据库查询失败: {exc}"
             return []
 
-    async def fetch_one(self, sql: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
-        rows = await self.fetch_all(sql, params)
+    async def fetch_one(self, sql: str, params: tuple[Any, ...] = (), strict: bool = False) -> dict[str, Any] | None:
+        rows = await self.fetch_all(sql, params, strict=strict)
         return rows[0] if rows else None
 
     @asynccontextmanager
@@ -179,6 +227,7 @@ class Database:
                     await conn.execute("SET LOCAL statement_timeout='15s'")
                     yield conn
         except (OperationalError, InterfaceError, PoolTimeout) as exc:
+            self._mark_down(exc)
             raise RuntimeError(f"数据库不可用: {exc}") from exc
 
     @asynccontextmanager

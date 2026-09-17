@@ -30,6 +30,9 @@ class StatusBroadcaster:
 
     async def _run(self) -> None:
         while True:
+            if not self.subscribers:
+                await asyncio.sleep(self.interval)
+                continue
             try:
                 payload = await self.repo.status_light()
             except Exception as exc:
