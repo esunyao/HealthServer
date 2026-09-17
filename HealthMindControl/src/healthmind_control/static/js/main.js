@@ -12,7 +12,8 @@ export function $$(sel, root) { return Array.from((root || document).querySelect
 
 export function fmtTs(iso) {
   if (!iso) return "-";
-  const d = new Date(iso);
+  const value = typeof iso === "number" && iso < 1e12 ? iso * 1000 : iso;
+  const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(iso);
   return d.toLocaleString("zh-CN", { hour12: false });
 }
@@ -23,9 +24,35 @@ export function fmtDurMs(ms) {
   return (ms / 60000).toFixed(1) + " min";
 }
 
+export class HttpError extends Error {
+  constructor(message, status, detail) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+    this.detail = detail || {};
+    this.code = this.detail.code || null;
+    this.canRetry = !!this.detail.can_retry;
+    this.requiresRepreview = !!this.detail.requires_repreview;
+    this.operationId = this.detail.operation_id || null;
+  }
+}
+
+async function responseError(r) {
+  const raw = await r.text();
+  let payload = null;
+  try { payload = JSON.parse(raw); } catch { /* plain text or proxy HTML */ }
+  const detail = payload && payload.detail;
+  if (detail && typeof detail === "object") {
+    return new HttpError(detail.message || JSON.stringify(detail), r.status, detail);
+  }
+  const message = typeof detail === "string" ? detail
+    : (payload && payload.error ? String(payload.error) : r.status + ": " + raw.slice(0, 300));
+  return new HttpError(message, r.status, {});
+}
+
 export async function getJson(url) {
   const r = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!r.ok) throw new Error(await errText(r));
+  if (!r.ok) throw await responseError(r);
   return r.json();
 }
 export async function postJson(url, body) {
@@ -35,7 +62,7 @@ export async function postJson(url, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!r.ok) throw new Error(await errText(r));
+  if (!r.ok) throw await responseError(r);
   return r.json();
 }
 export async function errText(r) {
@@ -45,7 +72,9 @@ export async function errText(r) {
   const raw = await r.text();
   try {
     const data = JSON.parse(raw);
-    return data && (data.detail || data.error) ? String(data.detail || data.error) : r.status + ": " + JSON.stringify(data).slice(0, 300);
+    const detail = data && (data.detail || data.error);
+    if (detail && typeof detail === "object") return detail.message || JSON.stringify(detail);
+    return detail ? String(detail) : r.status + ": " + JSON.stringify(data).slice(0, 300);
   } catch {
     return r.status + ": " + raw.slice(0, 300);
   }
@@ -55,6 +84,8 @@ export async function errText(r) {
 export function toast(msg, type) {
   const stack = document.getElementById("toasts");
   if (!stack) { alert(msg); return; }
+  const duplicate = Array.from(stack.children).find((item) => item.textContent === String(msg));
+  if (duplicate) return;
   const el = document.createElement("div");
   el.className = "toast " + (type || "");
   el.textContent = msg;

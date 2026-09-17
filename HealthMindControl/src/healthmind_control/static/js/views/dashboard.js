@@ -114,6 +114,15 @@ export function applySummary(s) {
   } else {
     healthCards(merged);
   }
+  if (merged.database && merged.database.available === false) {
+    const taskBox = document.getElementById("task-stats");
+    if (taskBox) taskBox.innerHTML = '<div class="muted">数据库暂不可用，统计已暂停（不是 0 条）</div>';
+    const prodBox = document.getElementById("production-card");
+    if (prodBox) prodBox.innerHTML = '<div class="muted">数据库恢复并完成 Schema 校验后自动刷新</div>';
+    const failureBox = document.getElementById("recent-failures");
+    if (failureBox) failureBox.innerHTML = '<tr><td colspan="5" class="empty">数据库暂不可用，未返回失败任务统计</td></tr>';
+    return;
+  }
   taskStats(merged.tasks);
   if (document.getElementById("production-card")) productionCard(merged.production);
   if (document.getElementById("recent-failures")) failures(merged.recent_failures);
@@ -132,6 +141,11 @@ const sectionMeta = [
 function backlogTables(b) {
   const box = document.getElementById("backlog-body");
   if (!b) { box.innerHTML = '<div class="muted">加载失败</div>'; return; }
+  if (b.available === false) {
+    box.innerHTML = '<div class="empty"><b>数据库暂不可用</b><br><span class="muted">'
+      + esc(b.error || "后台正在自动重连") + '；当前没有返回统计，不代表零滞留。</span></div>';
+    return;
+  }
   const parts = [];
   const chips = (b.counts || []).map(function (c) {
     return '<span class="badge ' + (c.status === "failed" || c.status === "publishing" ? "b-err" : c.status === "processed" || c.status === "published" ? "b-ok" : "b-warn") + '">'
