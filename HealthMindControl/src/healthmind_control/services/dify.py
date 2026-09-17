@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import subprocess
 import time
 from typing import Any
@@ -7,6 +8,13 @@ from typing import Any
 import httpx
 
 from ..config import Settings
+
+
+def _safe_cli_error(value: str) -> str:
+    """Limit CLI diagnostics and remove bearer/device-flow credentials."""
+    value = re.sub(r"(?i)\b(Bearer\s+)\S+", r"\1***", value)
+    value = re.sub(r"\bdfo[ae]_[A-Za-z0-9._~-]+", "***", value)
+    return value[-500:]
 
 
 class DifyService:
@@ -53,34 +61,84 @@ class DifyService:
         return completed.returncode, completed.stdout or completed.stderr
 
     async def discover(self, app_id: str | None = None, with_dsl: bool = False) -> dict[str, Any]:
-        """探测序列：workspaces → apps →（可选）describe app →（可选）export studio-app DSL。"""
-        result: dict[str, Any] = {}
-        commands = {"workspaces": ["get", "workspace", "-o", "json"], "apps": ["get", "app", "-o", "json"]}
-        if app_id:
-            commands["app"] = ["describe", "app", app_id, "-o", "json"]
-            if with_dsl:
-                commands["dsl"] = ["export", "studio-app", app_id, "-o", "yaml"]
-        for name, args in commands.items():
+        """通过 difyctl 的 OAuth 会话探测应用；从不读取或返回凭据。"""
+        result: dict[str, Any] = {
+            "authenticated": False,
+            "account": None,
+            "version": None,
+            "compatibility_warning": None,
+            "workspace": None,
+            "apps": [],
+            "app": None,
+            "dsl": None,
+            "resolved": {},
+            "errors": {},
+        }
+
+        async def json_command(name: str, args: list[str]) -> dict[str, Any] | None:
             try:
                 code, text = await self._run_difyctl(args)
-                if code:
-                    result[name] = {"error": text[-500:] or f"exit code {code}"}
-                    continue
-                if name == "dsl":
-                    result[name] = {"yaml": text}
-                else:
-                    try:
-                        result[name] = json.loads(text)
-                    except json.JSONDecodeError:
-                        result[name] = {"raw": text[:2000]}
+            except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+                result["errors"][name] = _safe_cli_error(str(exc))
+                return None
             except Exception as exc:
-                result[name] = {"error": str(exc)}
-        return result
+                result["errors"][name] = _safe_cli_error(str(exc))
+                return None
+            if code:
+                result["errors"][name] = _safe_cli_error(text) or f"exit code {code}"
+                return None
+            try:
+                value = json.loads(text)
+            except json.JSONDecodeError:
+                result["errors"][name] = "difyctl 未返回有效 JSON"
+                return None
+            return value if isinstance(value, dict) else {"data": value}
 
-    async def published(self, app_id: str) -> dict[str, Any]:
-        if not self.cfg.dify_console_token:
-            raise RuntimeError("未配置 HMC_DIFY_CONSOLE_TOKEN；请粘贴 workflows/publish JSON")
-        url = f"{self.cfg.dify_url.rstrip('/')}/console/api/apps/{app_id}/workflows/publish"
-        response = await self.client.get(url, headers={"Authorization": f"Bearer {self.cfg.dify_console_token}"})
-        response.raise_for_status()
-        return response.json()
+        version = await json_command("version", ["version", "-o", "json"])
+        if version:
+            result["version"] = version
+            compat = version.get("compat")
+            if isinstance(compat, dict) and compat.get("status") not in (None, "compatible", "ok"):
+                result["compatibility_warning"] = compat.get("detail") or str(compat.get("status"))
+
+        account = await json_command("auth", ["auth", "whoami", "--json"])
+        if not account:
+            result["login_hint"] = "请先在终端运行 difyctl auth login"
+            return result
+        result["authenticated"] = True
+        result["account"] = account
+
+        workspace_payload = await json_command("workspaces", ["get", "workspace", "-o", "json"])
+        workspaces = workspace_payload.get("workspaces", []) if workspace_payload else []
+        if isinstance(workspaces, list) and workspaces:
+            current = next((item for item in workspaces if item.get("current")), workspaces[0])
+            result["workspace"] = current
+            result["resolved"]["workspace_id"] = current.get("id")
+
+        apps_payload = await json_command("apps", ["get", "app", "-o", "json"])
+        apps = apps_payload.get("data", []) if apps_payload else []
+        if isinstance(apps, list):
+            result["apps"] = apps
+
+        if not app_id:
+            return result
+
+        app = await json_command("app", ["describe", "app", app_id, "-o", "json", "--refresh"])
+        if app:
+            result["app"] = app
+            info = app.get("info") if isinstance(app.get("info"), dict) else {}
+            result["resolved"]["app_id"] = info.get("id") or app_id
+            if isinstance(app.get("input_schema"), dict):
+                result["resolved"]["dify_input_schema"] = app["input_schema"]
+
+        if with_dsl:
+            try:
+                # --output/-o 是文件路径，不是格式；省略后 DSL 才会输出到 stdout。
+                code, text = await self._run_difyctl(["export", "studio-app", app_id])
+                if code:
+                    result["errors"]["dsl"] = _safe_cli_error(text) or f"exit code {code}"
+                else:
+                    result["dsl"] = {"yaml": text}
+            except Exception as exc:
+                result["errors"]["dsl"] = _safe_cli_error(str(exc))
+        return result

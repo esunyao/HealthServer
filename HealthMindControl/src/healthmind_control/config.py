@@ -25,7 +25,6 @@ class Settings(BaseSettings):
     dify_url: str = ""
     mcp_url: str = ""
     auth_url: str = ""
-    dify_console_token: str | None = None
     difyctl_path: str = "difyctl"
     nutri_api_url: str = ""
     enable_expert_mode: bool = False

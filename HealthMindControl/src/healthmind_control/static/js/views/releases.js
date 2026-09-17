@@ -192,37 +192,80 @@ function parsePublish() {
   }).catch(function (e) { toast("解析失败：" + e.message, "err"); });
 }
 
-async function consolePublished() {
-  const app = document.getElementById("w-app").value.trim();
-  if (!app) { toast("请先填写 app_id", "warn"); return; }
-  try {
-    const res = await getJson("/api/dify/published/" + encodeURIComponent(app));
-    fillFields({
-      app_id: app,
-      workflow_id: (res.workflow && (res.workflow.id || res.workflow.workflow_id)) || res.workflow_id,
-      workflow_version: (res.workflow && (res.workflow.version || res.workflow.updated_at || res.workflow.created_at)) || res.updated_at,
-    });
-    openDrawer("Console 返回（已核对字段）", res);
-  } catch (e) { toast("读取失败：" + e.message, "err"); }
+function renderDifyctlStatus(res) {
+  const host = document.getElementById("w-cli-status");
+  if (!res.authenticated) {
+    host.className = "small warn-line";
+    host.textContent = res.login_hint || "difyctl 尚未登录";
+    return;
+  }
+  const account = res.account || {};
+  const server = (res.version && res.version.server) || {};
+  const warning = res.compatibility_warning ? "；兼容性提示：" + res.compatibility_warning : "";
+  host.className = "small " + (warning ? "warn-line" : "muted");
+  host.textContent = "difyctl 已登录：" + (account.email || account.name || account.id || "当前账户")
+    + (server.version ? "；Dify " + server.version : "") + warning;
 }
 
-async function difyctlFill() {
-  const app = document.getElementById("w-app").value.trim();
-  const res = await getJson("/api/dify/discover" + (app ? "?app_id=" + encodeURIComponent(app) : ""));
-  const found = {};
-  const workspace = res.workspaces;
-  if (Array.isArray(workspace) && workspace.length) { found.workspace_id = workspace[0].id || workspace[0].workspace_id; }
-  else if (workspace && workspace.id) found.workspace_id = workspace.id;
-  const apps = res.apps;
-  if (Array.isArray(apps) && apps.length) { found.app_id = apps[0].id || apps[0].app_id; }
-  else if (apps && apps.id) found.app_id = apps.id;
-  const appDetail = res.app;
-  if (appDetail) {
-    const info = appDetail.info || appDetail.app || appDetail;
-    if (info.id) found.app_id = info.id;
+function renderDifyctlDetail(res) {
+  const detail = document.getElementById("w-cli-detail");
+  detail.innerHTML = "";
+  detail.appendChild(renderJsonTreeEl({
+    input_schema: res.resolved && res.resolved.dify_input_schema,
+    dsl: res.dsl,
+    errors: res.errors,
+  }));
+}
+
+function populateApps(apps, selected) {
+  const select = document.getElementById("w-app");
+  const workflowApps = (apps || []).filter(function (app) { return app.mode === "workflow"; });
+  select.innerHTML = "";
+  if (!workflowApps.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "没有可用的 workflow 应用";
+    select.appendChild(option);
+    return "";
   }
-  if (Object.keys(found).length) fillFields(found);
-  openDrawer("difyctl 探测结果", res);
+  workflowApps.forEach(function (app) {
+    const option = document.createElement("option");
+    option.value = app.id;
+    option.textContent = app.name + " · " + app.id;
+    select.appendChild(option);
+  });
+  select.value = workflowApps.some(function (app) { return app.id === selected; }) ? selected : workflowApps[0].id;
+  return select.value;
+}
+
+async function loadDifyctlApps(reloadSelected) {
+  const select = document.getElementById("w-app");
+  const selected = select.value;
+  try {
+    const res = await getJson("/api/dify/discover");
+    renderDifyctlStatus(res);
+    if (res.resolved) fillFields(res.resolved);
+    const appId = populateApps(res.apps, selected);
+    if (res.authenticated && appId && reloadSelected !== false) await loadDifyctlApp(appId);
+    else if (Object.keys(res.errors || {}).length) renderDifyctlDetail(res);
+  } catch (e) {
+    document.getElementById("w-cli-status").textContent = "difyctl 探测失败：" + e.message;
+    toast("difyctl 探测失败：" + e.message, "err");
+  }
+}
+
+async function loadDifyctlApp(appId) {
+  if (!appId) return;
+  try {
+    const res = await getJson("/api/dify/discover?app_id=" + encodeURIComponent(appId) + "&with_dsl=true");
+    renderDifyctlStatus(res);
+    if (res.resolved) {
+      // Dify 的运行输入 Schema 与 HealthMind 的 Kafka 事件契约不同，只展示，不覆盖发布 input_schema。
+      fillFields({ workspace_id: res.resolved.workspace_id, app_id: res.resolved.app_id });
+    }
+    renderDifyctlDetail(res);
+    if (Object.keys(res.errors || {}).length) toast("部分 difyctl 信息读取失败，请展开查看", "warn");
+  } catch (e) { toast("应用读取失败：" + e.message, "err"); }
 }
 
 // ---------------- 审计查询 ----------------
@@ -248,13 +291,14 @@ async function loadAudits() {
 
 function init() {
   document.getElementById("w-parse").addEventListener("click", parsePublish);
-  document.getElementById("w-console").addEventListener("click", consolePublished);
-  document.getElementById("w-dsl").addEventListener("click", difyctlFill);
+  document.getElementById("w-dsl").addEventListener("click", function () { loadDifyctlApps(true); });
+  document.getElementById("w-app").addEventListener("change", function (event) { loadDifyctlApp(event.target.value); });
   document.getElementById("w-preview").addEventListener("click", previewCreate);
   document.getElementById("rel-reload").addEventListener("click", loadReleases);
   document.getElementById("audit-go").addEventListener("click", loadAudits);
   loadToolDefs(DEFAULT_TOOLS);
   loadReleases();
+  loadDifyctlApps(true);
 }
 init();
 

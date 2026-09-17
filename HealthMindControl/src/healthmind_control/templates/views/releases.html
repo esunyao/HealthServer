@@ -5,19 +5,20 @@
   <h2 class="section">发布版本向导（登记 candidate）</h2>
   <div class="row" style="margin-bottom:10px">
     <button class="btn" id="w-parse" type="button">① 粘贴解析 publish / DSL</button>
-    <button class="btn" id="w-console" type="button">② 从 Dify Console 读 published（需 token）</button>
-    <button class="btn" id="w-dsl" type="button">③ difyctl describe app 回填</button>
-    <span class="small muted">④ 核对以下字段（schema 哈希将与 HealthMind Kotlin 一致性校验）</span>
+    <button class="btn" id="w-dsl" type="button">② 从 difyctl 重新读取</button>
+    <span class="small muted">③ 核对以下字段（schema 哈希将与 HealthMind Kotlin 一致性校验）</span>
   </div>
+  <div id="w-cli-status" class="small muted" style="margin-bottom:10px">正在通过 difyctl 检查登录与应用…</div>
   <textarea id="w-publish" rows="3" style="margin-bottom:10px" placeholder="粘贴 Dify workflows/publish 返回 JSON，或 studio DSL（YAML/JSON），再点 ①"></textarea>
   <div class="form-grid">
-    <div class="field"><label>app_id（② 需要）</label><input type="text" id="w-app" placeholder="console app UUID"></div>
+    <div class="field"><label>Dify 应用（OAuth 自动读取）</label><select id="w-app"><option value="">正在加载…</option></select></div>
     <div class="field"><label>workspace ID</label><input type="text" id="w-workspace"></div>
     <div class="field"><label>app ID</label><input type="text" id="w-appid"></div>
-    <div class="field"><label>published workflow ID</label><input type="text" id="w-workflow"></div>
-    <div class="field"><label>workflow version</label><input type="text" id="w-wfversion"></div>
+    <div class="field"><label>published workflow ID（版本历史 → 复制 ID）</label><input type="text" id="w-workflow" placeholder="difyctl 当前无法读取，需手动复制"></div>
+    <div class="field"><label>workflow version（手动核对）</label><input type="text" id="w-wfversion" placeholder="不要使用 app updated_at 代替"></div>
     <div class="field"><label>HealthMind release version</label><input type="text" id="w-version" placeholder="如 dify-20260901-v1"></div>
   </div>
+  <details style="margin-top:10px"><summary class="small">查看 difyctl 读取的 Dify 输入 Schema / DSL</summary><div id="w-cli-detail" class="small muted" style="margin-top:8px">选择应用后加载</div></details>
   <div class="form-grid" style="margin-top:10px">
     <div class="field"><label>input schema（JSON Schema）</label><textarea id="w-input" rows="7" style="font-family:var(--mono);font-size:12px">{
   "type": "object",

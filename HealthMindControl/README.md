@@ -31,7 +31,6 @@ Copy-Item HealthMindControl\.env.example HealthMindControl\.env   # 然后编辑
 | HMC_NUTRI_API_URL | 实验台调用 NutriMemo API 的地址（可选） |
 | HMC_ENABLE_EXPERT_MODE | `true` 才显示专家 SQL / offset 工具，默认 `false` |
 | HMC_DEBUG_DB_PATH | 调试运行和步骤历史的本地 SQLite 文件 |
-| HMC_DIFY_CONSOLE_TOKEN | 可选：只读自动读取 published workflow |
 | HMC_STALE_MINUTES / HMC_REFRESH_SECONDS | 滞留判定 / SSE 间隔 |
 | HMC_KAFKA_MAX_SCAN_MESSAGES | 消息查看扫描上限（默认 50000） |
 | HMC_KAFKA_SECURITY_PROTOCOL | 默认 PLAINTEXT；集群启用认证时填 SASL_PLAINTEXT / SSL / SASL_SSL |
@@ -45,6 +44,16 @@ Copy-Item HealthMindControl\.env.example HealthMindControl\.env   # 然后编辑
 | HMC_FIXTURE_REAPER_SECONDS | 到期测试任务扫描间隔，默认 10 秒 |
 
 ## 3. 启动与访问
+
+首次使用 Dify 版本页前，在终端登录一次：
+
+```powershell
+difyctl auth login
+```
+
+HMC 后续只调用 difyctl 的只读命令，由 difyctl 使用 Windows 系统凭据库中的 OAuth 会话自动认证和续期；
+HMC 不读取或输出凭据。当前 difyctl 尚不能查询 published workflow ID/version，这两个字段仍需从 Dify
+“版本历史”中复制。
 
 ```powershell
 cd E:\ProjectSpace\HealthServer

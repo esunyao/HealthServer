@@ -55,14 +55,6 @@ async def dify_discover(request: Request, app_id: str | None = None, with_dsl: b
     return await request.app.state.dify.discover(app_id, with_dsl)
 
 
-@router.get("/api/dify/published/{app_id}")
-async def dify_published(request: Request, app_id: str):
-    try:
-        return await request.app.state.dify.published(app_id)
-    except RuntimeError as exc:
-        raise HTTPException(409, str(exc))
-
-
 @router.post("/api/dify/analyze")
 async def dify_analyze(request: Request):
     """解析用户粘贴文本：workflows/publish JSON 或 studio DSL（YAML/JSON），尽力提取字段。"""
