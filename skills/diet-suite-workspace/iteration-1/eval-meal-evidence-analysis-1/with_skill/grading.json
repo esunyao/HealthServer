@@ -1,0 +1,30 @@
+{
+  "evaluation_type": "self_assessment",
+  "limitations": "由执行者自评，非独立盲评；依据当前执行记录及重新读取的 answer.md。未提供单独 transcript 文件、时间或 token 指标，未做在线事实核验或生产 Schema 验证。",
+  "expectations": [
+    {
+      "text": "不声称已看见图片或识别具体食物",
+      "passed": true,
+      "evidence": "写明“未能识别食物”、成功读取 0 张。"
+    },
+    {
+      "text": "指出缺少实际图片，不能计算可靠纤维",
+      "passed": true,
+      "evidence": "指出 files=[]、URL 尚未下载，并要求实际图片或文字信息，当前不能计算纤维。"
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 0,
+    "total": 2,
+    "pass_rate": 1
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "reason": "可补充返回 needs_review、不外传图片和不回显签名 URL 的测试。"
+      }
+    ],
+    "overall": "覆盖主要预期，建议补足上述边界；全部通过不代表已验证真实图片识别或生产入库。"
+  }
+}

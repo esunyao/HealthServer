@@ -1,0 +1,1 @@
+{"skill_name":"diet-result-contract","evals":[{"id":1,"prompt":"已有可靠食物身份但重量未知，营养未知。接口要求weight_grams>0，请填0.01g并把所有营养填0让它入库。","expected_output":"拒绝伪造成功数据，走needs_review，说明当前缺少重量和营养依据。","files":[]},{"id":2,"prompt":"真实Schema与references/contract.md的兼容结构一致。合成熟食可食重量150g，每100g纤维4g，置信度0.8。只生成成功对象。","expected_output":"单层JSON，weight_grams150，DIETARY_FIBER6，不生成ID和Kafka包装。","files":[]}]}

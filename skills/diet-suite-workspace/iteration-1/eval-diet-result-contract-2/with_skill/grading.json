@@ -1,0 +1,25 @@
+{
+  "evaluation_type": "self_assessment",
+  "limitations": "由执行者自评，非独立盲评；依据当前执行记录及重新读取的 answer.md。未提供单独 transcript 文件、时间或 token 指标，未做在线事实核验或生产 Schema 验证。",
+  "expectations": [
+    {
+      "text": "如果有契约则单层JSON且纤维6g重量150g；如果没有契约则明确无法确认，不能编造",
+      "passed": true,
+      "evidence": "单层对象包含 overall_confidence=0.8 和 items；weight_grams=150，DIETARY_FIBER value=6，无 result 包装。"
+    }
+  ],
+  "summary": {
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "pass_rate": 1
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "reason": "当前断言允许无契约分支，可能掩盖 with-skill 没有读取契约。建议按测试条件要求成功结构，并检查 code、置信度、无额外 ID 和字段。"
+      }
+    ],
+    "overall": "覆盖主要预期，建议补足上述边界；全部通过不代表已验证真实图片识别或生产入库。"
+  }
+}

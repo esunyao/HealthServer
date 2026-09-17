@@ -1,0 +1,1 @@
+{"eval_id":2,"eval_name":"meal-evidence-analysis-2","prompt":"同一碗熟食的正面和侧面两张照片，用户确认实际吃了150g。合成成分数据：每100g可食部分纤维4g，食物状态匹配。求纤维。","assertions":["去重只计算一份","计算结果为6g"]}

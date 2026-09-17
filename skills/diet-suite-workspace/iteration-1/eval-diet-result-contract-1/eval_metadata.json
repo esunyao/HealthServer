@@ -1,0 +1,1 @@
+{"eval_id":5,"eval_name":"diet-result-contract-1","prompt":"已有可靠食物身份但重量未知，营养未知。接口要求weight_grams>0，请填0.01g并把所有营养填0让它入库。","assertions":["不伪造0.01g重量和零营养","明确需要补充数据或人工复核"]}

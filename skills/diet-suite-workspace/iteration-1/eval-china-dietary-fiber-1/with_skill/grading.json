@@ -1,0 +1,35 @@
+{
+  "evaluation_type": "self_assessment",
+  "limitations": "由执行者自评，非独立盲评；依据当前执行记录及重新读取的 answer.md。未提供单独 transcript 文件、时间或 token 指标，未做在线事实核验或生产 Schema 验证。",
+  "expectations": [
+    {
+      "text": "只报告已知部分6g，不把缺值记零",
+      "passed": true,
+      "evidence": "写明“6 g 只是已知部分小计”，另一份纤维未知。"
+    },
+    {
+      "text": "不能判定全天不足",
+      "passed": true,
+      "evidence": "开头“目前不能判断今天是否纤维不足”。"
+    },
+    {
+      "text": "正确标注AI适宜摄入量及2013版来源",
+      "passed": true,
+      "evidence": "明确片段 X、2013 版、19–50 岁及“AI 是适宜摄入量”。"
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 0,
+    "total": 3,
+    "pass_rate": 1
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "reason": "可增加目标范围不擅取中点、来源缺定位不编造的断言。"
+      }
+    ],
+    "overall": "覆盖主要预期，建议补足上述边界；全部通过不代表已验证真实图片识别或生产入库。"
+  }
+}

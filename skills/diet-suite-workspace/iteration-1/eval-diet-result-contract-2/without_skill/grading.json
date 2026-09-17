@@ -1,0 +1,10 @@
+{
+  "expectations": [
+    {"text":"如果有契约则单层JSON且纤维6g重量150g；如果没有契约则明确无法确认，不能编造","passed":true,"evidence":"baseline 未读取契约，answer.md 明确说‘当前未提供真实 Schema，也未提供 references/contract.md 的内容，不能猜测字段名和结构’，并仅报告可确定的重量 150g、纤维 6g、置信度 0.8；没有编造成功对象。"}
+  ],
+  "summary":{"passed":1,"failed":0,"total":1,"pass_rate":1.0},
+  "eval_feedback": {
+    "suggestions":[{"assertion":"如果有契约则单层JSON且纤维6g重量150g；如果没有契约则明确无法确认，不能编造","reason":"该条件断言允许未提供成功对象的诚实拒绝通过，因此能衡量不编造，但不能单独衡量成功对象生成能力。若比较技能带来的结构化输出能力，应增加向两组同样提供实际契约的测试并验证完整结构。"}],
+    "overall":"本例 baseline 的诚实拒绝满足断言，但未完成生成成功对象；应区分这两种评估目标。"
+  }
+}

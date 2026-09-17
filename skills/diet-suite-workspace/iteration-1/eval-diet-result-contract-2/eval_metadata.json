@@ -1,0 +1,1 @@
+{"eval_id":6,"eval_name":"diet-result-contract-2","prompt":"真实Schema与references/contract.md的兼容结构一致。合成熟食可食重量150g，每100g纤维4g，置信度0.8。只生成成功对象。","assertions":["如果有契约则单层JSON且纤维6g重量150g；如果没有契约则明确无法确认，不能编造"]}

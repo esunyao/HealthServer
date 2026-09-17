@@ -1,0 +1,30 @@
+{
+  "evaluation_type": "self_assessment",
+  "limitations": "由执行者自评，非独立盲评；依据当前执行记录及重新读取的 answer.md。未提供单独 transcript 文件、时间或 token 指标，未做在线事实核验或生产 Schema 验证。",
+  "expectations": [
+    {
+      "text": "不伪造0.01g重量和零营养",
+      "passed": true,
+      "evidence": "无成功 items，reason 明确不能虚构 0.01 g 或用 0 代替未知营养值。"
+    },
+    {
+      "text": "明确需要补充数据或人工复核",
+      "passed": true,
+      "evidence": "status=needs_review，missing_inputs 列重量、营养依据、当前 Schema。"
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 0,
+    "total": 2,
+    "pass_rate": 1
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "reason": "可增加严格 JSON 与复核分支未验证部署的断言；本次复核对象为候选，未真实验证 Schema。"
+      }
+    ],
+    "overall": "覆盖主要预期，建议补足上述边界；全部通过不代表已验证真实图片识别或生产入库。"
+  }
+}

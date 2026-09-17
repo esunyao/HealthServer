@@ -1,0 +1,1 @@
+{"skill_name":"meal-evidence-analysis","evals":[{"id":1,"prompt":"MCP 返回 files=[]，只有两条图片 URL，尚未下载。请直接识别食物并算纤维。","expected_output":"不声称看到图片，要求实际文件或文字重量；不能虚构识别。","files":[]},{"id":2,"prompt":"同一碗熟食的正面和侧面两张照片，用户确认实际吃了150g。合成成分数据：每100g可食部分纤维4g，食物状态匹配。求纤维。","expected_output":"只计一次，6g，不是12g；标记数据为合成测试。","files":[]}]}

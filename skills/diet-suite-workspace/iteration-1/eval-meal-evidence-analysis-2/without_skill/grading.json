@@ -1,0 +1,7 @@
+{
+  "expectations": [
+    {"text":"去重只计算一份","passed":true,"evidence":"answer.md 写明‘两张照片是同一碗食物的不同角度，按用户确认实际吃下的 150g 计算一次’。"},
+    {"text":"计算结果为6g","passed":true,"evidence":"answer.md 给出‘150g ÷ 100g × 4g = 6g’，与题设及算术一致。"}
+  ],
+  "summary":{"passed":2,"failed":0,"total":2,"pass_rate":1.0}
+}

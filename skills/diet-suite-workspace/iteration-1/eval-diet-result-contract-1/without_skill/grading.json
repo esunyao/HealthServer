@@ -1,0 +1,7 @@
+{
+  "expectations": [
+    {"text":"不伪造0.01g重量和零营养","passed":true,"evidence":"answer.md 写明‘不能用 0.01g 和全零营养值代替未知数据’，没有生成此类入库对象。"},
+    {"text":"明确需要补充数据或人工复核","passed":true,"evidence":"answer.md 要求‘待补充实际重量及可靠营养数据后再提交’。"}
+  ],
+  "summary":{"passed":2,"failed":0,"total":2,"pass_rate":1.0}
+}

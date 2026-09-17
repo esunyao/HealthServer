@@ -1,0 +1,8 @@
+{
+  "expectations": [
+    {"text":"只报告已知部分6g，不把缺值记零","passed":true,"evidence":"answer.md 写明‘午餐已知部分贡献 6g，未知食物不能按 0g 处理；这也不是全天总摄入量’。"},
+    {"text":"不能判定全天不足","passed":true,"evidence":"answer.md 首句为‘目前不能判断今天是否纤维不足，因为只有午餐记录，还有一份食物的纤维含量未知’。"},
+    {"text":"正确标注AI适宜摄入量及2013版来源","passed":false,"evidence":"answer.md 引用‘题目提供的知识片段 X’和‘25–30g/日的 AI’，但未标注‘2013版’，也未解释 AI 为‘适宜摄入量’，未完整满足断言。"}
+  ],
+  "summary":{"passed":2,"failed":1,"total":3,"pass_rate":0.6666666666666666}
+}
