@@ -56,7 +56,7 @@ def test_mcp_execute_uses_ids_frozen_by_preview():
             return {key: intent[key] for key in ("task_id", "attempt_id", "trace_id", "session_id", "lease_until")}
 
     class FakeAudit:
-        def write(self, *args, **kwargs):
+        async def write(self, *args, **kwargs):
             return kwargs.get("operation_id", "op-1")
 
     class FakeStore:

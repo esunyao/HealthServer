@@ -59,17 +59,17 @@ async def sql_execute(request: Request, body: ExecuteRequest):
         return serial(replayed_result(cached))
     reason = preview.payload["reason"]
     op = preview.operation_id
-    write_started_audit(request, body.preview_token, "expert.sql", info["sha8"], reason, op,
-                        statement_class=info["statement_class"], sql_sha256=info["sha256"])
+    await write_started_audit(request, body.preview_token, "expert.sql", info["sha8"], reason, op,
+                              statement_class=info["statement_class"], sql_sha256=info["sha256"])
     try:
         result = await request.app.state.expert.execute(preview.payload["sql"])
-        request.app.state.audit.write("expert.sql", info["sha8"], reason, "succeeded", operation_id=op,
-                                      statement_class=info["statement_class"], row_count=result["row_count"])
+        await request.app.state.audit.write("expert.sql", info["sha8"], reason, "succeeded", operation_id=op,
+                                            statement_class=info["statement_class"], row_count=result["row_count"])
         final = serial(redact(result))
         request.app.state.previews.succeed(body.preview_token, final)
         return final
     except Exception as exc:
-        write_failed_audit(request, "expert.sql", info["sha8"], reason, op, exc)
+        await write_failed_audit(request, "expert.sql", info["sha8"], reason, op, exc)
         request.app.state.previews.indeterminate(body.preview_token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "SQL 执行结果无法确认，请通过操作编号检查审计和目标记录",

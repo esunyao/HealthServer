@@ -5,7 +5,7 @@
     <th>创建时间</th><th>任务 / Trace</th><th>类型 / 版本</th><th>状态</th>
     <th>来源服务</th><th>聚合</th><th>失败</th><th style="text-align:right">尝试</th><th>操作</th>
   </tr></thead>
-  <tbody>
+  <tbody id="tasks-table-body">
   {% for r in rows %}
     <tr>
       <td class="time-cell">{{ m.ts_cell(r.created_at) }}</td>
@@ -32,8 +32,6 @@
   </tbody>
 </table></div>
 {% else %}<div class="muted" style="padding:14px 4px">没有匹配记录</div>{% endif %}
-{% if next_url %}
-<div style="padding:8px 0;text-align:center">
-  <button class="btn sm" hx-get="{{ next_url }}" hx-target="#tasks-rows" hx-swap="append" hx-indicator="self">载入更多 ↓</button>
-</div>
-{% endif %}
+<div id="tasks-more" style="padding:8px 0;text-align:center">{% if next_url %}
+  <button class="btn sm" hx-get="{{ next_url }}" hx-target="#tasks-table-body" hx-swap="append" hx-indicator="self">载入更多 ↓</button>
+{% endif %}</div>

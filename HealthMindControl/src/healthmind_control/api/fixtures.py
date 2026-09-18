@@ -110,7 +110,7 @@ async def fixture_execute(request: Request, body: ExecuteRequest):
     if replayed:
         return serial(replayed_result(cached))
     op = preview.operation_id
-    write_started_audit(
+    await write_started_audit(
         request, body.preview_token, "fixture." + intent["operation"], intent["table_name"],
         intent["reason"], op, before=redact(snapshot), proposed=redact(intent["values"]),
     )
@@ -118,7 +118,7 @@ async def fixture_execute(request: Request, body: ExecuteRequest):
         result = await request.app.state.repo.execute_fixture(
             intent["operation"], intent["table_name"], intent["values"], intent["target"],
         )
-        request.app.state.audit.write(
+        await request.app.state.audit.write(
             "fixture." + intent["operation"], intent["table_name"], intent["reason"], "succeeded",
             operation_id=op, after=redact(result),
         )
@@ -126,8 +126,8 @@ async def fixture_execute(request: Request, body: ExecuteRequest):
         request.app.state.previews.succeed(body.preview_token, final)
         return final
     except Exception as exc:
-        write_failed_audit(request, "fixture." + intent["operation"], intent["table_name"],
-                           intent["reason"], op, exc)
+        await write_failed_audit(request, "fixture." + intent["operation"], intent["table_name"],
+                                 intent["reason"], op, exc)
         request.app.state.previews.indeterminate(body.preview_token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "写入结果无法确认，请通过操作编号检查审计和目标记录",
@@ -185,7 +185,7 @@ async def mcp_session_execute(request: Request, body: ExecuteRequest):
     if replayed:
         return serial(replayed_result(cached))
     op = preview.operation_id
-    write_started_audit(
+    await write_started_audit(
         request, body.preview_token, "fixture.mcp.create", intent["source_task_id"], intent["reason"], op,
         generated={key: intent[key] for key in ("task_id", "attempt_id", "trace_id")},
     )
@@ -201,7 +201,7 @@ async def mcp_session_execute(request: Request, body: ExecuteRequest):
             "fixture.mcp.create", "succeeded", result,
         )
         result["debug_run_id"] = run["run_id"]
-        request.app.state.audit.write(
+        await request.app.state.audit.write(
             "fixture.mcp.create", intent["source_task_id"], intent["reason"], "succeeded",
             operation_id=op, result=result,
         )
@@ -209,7 +209,7 @@ async def mcp_session_execute(request: Request, body: ExecuteRequest):
         request.app.state.previews.succeed(body.preview_token, final)
         return final
     except Exception as exc:
-        write_failed_audit(request, "fixture.mcp.create", intent["source_task_id"], intent["reason"], op, exc)
+        await write_failed_audit(request, "fixture.mcp.create", intent["source_task_id"], intent["reason"], op, exc)
         request.app.state.previews.indeterminate(body.preview_token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "MCP 测试记录写入结果无法确认，请通过操作编号检查审计",
@@ -253,12 +253,12 @@ async def _lifecycle_execute(request: Request, task_id: str, body: ExecuteReques
         return serial(replayed_result(cached))
     reason = preview.payload["reason"]
     op = preview.operation_id
-    write_started_audit(request, body.preview_token, f"fixture.mcp.{action}", task_id, reason, op)
+    await write_started_audit(request, body.preview_token, f"fixture.mcp.{action}", task_id, reason, op)
     try:
         result = (await request.app.state.repo.renew_mcp_session(
             task_id, request.app.state.settings.fixture_mcp_lease_minutes,
         )) if action == "renew" else await request.app.state.repo.close_mcp_session(task_id)
-        request.app.state.audit.write(
+        await request.app.state.audit.write(
             f"fixture.mcp.{action}", task_id, reason, "succeeded", operation_id=op, result=result,
         )
         final = serial(result)
@@ -266,11 +266,11 @@ async def _lifecycle_execute(request: Request, task_id: str, body: ExecuteReques
         return final
     except RuntimeError as exc:
         request.app.state.previews.release(body.preview_token, str(exc))
-        write_failed_audit(request, f"fixture.mcp.{action}", task_id, reason, op, exc)
+        await write_failed_audit(request, f"fixture.mcp.{action}", task_id, reason, op, exc)
         raise control_error(409, "EXECUTION_REJECTED", str(exc), can_retry=True,
                             operation_id=op) from exc
     except Exception as exc:
-        write_failed_audit(request, f"fixture.mcp.{action}", task_id, reason, op, exc)
+        await write_failed_audit(request, f"fixture.mcp.{action}", task_id, reason, op, exc)
         request.app.state.previews.indeterminate(body.preview_token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "会话操作结果无法确认，请通过操作编号检查审计和目标记录",
@@ -348,17 +348,17 @@ async def outbox_release_execute(request: Request, body: ExecuteRequest):
     if replayed:
         return serial(replayed_result(cached))
     op = preview.operation_id
-    write_started_audit(request, body.preview_token, "fixture.outbox.release", intent["event_id"],
-                        intent["reason"], op)
+    await write_started_audit(request, body.preview_token, "fixture.outbox.release", intent["event_id"],
+                              intent["reason"], op)
     try:
         result = await request.app.state.repo.release_fixture_outbox(intent["schema_name"], intent["event_id"])
-        request.app.state.audit.write("fixture.outbox.release", intent["event_id"], intent["reason"],
-                                      "succeeded", operation_id=op, result=result)
+        await request.app.state.audit.write("fixture.outbox.release", intent["event_id"], intent["reason"],
+                                            "succeeded", operation_id=op, result=result)
         final = serial(redact(result))
         request.app.state.previews.succeed(body.preview_token, final)
         return final
     except Exception as exc:
-        write_failed_audit(request, "fixture.outbox.release", intent["event_id"], intent["reason"], op, exc)
+        await write_failed_audit(request, "fixture.outbox.release", intent["event_id"], intent["reason"], op, exc)
         request.app.state.previews.indeterminate(body.preview_token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "outbox 放行结果无法确认，请通过操作编号检查审计和目标记录",

@@ -49,7 +49,7 @@ class DebugStore:
         with sqlite3.connect(self.path) as db:
             db.row_factory = sqlite3.Row
             rows = db.execute(
-                "SELECT * FROM debug_runs ORDER BY created_at DESC LIMIT ?", (min(limit, 100),)
+                "SELECT * FROM debug_runs ORDER BY created_at DESC LIMIT ?", (max(1, min(limit, 100)),)
             ).fetchall()
         return [self._run(dict(row)) for row in rows]
 

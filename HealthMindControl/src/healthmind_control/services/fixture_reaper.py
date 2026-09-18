@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import suppress
 
 
@@ -10,6 +11,7 @@ class FixtureSessionReaper:
         self.audit = audit
         self.interval_seconds = interval_seconds
         self._task: asyncio.Task | None = None
+        self._logger = logging.getLogger(__name__)
 
     def start(self) -> None:
         if self._task is None:
@@ -26,9 +28,21 @@ class FixtureSessionReaper:
         while True:
             await asyncio.sleep(self.interval_seconds)
             try:
-                for task_id in await self.repo.close_expired_mcp_sessions():
-                    self.audit.write(
-                        "fixture.mcp.expire", task_id, "MCP 调试租期到期", "succeeded",
-                    )
+                expired = await self.repo.close_expired_mcp_sessions()
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                self.audit.write("fixture.mcp.expire", "scan", "MCP 调试租期扫描", "failed", error=str(exc))
+                self._logger.exception("MCP fixture expiry scan failed: %s", exc)
+                await self._record("scan", "failed", error=str(exc))
+                continue
+            for task_id in expired:
+                await self._record(task_id, "succeeded")
+
+    async def _record(self, target: str, outcome: str, **details) -> None:
+        try:
+            await self.audit.write("fixture.mcp.expire", target, "MCP 调试租期扫描", outcome, **details)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # Never allow best-effort audit I/O to terminate the reaper task.
+            self._logger.exception("MCP fixture reaper audit write failed: %s", exc)

@@ -63,7 +63,11 @@ def create_app() -> FastAPI:
         app.state.csrf_token = secrets.token_urlsafe(32)
         app.state.settings = settings
         app.state.previews = PreviewStore(settings.preview_ttl_seconds)
-        app.state.audit = AuditLog(settings.audit_path)
+        app.state.audit = AuditLog(
+            settings.audit_path,
+            rotate_bytes=settings.audit_rotate_bytes,
+            retention_days=settings.audit_retention_days,
+        )
         app.state.refresh_seconds = settings.refresh_seconds
         app.state.db = Database(settings)
         await app.state.db.open()

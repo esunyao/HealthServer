@@ -64,7 +64,16 @@ async function perform(el) {
     if (swap === "append") {
       const holder = document.createElement("div");
       holder.innerHTML = html;
-      Array.from(holder.children).forEach((child) => target.appendChild(child));
+      holder.querySelectorAll("[data-hx-oob-target]").forEach((replacement) => {
+        const old = document.querySelector(replacement.dataset.hxOobTarget);
+        if (old) {
+          old.replaceWith(replacement);
+          scan(replacement);
+        }
+      });
+      const rowTemplate = holder.querySelector("template[data-hx-rows]");
+      if (rowTemplate) target.appendChild(rowTemplate.content.cloneNode(true));
+      else Array.from(holder.children).forEach((child) => target.appendChild(child));
     } else if (swap === "outerHTML") {
       const holder = document.createElement("div");
       holder.innerHTML = html;

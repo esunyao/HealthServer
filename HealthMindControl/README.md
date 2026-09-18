@@ -38,7 +38,7 @@ Copy-Item HealthMindControl\.env.example HealthMindControl\.env   # 然后编辑
 | HMC_KAFKA_SSL_CA_LOCATION | 自定义 CA 证书路径（SSL/SASL_SSL 时可选） |
 | HMC_KAFKA_METADATA_CACHE_SECONDS / HMC_PROBE_CACHE_TTL_SECONDS | 缓存节流 |
 | HMC_QUERY_LIMIT | 受控列表默认查询上限 |
-| HMC_AUDIT_PATH | JSONL 审计文件路径 |
+| HMC_AUDIT_PATH / HMC_AUDIT_ROTATE_BYTES / HMC_AUDIT_RETENTION_DAYS | JSONL 审计路径、轮转大小（默认 50 MiB）和 HMC 归档保留期（默认 90 天） |
 | HMC_PREVIEW_TTL_SECONDS / HMC_TASK_RETENTION_DAYS | 预览令牌 / 克隆保留期 |
 | HMC_FIXTURE_MCP_LEASE_MINUTES | MCP 测试数据租期，默认 50 分钟，范围 5–55 分钟 |
 | HMC_FIXTURE_REAPER_SECONDS | 到期测试任务扫描间隔，默认 10 秒 |
@@ -114,7 +114,7 @@ JS 语法由 pytest 用 node --check 递归校验（node 缺失自动跳过）�
 - Kafka 消息查看绝不提交业务消费组 offset；控制台自身诊断组（healthmind-control-*）不在列表中展示。
 - 所有写操作经过预览令牌和确认链路；执行请求不能覆盖预览时保存的参数。
 - HealthMind 收件箱不存 payload；缺失时支持重放 capture-ready，已存在时不会重置原 inbox。任务克隆与 release/task 约束仍以公开合规摘要为准。
-- 审计：var/audit/admin-actions.jsonl（portalocker + fsync），DB workflow_release_audits 每变更同写。
+- 审计：var/audit/admin-actions.jsonl（异步文件线程、portalocker + fsync）；到达 50 MiB 自动轮转，仅清理超过保留期的 HMC 自有归档，DB workflow_release_audits 每变更同写。
 - Dify API Key 只由 Nacos/环境变量管理；difyctl 导出永不加 --include-secret；不读取凭据文件。
 - 专家模式允许单条 SQL 和离线消费组 offset 调整；默认关闭，仍不提供 topic 创建/删除、物理删除向导或修改历史成功记录的普通表单。
 - Kafka payload 始终以编辑器原始 UTF-8 文本发送；服务端负责 JSON 校验，避免浏览器把 BIGINT 四舍五入。

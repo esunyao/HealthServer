@@ -1,6 +1,6 @@
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.templating import Jinja2Templates
 
 router = APIRouter()
@@ -24,39 +24,39 @@ ROW_PARAMS = ("status", "analysis", "code", "service", "subject_id", "since", "u
 
 
 @router.get("/ui/parts/tasks")
-async def parts_tasks(request: Request):
+async def parts_tasks(request: Request, limit: int = Query(50, ge=1, le=100), fragment: bool = False):
     repo = request.app.state.repo
     result = await repo.list_tasks(
         **{k: request.query_params.get(k) for k in TASK_PARAMS},
         cursor=request.query_params.get("cursor"),
-        limit=min(int(request.query_params.get("limit", 50)), 100),
+        limit=limit,
     )
     next_cursor = result["next_cursor"]
     return templates(request).TemplateResponse(
-        request, "partials/task_table.html",
+        request, "partials/task_rows.html" if fragment else "partials/task_table.html",
         {"rows": result["items"], "next_url": (
-            "/ui/parts/tasks?" + _echo_params(request.query_params, TASK_PARAMS, next_cursor) if next_cursor else None
+            "/ui/parts/tasks?" + _echo_params(request.query_params, TASK_PARAMS, next_cursor) + "&fragment=1" if next_cursor else None
         )},
     )
 
 
 @router.get("/ui/parts/rows")
-async def parts_rows(request: Request, kind: str):
+async def parts_rows(request: Request, kind: str, limit: int = Query(50, ge=1, le=100), fragment: bool = False):
     repo = request.app.state.repo
     try:
         result = await repo.list_rows(
             kind,
             **{k: request.query_params.get(k) for k in ROW_PARAMS},
             cursor=request.query_params.get("cursor"),
-            limit=min(int(request.query_params.get("limit", 50)), 100),
+            limit=limit,
         )
     except KeyError:
         raise HTTPException(404, "unknown row kind")
     next_cursor = result["next_cursor"]
     from ..repositories.rows import get_kind
     return templates(request).TemplateResponse(
-        request, "partials/row_table.html",
+        request, "partials/row_rows.html" if fragment else "partials/row_table.html",
         {"kind": kind, "id_col": get_kind(kind).id_col, "rows": result["items"], "next_url": (
-            "/ui/parts/rows?kind=" + kind + "&" + _echo_params(request.query_params, ROW_PARAMS, next_cursor) if next_cursor else None
+            "/ui/parts/rows?kind=" + kind + "&" + _echo_params(request.query_params, ROW_PARAMS, next_cursor) + "&fragment=1" if next_cursor else None
         )},
     )

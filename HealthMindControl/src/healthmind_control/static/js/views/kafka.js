@@ -106,7 +106,7 @@ function messageRow(m, idx) {
     + '<td class="time-cell">' + fmtTs(m.timestamp) + "</td>"
     + '<td class="num">' + m.offset + "</td>"
     + '<td class="mono-cell ellip" style="max-width:150px" title="' + esc(m.key || "") + '">' + esc(m.key || "-") + "</td>"
-    + '<td class="num">' + Object.keys(m.headers || {}).length + "</td>"
+    + '<td class="num">' + (Array.isArray(m.headers) ? m.headers.length : Object.keys(m.headers || {}).length) + "</td>"
     + '<td class="mono-cell ellip" style="max-width:300px">' + esc(preview) + "</td></tr>";
 }
 
@@ -155,8 +155,9 @@ function showMessage(m) {
     + "<div><b>时间</b> " + fmtTs(m.timestamp) + "</div>"
     + "<div><b>Key</b> " + esc(m.key || "-") + "</div>"
     + "</div>";
-  const headers = Object.keys(m.headers || {}).length
-    ? '<h3 style="font-size:13px;margin:8px 0 4px">Headers</h3><div class="msg-meta">' + Object.entries(m.headers).map(function (h) { return "<div><b>" + esc(h[0]) + "</b> " + esc(h[1]) + "</div>"; }).join("") + "</div>"
+  const headerItems = Array.isArray(m.headers) ? m.headers : Object.entries(m.headers || {}).map(function (h) { return { key: h[0], value: h[1], encoding: "utf-8" }; });
+  const headers = headerItems.length
+    ? '<h3 style="font-size:13px;margin:8px 0 4px">Headers</h3><div class="msg-meta">' + headerItems.map(function (h) { return "<div><b>" + esc(h.key) + "</b> " + esc(h.value == null ? "(null)" : h.value) + (h.encoding && h.encoding !== "utf-8" ? ' <span class="small muted">[' + esc(h.encoding) + "]</span>" : "") + "</div>"; }).join("") + "</div>"
     : "";
   const payload = typeof m.payload === "string" ? m.payload : m.payload;
   const wrap = document.createElement("div");

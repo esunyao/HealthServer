@@ -13,6 +13,17 @@ def _uuid_or_none(value: str | None) -> str | None:
         return None
 
 
+def _manifest_meal_ref(manifest: Any) -> tuple[int, str] | None:
+    """Validate external JSONB references before using them in typed SQL parameters."""
+    if not isinstance(manifest, dict):
+        return None
+    meal_id, capture_id = manifest.get("meal_id"), manifest.get("capture_session_id")
+    try:
+        return int(meal_id), str(UUID(str(capture_id)))
+    except (TypeError, ValueError):
+        return None
+
+
 class TasksMixin:
     """AI 任务：筛选/keyset 分页列表（轻量投影）与任务详情聚合。"""
 
@@ -85,9 +96,8 @@ class TasksMixin:
               FROM healthmind.integration_outbox WHERE task_id = %s ORDER BY created_at
         """, (task_id,))
         meal = None
-        manifest = task.get("context_manifest") or {}
-        meal_id, capture_id = manifest.get("meal_id"), manifest.get("capture_session_id")
-        if meal_id is not None and capture_id:
+        reference = _manifest_meal_ref(task.get("context_manifest") or {})
+        if reference:
             meal = await self.db.fetch_one("""
                 SELECT m.meal_id, m.capture_session_id, m.meal_type, m.consumed_at, m.timezone,
                        m.local_date, m.analysis_status, m.status, m.created_at, m.updated_at,
@@ -97,6 +107,7 @@ class TasksMixin:
                   FROM nutri.meal_records m
                   JOIN nutri.meal_capture_sessions s USING (capture_session_id)
                  WHERE m.meal_id = %s AND m.capture_session_id = %s
-            """, (int(meal_id), str(capture_id)))
+            """, reference)
         return {"task": task, "attempts": attempts, "invocations": invocations,
-                "results": results, "outbox": outbox, "meal": meal}
+                "results": results, "outbox": outbox, "meal": meal,
+                "meal_reference_error": None if reference else "context_manifest 的 meal_id/capture_session_id 无效或缺失"}

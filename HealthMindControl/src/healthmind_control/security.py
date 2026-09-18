@@ -237,7 +237,7 @@ def require_database_available(request: Request) -> None:
         )
 
 
-def write_started_audit(
+async def write_started_audit(
     request: Request,
     preview_token: str,
     action: str,
@@ -248,7 +248,7 @@ def write_started_audit(
 ) -> None:
     """Persist the mandatory start audit before side effects, releasing on local I/O failure."""
     try:
-        request.app.state.audit.write(
+        await request.app.state.audit.write(
             action, target, reason, "started", operation_id=operation_id, **details,
         )
     except Exception as exc:
@@ -259,7 +259,7 @@ def write_started_audit(
         ) from exc
 
 
-def write_failed_audit(
+async def write_failed_audit(
     request: Request,
     action: str,
     target: str,
@@ -269,7 +269,7 @@ def write_failed_audit(
 ) -> None:
     """Best-effort terminal audit; never hide the original execution uncertainty."""
     try:
-        request.app.state.audit.write(
+        await request.app.state.audit.write(
             action, target, reason, "failed", operation_id=operation_id, error=str(error),
         )
     except Exception:

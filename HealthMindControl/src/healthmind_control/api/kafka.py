@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from ..models import ExecuteRequest, KafkaOffsetRequest, KafkaProduceRequest
 from ..security import (
@@ -21,19 +21,21 @@ async def groups(request: Request):
 
 
 @router.get("/api/kafka/messages")
-async def messages(request: Request, topic: str, partition: int = 0, start: str = "latest",
-                   offset: int | None = None, time_ms: int | None = None, limit: int = 50,
+async def messages(request: Request, topic: str, partition: int = Query(0, ge=0), start: str = "latest",
+                   offset: int | None = Query(None, ge=0), time_ms: int | None = Query(None, ge=0),
+                   limit: int = Query(50, ge=1, le=100),
                    key: str | None = None, event_id: str | None = None, trace_id: str | None = None,
-                   event_type: str | None = None, contains: str | None = None, max_scan: int | None = None):
+                   event_type: str | None = None, contains: str | None = None,
+                   max_scan: int | None = Query(None, ge=100, le=500000)):
     if start not in ("latest", "earliest", "offset", "time"):
         raise HTTPException(400, "start 取值应为 latest/earliest/offset/time")
     if start == "time" and time_ms is None:
         raise HTTPException(400, "start=time 需要 time_ms")
     if start == "offset" and offset is None:
         raise HTTPException(400, "start=offset 需要 offset")
-    return redact(await request.app.state.kafka.messages(
+    return serial(redact(await request.app.state.kafka.messages(
         topic, partition, start, offset, time_ms, limit, key, event_id, trace_id, event_type, contains, max_scan,
-    ))
+    )))
 
 
 @router.post("/api/kafka/produce/preview")
@@ -90,17 +92,17 @@ async def produce_execute(request: Request, body: ExecuteRequest):
     if replayed:
         return replayed_result(cached)
     op = preview.operation_id
-    write_started_audit(
+    await write_started_audit(
         request, body.preview_token or "", "kafka.produce", topic, str(intent["reason"]), op,
         payload_sha256=__import__("hashlib").sha256(str(intent["payload_text"]).encode("utf-8")).hexdigest(),
     )
     try:
         result = await request.app.state.kafka.produce(topic, intent.get("key"), str(intent["payload_text"]), intent.get("headers", {}), intent.get("partition"))
-        request.app.state.audit.write("kafka.produce", topic, str(intent["reason"]), "succeeded", operation_id=op, result=result)
+        await request.app.state.audit.write("kafka.produce", topic, str(intent["reason"]), "succeeded", operation_id=op, result=result)
         request.app.state.previews.succeed(body.preview_token or "", result)
         return result
     except Exception as exc:
-        write_failed_audit(request, "kafka.produce", topic, str(intent["reason"]), op, exc)
+        await write_failed_audit(request, "kafka.produce", topic, str(intent["reason"]), op, exc)
         request.app.state.previews.indeterminate(body.preview_token or "", str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "Kafka 交付结果无法确认，请通过操作编号检查审计和目标 topic",
@@ -152,14 +154,14 @@ async def offset_execute(request: Request, body: ExecuteRequest):
     if replayed:
         return replayed_result(cached)
     op = preview.operation_id
-    write_started_audit(request, body.preview_token, "kafka.offset", plan["group_id"], reason, op, before=plan)
+    await write_started_audit(request, body.preview_token, "kafka.offset", plan["group_id"], reason, op, before=plan)
     try:
         result = await request.app.state.kafka.alter_offset(plan)
-        request.app.state.audit.write("kafka.offset", plan["group_id"], reason, "succeeded", operation_id=op, result=result)
+        await request.app.state.audit.write("kafka.offset", plan["group_id"], reason, "succeeded", operation_id=op, result=result)
         request.app.state.previews.succeed(body.preview_token, result)
         return result
     except Exception as exc:
-        write_failed_audit(request, "kafka.offset", plan["group_id"], reason, op, exc)
+        await write_failed_audit(request, "kafka.offset", plan["group_id"], reason, op, exc)
         request.app.state.previews.indeterminate(body.preview_token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "消费组 offset 修改结果无法确认，请通过操作编号检查",

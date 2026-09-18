@@ -1,0 +1,7 @@
+{% import "partials/_macros.html" as m %}
+{% set skip_cols = ["payload", "context_manifest", "execution_metadata", "input_schema", "output_schema", "result_payload", "request_schema", "response_schema", "change_metadata", "description", "schema_error"] %}
+{% set columns = rows[0].keys() | list if rows else [] %}
+<template data-hx-rows>
+{% for r in rows %}<tr><td><button class="btn sm" type="button" data-drawer-url="/api/rows/{{ kind }}/{{ r.get(id_col) }}" data-drawer-title="{{ kind }} {{ r.get(id_col) }}">详情</button></td>{% for c in columns if c not in skip_cols %}<td class="{{ 'mono-cell' if c in ('task_id','event_id','attempt_id','meal_id','trace_id','capture_session_id','payload_sha256','result_sha256','input_schema_sha256','output_schema_sha256','invocation_id','result_id','release_id','item_id','image_id','bucket','object_key') else ('time-cell' if is_time_col(c) else '') }}">{{ m.cell(r.get(c), c) }}</td>{% endfor %}</tr>{% endfor %}
+</template>
+<div id="rows-more" data-hx-oob-target="#rows-more" style="padding:8px 0;text-align:center">{% if next_url %}<button class="btn sm" hx-get="{{ next_url }}" hx-target="#rows-table-body" hx-swap="append" hx-indicator="self">载入更多 ↓</button>{% endif %}</div>

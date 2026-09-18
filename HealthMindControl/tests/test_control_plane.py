@@ -78,7 +78,7 @@ def test_kafka_execute_uses_server_side_preview_intent():
             return {"offset": 1, "partition": 0}
 
     class FakeAudit:
-        def write(self, *args, **kwargs):
+        async def write(self, *args, **kwargs):
             return "op"
 
     app = FastAPI()
@@ -123,7 +123,7 @@ def test_kafka_warning_rejection_keeps_preview_reusable():
             return {"offset": 7, "partition": 0}
 
     class FakeAudit:
-        def write(self, *args, **kwargs):
+        async def write(self, *args, **kwargs):
             return kwargs.get("operation_id", "op")
 
     app = FastAPI()

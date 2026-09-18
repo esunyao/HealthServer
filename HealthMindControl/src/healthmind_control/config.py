@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     preview_ttl_seconds: int = Field(120, ge=30, le=600)
     task_retention_days: int = Field(180, ge=1, le=3650)
     audit_path: Path = ROOT / "var" / "audit" / "admin-actions.jsonl"
+    audit_rotate_bytes: int = Field(50 * 1024 * 1024, ge=1024 * 1024, le=1024 * 1024 * 1024)
+    audit_retention_days: int = Field(90, ge=1, le=3650)
     kafka_max_scan_messages: int = Field(50000, ge=100, le=500000)
     kafka_metadata_cache_seconds: int = Field(8, ge=2, le=300)
     probe_cache_ttl_seconds: int = Field(15, ge=5, le=300)

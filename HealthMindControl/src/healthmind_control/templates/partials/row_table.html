@@ -8,7 +8,7 @@
     <th style="width:44px"></th>
     {% for c in columns if c not in skip_cols %}<th>{{ col_label(c) }}</th>{% endfor %}
   </tr></thead>
-  <tbody>
+  <tbody id="rows-table-body">
   {% for r in rows %}
     <tr>
       <td>
@@ -22,8 +22,6 @@
   </tbody>
 </table></div>
 {% else %}<div class="muted" style="padding:14px 4px">没有匹配记录</div>{% endif %}
-{% if next_url %}
-<div style="padding:8px 0;text-align:center">
-  <button class="btn sm" hx-get="{{ next_url }}" hx-target="#rows-rows" hx-swap="append" hx-indicator="self">载入更多 ↓</button>
-</div>
-{% endif %}
+<div id="rows-more" style="padding:8px 0;text-align:center">{% if next_url %}
+  <button class="btn sm" hx-get="{{ next_url }}" hx-target="#rows-table-body" hx-swap="append" hx-indicator="self">载入更多 ↓</button>
+{% endif %}</div>

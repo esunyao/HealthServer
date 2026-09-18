@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from psycopg.types.json import Jsonb
 
@@ -67,8 +67,12 @@ class RecoveryMixin:
         meal_id, capture_id = manifest.get("meal_id"), manifest.get("capture_session_id")
         meal_info: dict[str, Any] | None = None
         reasons: list[str] = []
-        if meal_id is None or capture_id is None:
-            reasons.append("任务 context_manifest 缺少 meal_id/capture_session_id")
+        try:
+            meal_ref = int(meal_id), str(UUID(str(capture_id)))
+        except (TypeError, ValueError):
+            meal_ref = None
+        if meal_ref is None:
+            reasons.append("任务 context_manifest 的 meal_id/capture_session_id 缺失或格式无效")
         else:
             meal_info = await self.db.fetch_one("""
                 SELECT m.meal_id, m.status AS meal_status, m.analysis_status,
@@ -78,7 +82,7 @@ class RecoveryMixin:
                   FROM nutri.meal_records m
                   JOIN nutri.meal_capture_sessions s USING (capture_session_id)
                  WHERE m.meal_id = %s AND m.capture_session_id = %s
-            """, (int(meal_id), str(capture_id)))
+            """, meal_ref)
             if not meal_info:
                 reasons.append("关联餐食记录不存在")
             else:

@@ -1,0 +1,13 @@
+{% import "partials/_macros.html" as m %}
+<template data-hx-rows>
+{% for r in rows %}
+  <tr>
+    <td class="time-cell">{{ m.ts_cell(r.created_at) }}</td>
+    <td><div class="mono-cell ellip" style="max-width:200px" title="{{ r.task_id }}">{{ r.task_id }}</div><div class="small muted mono-cell ellip" style="max-width:200px" title="{{ r.trace_id }}">trace {{ (r.trace_id or '')[:16] }}</div></td>
+    <td><span class="badge b-info">{{ r.task_type_code }}</span> <span class="small muted">{{ r.release_version }}</span></td><td><span class="badge {{ badge_cls(r.status) }}">{{ r.status }}</span></td><td>{{ r.requester_service }}</td>
+    <td class="small muted mono-cell ellip" style="max-width:150px" title="{{ r.aggregate_id }}">{{ r.aggregate_type }}:{{ (r.aggregate_id or '')[:18] }}</td><td>{% if r.failure_code %}<span class="badge b-err" title="{{ r.failure_message or '' }}">{{ r.failure_code }}</span>{% else %}<span class="muted">-</span>{% endif %}</td><td class="num">{{ r.attempt_count }}</td>
+    <td><div class="row-actions"><a class="btn sm primary" href="/ui/fixtures?preset=mcp&amp;source={{ r.task_id }}">MCP 测试</a><button class="btn sm" type="button" data-drawer-url="/api/tasks/{{ r.task_id }}" data-drawer-title="任务 {{ r.task_id }}">详情</button><a class="btn sm ghost" href="/ui/trace?q={{ r.task_id }}">链路</a>{% if r.status in ("failed", "cancelled", "expired") %}<a class="btn sm ghost" href="/ui/repair?q={{ r.task_id }}">修复</a>{% endif %}</div></td>
+  </tr>
+{% endfor %}
+</template>
+<div id="tasks-more" data-hx-oob-target="#tasks-more" style="padding:8px 0;text-align:center">{% if next_url %}<button class="btn sm" hx-get="{{ next_url }}" hx-target="#tasks-table-body" hx-swap="append" hx-indicator="self">载入更多 ↓</button>{% endif %}</div>

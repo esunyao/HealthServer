@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import logging
 import time
@@ -272,7 +273,7 @@ class KafkaService:
                     "topic": msg.topic(), "partition": msg.partition(), "offset": msg.offset(),
                     "timestamp": msg.timestamp()[1],
                     "key": msg_key,
-                    "headers": dict(msg.headers() or []), "payload": json_safe(payload),
+                    "headers": self._headers_json_safe(msg.headers() or []), "payload": json_safe(payload),
                     "payload_raw": raw,
                 })
             if scanned >= scan_budget:
@@ -280,6 +281,19 @@ class KafkaService:
             return output
         finally:
             consumer.close()
+
+    @staticmethod
+    def _headers_json_safe(headers: list[tuple[str, bytes | None]]) -> list[dict[str, str | None]]:
+        output: list[dict[str, str | None]] = []
+        for key, value in headers:
+            if value is None:
+                output.append({"key": str(key), "value": None, "encoding": "null"})
+                continue
+            try:
+                output.append({"key": str(key), "value": value.decode("utf-8"), "encoding": "utf-8"})
+            except UnicodeDecodeError:
+                output.append({"key": str(key), "value": base64.b64encode(value).decode("ascii"), "encoding": "base64"})
+        return output
 
     @staticmethod
     def _offset_for_time(consumer: Consumer, tp: TopicPartition, time_ms: int) -> int:

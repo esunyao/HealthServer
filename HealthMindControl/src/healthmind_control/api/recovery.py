@@ -84,15 +84,15 @@ async def retry_execute(request: Request, task_id: str, body: ExecuteRequest):
     if replayed:
         return replayed_result(cached)
     op = preview.operation_id
-    write_started_audit(request, token, "task.retry", task_id, reason, op)
+    await write_started_audit(request, token, "task.retry", task_id, reason, op)
     try:
         new_id = await request.app.state.repo.retry_task(task_id, intent.get("release_id"), reason, op)
-        request.app.state.audit.write("task.retry", task_id, reason, "succeeded", operation_id=op, new_task_id=new_id)
+        await request.app.state.audit.write("task.retry", task_id, reason, "succeeded", operation_id=op, new_task_id=new_id)
         result = {"task_id": new_id}
         request.app.state.previews.succeed(token, result)
         return result
     except Exception as exc:
-        write_failed_audit(request, "task.retry", task_id, reason, op, exc)
+        await write_failed_audit(request, "task.retry", task_id, reason, op, exc)
         request.app.state.previews.indeterminate(token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "任务克隆结果无法确认，请通过操作编号检查审计和目标记录",
@@ -190,8 +190,8 @@ async def recovery_execute(request: Request, body: ExecuteRequest):
     if replayed:
         return serial(replayed_result(cached))
     op = preview.operation_id
-    write_started_audit(request, body.preview_token, "recovery." + intent.operation,
-                        intent.record_id, intent.reason, op)
+    await write_started_audit(request, body.preview_token, "recovery." + intent.operation,
+                              intent.record_id, intent.reason, op)
     try:
         if intent.operation in {"replay_outbox", "replay_nutri_inbox", "replay_hm_inbox"}:
             if intent.operation == "replay_hm_inbox":
@@ -207,14 +207,14 @@ async def recovery_execute(request: Request, body: ExecuteRequest):
             result = await request.app.state.repo.recover(
                 intent.operation, intent.schema_name, intent.record_id, intent.expected_lock_version,
             )
-        request.app.state.audit.write(
+        await request.app.state.audit.write(
             "recovery." + intent.operation, intent.record_id, intent.reason, "succeeded", operation_id=op, result=result,
         )
         final = serial(result)
         request.app.state.previews.succeed(body.preview_token, final)
         return final
     except Exception as exc:
-        write_failed_audit(request, "recovery." + intent.operation, intent.record_id, intent.reason, op, exc)
+        await write_failed_audit(request, "recovery." + intent.operation, intent.record_id, intent.reason, op, exc)
         request.app.state.previews.indeterminate(body.preview_token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "修复结果无法确认，请通过操作编号检查审计和目标记录",

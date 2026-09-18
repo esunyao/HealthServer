@@ -13,6 +13,7 @@ from ..security import (
 from ..util import serial
 
 router = APIRouter()
+_RELEASE_ACTIONS = {"release.create", "release.promote", "release.retire", "release.rollback"}
 
 
 def _require_release_writes(request: Request, operation_id: str | None = None) -> None:
@@ -174,11 +175,18 @@ async def release_preview(request: Request, body: ReleaseRequest):
 async def release_execute(request: Request, body: ExecuteRequest):
     require_csrf(request, body.csrf_token)
     preview = request.app.state.previews.inspect(body.preview_token, "release.", prefix=True)
-    intent = ReleaseRequest.model_validate(preview.payload)
+    if preview.action not in _RELEASE_ACTIONS:
+        raise control_error(409, "PREVIEW_TARGET_MISMATCH", "预览令牌不属于版本变更操作",
+                            requires_repreview=True, operation_id=preview.operation_id)
+    try:
+        intent = ReleaseRequest.model_validate(preview.payload)
+    except ValueError as exc:
+        raise control_error(409, "PREVIEW_TARGET_MISMATCH", "预览数据不是有效的版本变更请求",
+                            requires_repreview=True, operation_id=preview.operation_id) from exc
     if body.confirmation != f"RELEASE {intent.operation.upper()}":
         raise control_error(409, "CONFIRMATION_MISMATCH", "确认文本不匹配", can_retry=True,
                             operation_id=preview.operation_id)
-    preview, replayed, cached = request.app.state.previews.replay(body.preview_token, "release.", prefix=True)
+    preview, replayed, cached = request.app.state.previews.replay(body.preview_token, preview.action)
     if replayed:
         return replayed_result(cached)
     _require_release_writes(request, preview.operation_id)
@@ -188,11 +196,11 @@ async def release_execute(request: Request, body: ExecuteRequest):
             raise control_error(409, "PREVIEW_STALE", "版本在预览后发生变化，请重新预览",
                                 requires_repreview=True, operation_id=preview.operation_id)
     before = None if intent.operation == "create" else current
-    preview, replayed, cached = request.app.state.previews.begin(body.preview_token, "release.", prefix=True)
+    preview, replayed, cached = request.app.state.previews.begin(body.preview_token, preview.action)
     if replayed:
         return replayed_result(cached)
     op = preview.operation_id
-    write_started_audit(
+    await write_started_audit(
         request, body.preview_token, "release." + intent.operation,
         intent.release_id or intent.release_version or "new", intent.reason, op,
         before=redact(before),
@@ -204,14 +212,14 @@ async def release_execute(request: Request, body: ExecuteRequest):
             rid = intent.release_id
             await request.app.state.repo.transition_release(rid, intent.operation, intent.reason)
         after = await request.app.state.repo.release_detail(str(rid))
-        request.app.state.audit.write("release." + intent.operation, rid, intent.reason, "succeeded", operation_id=op,
-                                      before=redact(before), after=redact(after))
+        await request.app.state.audit.write("release." + intent.operation, rid, intent.reason, "succeeded", operation_id=op,
+                                            before=redact(before), after=redact(after))
         result = {"release_id": rid, "status": "ok"}
         request.app.state.previews.succeed(body.preview_token, result)
         return result
     except Exception as exc:
-        write_failed_audit(request, "release." + intent.operation,
-                           intent.release_id or "new", intent.reason, op, exc)
+        await write_failed_audit(request, "release." + intent.operation,
+                                 intent.release_id or "new", intent.reason, op, exc)
         request.app.state.previews.indeterminate(body.preview_token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "版本变更结果无法确认，请通过操作编号检查审计和版本记录",
@@ -263,17 +271,17 @@ async def bind_tools_execute(request: Request, release_id: str, body: ExecuteReq
     if replayed:
         return serial(replayed_result(cached))
     op = preview.operation_id
-    write_started_audit(request, token, "release.bind_tools", release_id, intent.reason, op)
+    await write_started_audit(request, token, "release.bind_tools", release_id, intent.reason, op)
     try:
         result = await request.app.state.repo.bind_tools(
             release_id, [b.model_dump() for b in intent.bindings], intent.reason,
         )
-        request.app.state.audit.write("release.bind_tools", release_id, intent.reason, "succeeded", operation_id=op)
+        await request.app.state.audit.write("release.bind_tools", release_id, intent.reason, "succeeded", operation_id=op)
         final = serial(result)
         request.app.state.previews.succeed(token, final)
         return final
     except Exception as exc:
-        write_failed_audit(request, "release.bind_tools", release_id, intent.reason, op, exc)
+        await write_failed_audit(request, "release.bind_tools", release_id, intent.reason, op, exc)
         request.app.state.previews.indeterminate(token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "工具绑定结果无法确认，请通过操作编号检查审计和版本记录",

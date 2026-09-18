@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.get("/api/debug/runs")
-async def runs(request: Request, limit: int = 100):
+async def runs(request: Request, limit: int = Query(100, ge=1, le=100)):
     return serial(await asyncio.to_thread(request.app.state.debug_store.list, limit))
 
 
@@ -94,19 +94,19 @@ async def step_execute(request: Request, run_id: str, step: str, body: ExecuteRe
     if replayed:
         return serial(replayed_result(cached))
     op = preview.operation_id
-    write_started_audit(request, body.preview_token, f"debug.{step}", target, intent["reason"], op,
-                        run_id=run_id)
+    await write_started_audit(request, body.preview_token, f"debug.{step}", target, intent["reason"], op,
+                              run_id=run_id)
     try:
         result = await request.app.state.debug.execute_step(run, intent)
         safe = redact(result)
         await asyncio.to_thread(request.app.state.debug_store.record, run_id, step, f"debug.{step}", "succeeded", safe)
-        request.app.state.audit.write(f"debug.{step}", target, intent["reason"], "succeeded", operation_id=op, result=safe)
+        await request.app.state.audit.write(f"debug.{step}", target, intent["reason"], "succeeded", operation_id=op, result=safe)
         final = serial(safe)
         request.app.state.previews.succeed(body.preview_token, final)
         return final
     except Exception as exc:
         await asyncio.to_thread(request.app.state.debug_store.record, run_id, step, f"debug.{step}", "failed", {"error": str(exc)})
-        write_failed_audit(request, f"debug.{step}", target, intent["reason"], op, exc)
+        await write_failed_audit(request, f"debug.{step}", target, intent["reason"], op, exc)
         request.app.state.previews.indeterminate(body.preview_token, str(exc))
         raise control_error(503, "EXECUTION_INDETERMINATE",
                             "调试步骤结果无法确认，请通过操作编号检查审计和目标记录",
