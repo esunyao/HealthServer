@@ -4,7 +4,9 @@ version = "0.4.0"
 description = "Local operations console for HealthMind, NutriMemo, Kafka and Dify"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "confluent-kafka>=2.6",
+  # 2.15.0 Windows wheel omits the documented confluent_kafka.admin package.
+  # Keep the latest known-good release until the upstream wheel is corrected.
+  "confluent-kafka>=2.14.2,<2.15",
   "fastapi>=0.115",
   "httpx>=0.28",
   "jinja2>=3.1",
