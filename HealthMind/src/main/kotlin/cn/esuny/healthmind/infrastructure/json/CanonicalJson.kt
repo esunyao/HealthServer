@@ -19,6 +19,12 @@ class CanonicalJson(private val objectMapper: ObjectMapper) {
         .digest(value.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
 
+    @Suppress("UNCHECKED_CAST")
+    fun toPlainMap(node: JsonNode): Map<String, Any?> {
+        require(node.isObject) { "Structured MCP content must be a JSON object" }
+        return objectMapper.readValue(stringify(node), Map::class.java) as Map<String, Any?>
+    }
+
     private fun sort(node: JsonNode): JsonNode = when {
         node.isObject -> {
             val result = objectMapper.createObjectNode()
