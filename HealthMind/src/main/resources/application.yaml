@@ -179,17 +179,6 @@ healthmind:
       audience: ${NUTRIMEMO_OAUTH_AUDIENCE:nutrimemo-internal}
       # 请求 NutriMemo 令牌时申请的 scope。
       scope: ${NUTRIMEMO_OAUTH_SCOPE:nutrimemo.ai-context.read}
-  # MCP 工具返回餐食图片时的下载与传输限制。
-  mcp:
-    capture-images:
-      # 单次工具调用最多返回的图片数量。
-      max-count: ${HEALTHMIND_MCP_CAPTURE_IMAGE_MAX_COUNT:10}
-      # 单张图片最大字节数，默认 10 MiB。
-      max-image-bytes: ${HEALTHMIND_MCP_CAPTURE_IMAGE_MAX_BYTES:10485760}
-      # 单次工具调用全部图片的最大总字节数，默认 100 MiB。
-      max-total-bytes: ${HEALTHMIND_MCP_CAPTURE_IMAGE_MAX_TOTAL_BYTES:104857600}
-      # 允许作为 MCP ImageContent 返回的 MIME 类型。
-      allowed-mime-types: ${HEALTHMIND_MCP_CAPTURE_IMAGE_ALLOWED_MIME_TYPES:image/jpeg,image/png,image/webp}
   # 后台任务调度配置。
   scheduler:
     # 每轮批量处理的任务数量。

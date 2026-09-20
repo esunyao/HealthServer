@@ -21,21 +21,10 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 
 | 工具 | 用途 |
 |---|---|
-| `nutrimemo.capture_context.get` | 读取已确认图片与餐次元数据，并以 MCP `ImageContent` 返回真实图片文件 |
+| `nutrimemo.capture_context.get` | 读取已确认图片与餐次元数据 |
 | `orion.nutrition_context.get` | 读取经授权的最小营养健康上下文 |
 
 工具调用以任务和 attempt 作为上下文；调用方不能自由指定用户、采集会话或餐次。工具仅返回当前任务授权范围内的数据。
-
-`nutrimemo.capture_context.get` 会在响应 Schema 校验通过后，按 `image_urls` 顺序下载全部图片。MCP 响应的 `content` 只包含图片，`structuredContent` 保留餐次元数据；因此 Dify 1.17.1 中对应为 `files` 与 `json`，`text` 为空。任意图片下载失败都会使整次工具调用失败，不会返回部分图片。
-
-图片下载不经过服务发现，默认仅允许 JPEG、PNG 和 WebP，最多 10 张、单张最多 10 MiB、总计最多 100 MiB。可通过以下环境变量调整：
-
-- `HEALTHMIND_MCP_CAPTURE_IMAGE_MAX_COUNT`
-- `HEALTHMIND_MCP_CAPTURE_IMAGE_MAX_BYTES`
-- `HEALTHMIND_MCP_CAPTURE_IMAGE_MAX_TOTAL_BYTES`
-- `HEALTHMIND_MCP_CAPTURE_IMAGE_ALLOWED_MIME_TYPES`
-
-失败信息和日志不会包含完整预签名 URL；工具调用审计只保存上下文 JSON 的 SHA-256，不保存图片 Base64。
 
 ## 事件与工作流
 

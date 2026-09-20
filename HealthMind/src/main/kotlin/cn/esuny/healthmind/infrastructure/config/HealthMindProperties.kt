@@ -14,7 +14,6 @@ data class HealthMindProperties(
     @field:Valid val kafka: Kafka = Kafka(),
     @field:Valid val dify: Dify = Dify(),
     @field:Valid val oauth: OAuth = OAuth(),
-    @field:Valid val mcp: Mcp = Mcp(),
     @field:Valid val scheduler: Scheduler = Scheduler(),
     @field:Valid val retention: Retention = Retention(),
 ) {
@@ -62,17 +61,6 @@ data class HealthMindProperties(
         val outboxFixedDelay: Duration = Duration.ofSeconds(1),
         val recoveryFixedDelay: Duration = Duration.ofMinutes(1),
     )
-
-    data class Mcp(
-        @field:Valid val captureImages: CaptureImages = CaptureImages(),
-    ) {
-        data class CaptureImages(
-            @field:Min(1) @field:Max(100) val maxCount: Int = 10,
-            @field:Min(1) val maxImageBytes: Long = 10L * 1024 * 1024,
-            @field:Min(1) val maxTotalBytes: Long = 100L * 1024 * 1024,
-            val allowedMimeTypes: Set<String> = setOf("image/jpeg", "image/png", "image/webp"),
-        )
-    }
 
     data class Retention(
         val result: Duration = Duration.ofDays(30),

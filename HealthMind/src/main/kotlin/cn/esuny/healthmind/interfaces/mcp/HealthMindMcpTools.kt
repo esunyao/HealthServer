@@ -3,11 +3,8 @@ package cn.esuny.healthmind.interfaces.mcp
 import cn.esuny.healthmind.application.port.out.InternalContextPort
 import cn.esuny.healthmind.infrastructure.config.HealthMindProperties
 import cn.esuny.healthmind.infrastructure.database.ToolInvocationRepository
-import cn.esuny.healthmind.infrastructure.http.CaptureImageContentLoader
-import cn.esuny.healthmind.infrastructure.http.CaptureImageFetchException
 import cn.esuny.healthmind.infrastructure.json.CanonicalJson
 import cn.esuny.healthmind.infrastructure.json.JsonSchemaService
-import io.modelcontextprotocol.spec.McpSchema
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
 import org.springframework.security.core.context.SecurityContextHolder
@@ -22,7 +19,6 @@ class HealthMindMcpTools(
     private val canonicalJson: CanonicalJson,
     private val schemas: JsonSchemaService,
     private val properties: HealthMindProperties,
-    private val captureImages: CaptureImageContentLoader,
 ) {
     @McpTool(
         name = "nutrimemo.capture_context.get",
@@ -32,18 +28,7 @@ class HealthMindMcpTools(
     fun captureContext(
         @McpToolParam(required = true, description = "HealthMind task UUID") taskId: String,
         @McpToolParam(required = true, description = "HealthMind attempt UUID") attemptId: String,
-    ): McpSchema.CallToolResult = invoke(
-        "nutrimemo.capture_context.get",
-        taskId,
-        attemptId,
-        contexts::getCaptureContext,
-    ) { response ->
-        val result = McpSchema.CallToolResult.builder()
-            .structuredContent(canonicalJson.toPlainMap(response))
-            .isError(false)
-        captureImages.load(response).forEach(result::addContent)
-        result.build()
-    }
+    ): String = invoke("nutrimemo.capture_context.get", taskId, attemptId, contexts::getCaptureContext)
 
     @McpTool(
         name = "orion.nutrition_context.get",
@@ -53,20 +38,14 @@ class HealthMindMcpTools(
     fun nutritionContext(
         @McpToolParam(required = true, description = "HealthMind task UUID") taskId: String,
         @McpToolParam(required = true, description = "HealthMind attempt UUID") attemptId: String,
-    ): String = invoke(
-        "orion.nutrition_context.get",
-        taskId,
-        attemptId,
-        contexts::getNutritionContext,
-    ) { canonicalJson.stringify(it) }
+    ): String = invoke("orion.nutrition_context.get", taskId, attemptId, contexts::getNutritionContext)
 
-    private fun <T> invoke(
+    private fun invoke(
         toolCode: String,
         taskId: String,
         attemptId: String,
         call: (ToolInvocationRepository.ToolGrant) -> tools.jackson.databind.JsonNode,
-        transform: (tools.jackson.databind.JsonNode) -> T,
-    ): T {
+    ): String {
         val auth = SecurityContextHolder.getContext().authentication as? JwtAuthenticationToken
             ?: throw IllegalStateException("MCP caller is not authenticated")
         val clientId = auth.token.getClaimAsString("azp") ?: auth.token.getClaimAsString("client_id")
@@ -79,16 +58,11 @@ class HealthMindMcpTools(
             schemas.validate(invocation.grant.requestSchema, request, "TOOL_REQUEST_CONTRACT_INVALID")
             val response = call(invocation.grant)
             schemas.validate(invocation.grant.responseSchema, response, "TOOL_RESPONSE_CONTRACT_INVALID")
-            val result = transform(response)
+            val json = canonicalJson.stringify(response)
             repository.succeed(invocation, canonicalJson.sha256(response))
-            result
+            json
         } catch (exception: Exception) {
-            val failureCode = if (exception is CaptureImageFetchException) {
-                "CAPTURE_IMAGE_FETCH_FAILED"
-            } else {
-                "DOWNSTREAM_CONTEXT_FAILED"
-            }
-            repository.fail(invocation, failureCode)
+            repository.fail(invocation, "DOWNSTREAM_CONTEXT_FAILED")
             throw exception
         }
     }
