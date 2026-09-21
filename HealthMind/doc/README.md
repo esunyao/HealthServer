@@ -15,7 +15,7 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 | 工作流 | Dify Workflow blocking 调用 |
 | 认证 | Authentik OIDC Resource Server 与 M2M client credentials |
 
-所有服务地址、issuer 和凭据均由环境变量或 Nacos 注入。
+所有服务地址、issuer 和凭据均由环境变量或 Nacos 注入；Dify App Key 按 app id 映射由环境变量注入，不落库。
 
 ## MCP 工具
 
@@ -25,6 +25,10 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 | `orion.nutrition_context.get` | 读取经授权的最小营养健康上下文 |
 
 工具调用以任务和 attempt 作为上下文；调用方不能自由指定用户、采集会话或餐次。工具仅返回当前任务授权范围内的数据。
+
+授权分两层：JWT 层校验 issuer、audience 与调用方 `azp`（Dify），工具层再校验任务处于 running、release 已绑定该工具、scope 匹配且未超调用上限，并写入 `ai_tool_invocations` 审计。
+
+任务状态为 `queued → running → succeeded / failed`，可重试失败按指数退避回到 `queued`；工作流版本在事件接收时固定，运行中和重试任务不切换新版本。
 
 ## 事件与工作流
 
@@ -50,3 +54,9 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 ```
 
 `bootRun` 需要 PostgreSQL、Kafka、Nacos、Authentik 和 Dify 的环境配置。
+
+## 进一步阅读
+
+- [模块 AGENTS.md](../AGENTS.md)：AI 导航（任务 → 读什么、状态机与重试、MCP 双层授权、Dify 调用细节）。
+- [根 AGENTS.md](../AGENTS.md)：仓库规范、阅读导航与项目背景（HealthMind 是通用 AI 能力层）。
+- [NutriMemo/AGENTS.md](../NutriMemo/AGENTS.md) 与 [integration-contracts/doc/README.md](../integration-contracts/doc/README.md)：链路对端与事件契约。
