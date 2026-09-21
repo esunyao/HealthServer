@@ -30,8 +30,8 @@
 | 根 `doc-project/` | **项目整体背景**（特例） | 不限 | 否 | 维护者 |
 | `<模块>/docp/` | 子项目详细说明 | 很细 | 否 | 维护者 |
 | `<模块>/doc/` | 模块大体说明 | 不写太细 | 是 | 维护者与 AI |
-| `<模块>/AGENTS.md` | 模块导航与理解指南（面向 AI，只导航不新增规范） | 导航级 | 是 | 维护者与 AI |
-| 模块根 `openapi.yaml` | HTTP 接口字段契约 | 以契约为准 | 是 | 维护者 |
+| `<模块>/AGENTS.md`（如 [`gateway/AGENTS.md`](./gateway/AGENTS.md)） | 模块导航与理解指南（面向 AI，只导航不新增规范） | 导航级 | 是 | 维护者与 AI |
+| 模块根 `openapi.yaml`（如 [`Orion/openapi.yaml`](./Orion/openapi.yaml)、[`NutriMemo/openapi.yaml`](./NutriMemo/openapi.yaml)） | HTTP 接口字段契约 | 以契约为准 | 是 | 维护者 |
 | `integration-contracts/src/main/resources/{schema,asyncapi}` | 跨服务事件契约 | 以契约为准 | 是 | 维护者 |
 | 根 `AGENTS.md` | 本文件，规范的唯一来源 | — | 是 | 维护者与 AI |
 | 根或模块 `CLAUDE.md` | 兼容存根，指向根 `AGENTS.md`、`<模块>/AGENTS.md` 与本模块本地说明 | — | 是 | 同 `AGENTS.md` |
@@ -49,15 +49,15 @@
 
 | 模块 | Gradle 模块名 | 默认端口 | 端口变量 | 技术栈 | 职责 |
 |---|---|---:|---|---|---|
-| `gateway/` | `gateway` | 8091 | `SERVER_PORT` | Spring Cloud Gateway WebFlux + Authentik OIDC | API 网关：路由、限流、日志、认证预处理 |
-| `Orion/` | `orion` | 8090 | `SERVER_PORT` | WebMVC + MyBatis-Plus + PostgreSQL + S3 兼容存储 | 用户身份、画像、健康记录、头像文件 |
-| `NutriMemo/` | `nutrimemo` | 8099 | `SERVER_PORT` | WebMVC + PostgreSQL + Kafka | 拍照膳食采集、餐次与营养汇总 |
-| `HealthMind/` | `healthmind` | 8100 | `HEALTHMIND_PORT` | Spring AI MCP（STREAMABLE）+ Dify + PostgreSQL + Kafka | AI 编排：任务状态、契约校验、事件投递、MCP 授权 |
-| `integration-contracts/` | `integration-contracts` | — | — | JSON Schema + AsyncAPI + Kotlin 数据类 | 跨服务事件契约的单一来源 |
-| `HealthMindControl/` | 非 Gradle 模块 | 8765 | `HMC_PORT` | FastAPI + Jinja2 + 原生 ES modules（Python `>=3.12,<3.13`） | 本地运维控制台，仅监听 `127.0.0.1` |
-| `AgentDeveloper/` | 非 Gradle 模块 | — | — | Dify 膳食分析技能套件（`SKILL.md` + `evals/`） | AI 提示词技能资产：餐食证据分析、膳食纤维、结果契约 |
+| [`gateway/`](./gateway/AGENTS.md) | `gateway` | 8091 | `SERVER_PORT` | Spring Cloud Gateway WebFlux + Authentik OIDC | API 网关：路由、限流、日志、认证预处理 |
+| [`Orion/`](./Orion/AGENTS.md) | `orion` | 8090 | `SERVER_PORT` | WebMVC + MyBatis-Plus + PostgreSQL + S3 兼容存储 | 用户身份、画像、健康记录、头像文件 |
+| [`NutriMemo/`](./NutriMemo/AGENTS.md) | `nutrimemo` | 8099 | `SERVER_PORT` | WebMVC + PostgreSQL + Kafka | 拍照膳食采集、餐次与营养汇总 |
+| [`HealthMind/`](./HealthMind/AGENTS.md) | `healthmind` | 8100 | `HEALTHMIND_PORT` | Spring AI MCP（STREAMABLE）+ Dify + PostgreSQL + Kafka | AI 编排：任务状态、契约校验、事件投递、MCP 授权 |
+| [`integration-contracts/`](./integration-contracts/AGENTS.md) | `integration-contracts` | — | — | JSON Schema + AsyncAPI + Kotlin 数据类 | 跨服务事件契约的单一来源 |
+| [`HealthMindControl/`](./HealthMindControl/AGENTS.md) | 非 Gradle 模块 | 8765 | `HMC_PORT` | FastAPI + Jinja2 + 原生 ES modules（Python `>=3.12,<3.13`） | 本地运维控制台，仅监听 `127.0.0.1` |
+| [`AgentDeveloper/`](./AgentDeveloper/AGENTS.md) | 非 Gradle 模块 | — | — | Dify 膳食分析技能套件（`SKILL.md` + `evals/`） | AI 提示词技能资产：餐食证据分析、膳食纤维、结果契约 |
 
-> Gradle 项目名为小写；目录名 `Orion` 对应 `:orion`。
+> Gradle 项目名为小写；目录名 `Orion` 对应 `:orion`。模块名即链接：点击进入该模块的 `AGENTS.md`（模块导航），再向下到 `doc/`、契约与源码。
 
 ### 路由（Gateway → 后端）
 
@@ -94,7 +94,7 @@
 ./gradlew clean
 ```
 
-`HealthMindControl` 不是 Gradle 模块；其 Python 版本、依赖和测试入口见 `HealthMindControl/README.md`。`AgentDeveloper` 同样不是 Gradle 模块，是 Dify 技能资产目录，说明见 [`AgentDeveloper/AGENTS.md`](./AgentDeveloper/AGENTS.md)。
+`HealthMindControl` 不是 Gradle 模块；其 Python 版本、依赖和测试入口见 [`HealthMindControl/README.md`](./HealthMindControl/README.md)，模块导航见 [`HealthMindControl/AGENTS.md`](./HealthMindControl/AGENTS.md)。`AgentDeveloper` 同样不是 Gradle 模块，是 Dify 技能资产目录，说明见 [`AgentDeveloper/AGENTS.md`](./AgentDeveloper/AGENTS.md)。
 
 ## 项目背景与不可变边界
 
@@ -106,7 +106,7 @@
 | `NutriMemo` | 营养膳食核心业务（相当于剔除 AI 的营养后端）：餐食记录与统计 |
 | `HealthMind` | 所有 App 的通用 AI 能力层：以 MCP 向各后端取数，对接 Dify 完成 AI 相关的请求、处理与运行 |
 
-完整背景（服务架构、技术栈、跨服务 m2m 时序、Inbox/Outbox 状态、Dify 结构化输出规范）见根 `doc-project/README.md` 及其引用的文档；AI 分析链路的逐阶段状态见 [`HealthMindControl/doc/analysis-chain.md`](./HealthMindControl/doc/analysis-chain.md)。
+完整背景（服务架构、技术栈、跨服务 m2m 时序、Inbox/Outbox 状态、Dify 结构化输出规范）见根 [`doc-project/README.md`](./doc-project/README.md) 及其引用的文档；AI 分析链路的逐阶段状态见 [`HealthMindControl/doc/analysis-chain.md`](./HealthMindControl/doc/analysis-chain.md)。
 
 > [!important]
 > 以下内容是仓库边界，不可变动：
@@ -118,11 +118,13 @@
 
 ## 阅读导航（按需阅读，不通读全仓）
 
+**本文件是文档链接树的根**：模块入口、契约与关键脚本都可以从本文件的链接逐层向下到达——根 `AGENTS.md` → 模块 `AGENTS.md`（模块速查表）→ 模块 `doc/README.md` 与源码（模块 `AGENTS.md` 内的「任务 → 读什么」索引）。只读到一个文件的 AI 应顺着链接找到其余全部内容，不依赖目录猜测。
+
 原则：先建立全局背景与框架认知，再按任务只读必要部分。不了解项目背景和跨服务框架不要动手，但也不以「读完整仓库」作为开始工作的前提。
 
 | 场景 | 阅读顺序 |
 |---|---|
-| 首次接触项目 | 本文件「项目总体阅读说明」→ `doc-project/`（背景）→ 本文件「仓库速查」→ 目标模块 `AGENTS.md` |
+| 首次接触项目 | 本文件「项目总体阅读说明」→ [`doc-project/README.md`](./doc-project/README.md)（背景，本地私有）→ 本文件「仓库速查」→ 目标模块 `AGENTS.md` |
 | 修改某模块 | 目标模块 `AGENTS.md` 的「任务 → 读什么」索引 → 索引列出的少量文件 → 受影响模块的 `doc/` |
 | 跨服务链路与事件 | [`integration-contracts/doc/README.md`](./integration-contracts/doc/README.md) 与 `integration-contracts/src/main/resources/{schema,asyncapi}` → 链路两端模块的 `AGENTS.md` → [`HealthMindControl/doc/analysis-chain.md`](./HealthMindControl/doc/analysis-chain.md) |
 | 排查 AI 分析链路故障 | [`analysis-chain.md` 的「故障定位顺序」](./HealthMindControl/doc/analysis-chain.md) → 相关模块 `AGENTS.md` 的「关键事实与易错点」 |
@@ -134,7 +136,7 @@
 
 ### 项目结构
 
-Kotlin 源码位于各模块 `src/main/kotlin`，资源位于 `src/main/resources`，测试位于 `src/test/kotlin`；数据库迁移位于各模块 `src/main/resources/db/migration`。共享构建与依赖管理在根 `build.gradle`，模块注册在 `settings.gradle`。改动某模块架构前，先阅读该模块的 `AGENTS.md`（导航）与 `doc/README.md`（概览）。
+Kotlin 源码位于各模块 `src/main/kotlin`，资源位于 `src/main/resources`，测试位于 `src/test/kotlin`；数据库迁移位于各模块 `src/main/resources/db/migration`。共享构建与依赖管理在根 [`build.gradle`](./build.gradle)，模块注册在 [`settings.gradle`](./settings.gradle)。改动某模块架构前，先阅读该模块的 `AGENTS.md`（导航）与 `doc/README.md`（概览）。
 
 ### 代码风格与命名
 

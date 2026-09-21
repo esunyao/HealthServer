@@ -19,7 +19,7 @@
 | 入口 | [`src/healthmind_control/main.py`](./src/healthmind_control/main.py)（console script `healthmind-control`）；[`app.py`](./src/healthmind_control/app.py) 为薄装配 |
 | 端口/地址 | `HMC_HOST`（默认并强制 `127.0.0.1`）、`HMC_PORT`（默认 `8765`）；Windows 上强制 Selector 事件循环 |
 | 技术栈 | FastAPI + Jinja2 + 原生 ES modules（自研 hx.js 兼容子集）+ psycopg 连接池 + confluent-kafka（锁 `>=2.14.2,<2.15`，2.15.0 Windows wheel 缺 admin 包） |
-| 配置 | 模块自己的 [`.env`](./.env.example)（模板 `.env.example`，AI 不读实际 `.env` 内容）；全部 `HMC_*` 变量见 [README.md](./README.md) 第 2 节 |
+| 配置 | 模块自己的 `.env`（模板见 [`.env.example`](./.env.example)；AI 不读实际 `.env` 内容）；全部 `HMC_*` 变量见 [README.md](./README.md) 第 2 节 |
 | 文档 | [`doc/`](./doc/)：README（大体说明）、`analysis-chain.md`（链路与排障）、`fixture.md`（数据构造）、`requirements.md`（公开合规三态） |
 
 ## 代码地图

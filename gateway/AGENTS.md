@@ -14,7 +14,7 @@ HealthServer 的统一流量入口（默认端口 `8091`），基于 Spring Clou
 
 | 项 | 值 |
 |---|---|
-| Gradle | `:gateway`（应用名 `GateWay`，大小写特殊，`src/main/resources/application.yaml`） |
+| Gradle | `:gateway`（应用名 `GateWay`，大小写特殊，见 [`application.yaml`](./src/main/resources/application.yaml)） |
 | 入口 | [`GatewayApplication.kt`](./src/main/kotlin/cn/esuny/gateway/GatewayApplication.kt) |
 | 端口 | `${SERVER_PORT:8091}` |
 | 技术栈 | Spring Cloud Gateway WebFlux + `spring-security-oauth2-jose`（刻意不引入 `starter-security`，见 [`build.gradle`](./build.gradle)） |
@@ -50,7 +50,7 @@ HealthServer 的统一流量入口（默认端口 `8091`），基于 Spring Clou
 ## 关键事实与易错点
 
 - **响应式边界**：本模块是 WebFlux 响应式代码，写过滤器/处理器时不要引入阻塞调用或 Servlet API；根 `AGENTS.md` 要求保留这个边界。
-- **请求处理顺序**（改顺序会改变安全语义）：CORS → `TraceIdFilter` → `RequestLoggingFilter` → `RateLimitFilter`（默认 20 req/s、burst 40）→ `AuthentikAuthFilter`（顺序常量见 `config/FilterOrder.kt`）。
+- **请求处理顺序**（改顺序会改变安全语义）：CORS → `TraceIdFilter` → `RequestLoggingFilter` → `RateLimitFilter`（默认 20 req/s、burst 40）→ `AuthentikAuthFilter`（顺序常量见 [`config/FilterOrder.kt`](./src/main/kotlin/cn/esuny/gateway/config/FilterOrder.kt)）。
 - **身份头信任模型**：`AuthentikAuthFilter` 验证令牌后注入 `X-Auth-Subject`/`X-Auth-Username`/`X-Auth-Email`/`X-Auth-Display-Name`/`X-Auth-Email-Verified`，并**移除客户端伪造的同名头**；后端（Orion/NutriMemo）只信任来自受控 Gateway 的请求。
 - **白名单**：`/actuator/`、`/fallback` 免认证，且支持 Nacos 动态刷新（`refreshEnabled=true`）。
 - **Nacos 非 optional**：`nacos:GateWay_Application.yaml` 导入没有 `optional:` 前缀，缺少 Nacos 时网关起不来；这是有意设计，防止静默使用弱配置。

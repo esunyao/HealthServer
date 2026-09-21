@@ -84,6 +84,7 @@
 
 ## 相关文档
 
+- [README.md](./README.md) — 模块根兼容入口（指向 `doc/README.md`）。
 - [doc/README.md](./doc/README.md) — 模块公开大体说明（工具表、事件与保留期）。
 - [../AGENTS.md](../AGENTS.md) — 仓库规范、阅读导航与项目背景（HealthMind 是通用 AI 能力层）。
 - 链路对端：[../NutriMemo/AGENTS.md](../NutriMemo/AGENTS.md)、[../Orion/AGENTS.md](../Orion/AGENTS.md)、[../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md)。

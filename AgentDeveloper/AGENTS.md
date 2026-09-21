@@ -18,7 +18,7 @@
 | [`skills/meal-evidence-analysis/SKILL.md`](./skills/meal-evidence-analysis/SKILL.md) | 多图识别、去重、可食重量与营养计算；输出带证据与不确定性的草案（参考 [`references/calculation.md`](./skills/meal-evidence-analysis/references/calculation.md)） |
 | [`skills/china-dietary-fiber/SKILL.md`](./skills/china-dietary-fiber/SKILL.md) | 用中国指南/DRI/食物成分证据评估膳食纤维，区分人群、版次、单餐与全天（参考 [`references/knowledge-base.md`](./skills/china-dietary-fiber/references/knowledge-base.md)） |
 | [`skills/diet-result-contract/SKILL.md`](./skills/diet-result-contract/SKILL.md) | 校验并整理成可入库的结构化结果；不虚构缺失值、不生成 Kafka 事件或业务 ID（参考 [`references/contract.md`](./skills/diet-result-contract/references/contract.md)） |
-| [`skills/diet-suite-workspace/`](./skills/diet-suite-workspace/) | skill-creator 评测工作区：[`TEST-NOTES.md`](./skills/diet-suite-workspace/TEST-NOTES.md)、`iteration-1/`（六道题 × with/without skill 输出与评分）、[`review.html`](./skills/diet-suite-workspace/review.html) |
+| [`skills/diet-suite-workspace/`](./skills/diet-suite-workspace/) | skill-creator 评测工作区：[`TEST-NOTES.md`](./skills/diet-suite-workspace/TEST-NOTES.md)、[`iteration-1/`](./skills/diet-suite-workspace/iteration-1/)（六道题 × with/without skill 输出与评分）、[`review.html`](./skills/diet-suite-workspace/review.html) |
 | 各技能 `evals/evals.json` | 评测题目（缺图、多图重复、单位换算、来源冲突、单餐不冒充全天、缺值不补零、严格输出） |
 
 ## 任务 → 读什么

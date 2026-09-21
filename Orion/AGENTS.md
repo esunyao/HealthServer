@@ -75,7 +75,7 @@
 ```
 
 - 测试在 [`src/test/kotlin/cn/esuny/orion/`](./src/test/kotlin/cn/esuny/orion/)：配置/迁移脚本、异常处理、内部营养上下文服务、文件与身份服务；`controller/rest/` 测试目录暂空。
-- 测试配置禁用 Nacos/Flyway/调度；`src/test/resources/application.yaml` 含遗留 `jwt.*` 测试密钥配置，**不要扩散或复用**。
+- 测试配置禁用 Nacos/Flyway/调度；[`src/test/resources/application.yaml`](./src/test/resources/application.yaml) 含遗留 `jwt.*` 测试密钥配置，**不要扩散或复用**。
 
 ## 相关文档
 
