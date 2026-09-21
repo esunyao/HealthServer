@@ -38,8 +38,11 @@ HealthServer 的统一流量入口（默认端口 `8091`），基于 Spring Clou
 
 - `config/`：过滤器顺序、Nacos、CORS、限流和认证配置。
 - `filter/`：请求级 WebFilter。
+- `handler/`、`health/`：`/fallback` 兜底端点（免认证白名单内）与自定义健康指示器。
 - `GatewayApplication.kt`：应用入口。
 - `src/main/resources/application.yaml`：无密钥的本地配置骨架。
+
+网关自身端点只有 `/fallback` 与 Actuator `health,info`；不承载业务数据，也不直连数据库或 Kafka。
 
 ## 验证
 
@@ -49,3 +52,8 @@ HealthServer 的统一流量入口（默认端口 `8091`），基于 Spring Clou
 ```
 
 `bootRun` 需要可用的 Nacos、Authentik 配置以及后端服务发现实例。
+
+## 进一步阅读
+
+- [模块 AGENTS.md](../AGENTS.md)：AI 导航（任务 → 读什么、关键事实与易错点）。
+- [根 AGENTS.md](../AGENTS.md)：仓库规范、路由表与阅读导航。
