@@ -30,16 +30,18 @@
 | 根 `doc-project/` | **项目整体背景**（特例） | 不限 | 否 | 维护者 |
 | `<模块>/docp/` | 子项目详细说明 | 很细 | 否 | 维护者 |
 | `<模块>/doc/` | 模块大体说明 | 不写太细 | 是 | 维护者与 AI |
+| `<模块>/AGENTS.md` | 模块导航与理解指南（面向 AI，只导航不新增规范） | 导航级 | 是 | 维护者与 AI |
 | 模块根 `openapi.yaml` | HTTP 接口字段契约 | 以契约为准 | 是 | 维护者 |
 | `integration-contracts/src/main/resources/{schema,asyncapi}` | 跨服务事件契约 | 以契约为准 | 是 | 维护者 |
 | 根 `AGENTS.md` | 本文件，规范的唯一来源 | — | 是 | 维护者与 AI |
-| 根或模块 `CLAUDE.md` | 兼容存根，指向本文件 | — | 是 | 同 `AGENTS.md` |
+| 根或模块 `CLAUDE.md` | 兼容存根，指向根 `AGENTS.md`、`<模块>/AGENTS.md` 与本模块 `doc/` | — | 是 | 同 `AGENTS.md` |
 
 - 每个模块的 `doc/README.md` 是公开入口；只有确有必要时才增加主题文件。
+- 每个模块的 `AGENTS.md` 是 AI 导航入口：写「读什么、去哪找、边界在哪」，不复制规范、不维护第二套规则；规范、契约与细节以根 `AGENTS.md`、`doc/`、`openapi.yaml`、`integration-contracts` 与源码为准。
 - 公开文档文件名使用小写英文、单数，不加日期和版本前缀；`README.md` 是入口文件的固定例外。
 - `docp/` 的组织方式、文件名和文件头由维护者自行决定，AI 不代为规定，也不写入。
 - `doc-project/` 是项目背景特例，不受公开文档命名规则约束。
-- 所有模块级 `CLAUDE.md` 若存在，必须是相同格式的两行兼容存根，不维护第二套规则。
+- 所有模块级 `CLAUDE.md` 若存在，必须是相同格式的两行兼容存根（指向根 `AGENTS.md`、`<模块>/AGENTS.md` 与本模块 `doc/`），不维护第二套规则。
 
 ## 仓库速查
 
@@ -53,6 +55,7 @@
 | `HealthMind/` | `healthmind` | 8100 | `HEALTHMIND_PORT` | Spring AI MCP（STREAMABLE）+ Dify + PostgreSQL + Kafka | AI 编排：任务状态、契约校验、事件投递、MCP 授权 |
 | `integration-contracts/` | `integration-contracts` | — | — | JSON Schema + AsyncAPI + Kotlin 数据类 | 跨服务事件契约的单一来源 |
 | `HealthMindControl/` | 非 Gradle 模块 | 8765 | `HMC_PORT` | FastAPI + Jinja2 + 原生 ES modules（Python `>=3.12,<3.13`） | 本地运维控制台，仅监听 `127.0.0.1` |
+| `AgentDeveloper/` | 非 Gradle 模块 | — | — | Dify 膳食分析技能套件（`SKILL.md` + `evals/`） | AI 提示词技能资产：餐食证据分析、膳食纤维、结果契约 |
 
 > Gradle 项目名为小写；目录名 `Orion` 对应 `:orion`。
 
@@ -91,13 +94,47 @@
 ./gradlew clean
 ```
 
-`HealthMindControl` 不是 Gradle 模块；其 Python 版本、依赖和测试入口见 `HealthMindControl/README.md`。
+`HealthMindControl` 不是 Gradle 模块；其 Python 版本、依赖和测试入口见 `HealthMindControl/README.md`。`AgentDeveloper` 同样不是 Gradle 模块，是 Dify 技能资产目录，说明见 [`AgentDeveloper/AGENTS.md`](./AgentDeveloper/AGENTS.md)。
+
+## 项目背景与不可变边界
+
+本仓库是企业级项目 HealthServer 的服务端：睡眠、膳食等多个 App 共用一套 SSO 单点登录；本仓库偏饮食膳食 App 的后端，同时也作为其他应用的后端。三个核心服务的分工（项目背景结论）：
+
+| 服务 | 角色 |
+|---|---|
+| `Orion` | 用户画像系统：提供全方位的用户基础画像（年龄、体重等由 Orion 提供） |
+| `NutriMemo` | 营养膳食核心业务（相当于剔除 AI 的营养后端）：餐食记录与统计 |
+| `HealthMind` | 所有 App 的通用 AI 能力层：以 MCP 向各后端取数，对接 Dify 完成 AI 相关的请求、处理与运行 |
+
+完整背景（服务架构、技术栈、跨服务 m2m 时序、Inbox/Outbox 状态、Dify 结构化输出规范）见根 `doc-project/README.md` 及其引用的文档；AI 分析链路的逐阶段状态见 [`HealthMindControl/doc/analysis-chain.md`](./HealthMindControl/doc/analysis-chain.md)。
+
+> [!important]
+> 以下内容是仓库边界，不可变动：
+>
+> 1. 项目背景（根 `doc-project/`，本地私有、不提交）不可变动。
+> 2. 本文件「# 项目总体阅读说明」一节逐字不可变动。
+> 3. `docp/` 是私有详细说明，AI 只读参考、不写入。
+> 4. 模块接口、配置、数据结构、架构或行为发生变化时，同步更新该模块的 `doc/` 与 `AGENTS.md`。
+
+## 阅读导航（按需阅读，不通读全仓）
+
+原则：先建立全局背景与框架认知，再按任务只读必要部分。不了解项目背景和跨服务框架不要动手，但也不以「读完整仓库」作为开始工作的前提。
+
+| 场景 | 阅读顺序 |
+|---|---|
+| 首次接触项目 | 本文件「项目总体阅读说明」→ `doc-project/`（背景）→ 本文件「仓库速查」→ 目标模块 `AGENTS.md` |
+| 修改某模块 | 目标模块 `AGENTS.md` 的「任务 → 读什么」索引 → 索引列出的少量文件 → 受影响模块的 `doc/` |
+| 跨服务链路与事件 | [`integration-contracts/doc/README.md`](./integration-contracts/doc/README.md) 与 `integration-contracts/src/main/resources/{schema,asyncapi}` → 链路两端模块的 `AGENTS.md` → [`HealthMindControl/doc/analysis-chain.md`](./HealthMindControl/doc/analysis-chain.md) |
+| 排查 AI 分析链路故障 | [`analysis-chain.md` 的「故障定位顺序」](./HealthMindControl/doc/analysis-chain.md) → 相关模块 `AGENTS.md` 的「关键事实与易错点」 |
+| 只需模块概览 | `<模块>/doc/README.md`；还需要设计细节再读维护者本地的 `<模块>/docp/`（只读，不写入） |
+
+各模块 `AGENTS.md` 是进入该模块的最短路径；它们只做导航，规范与契约以根 `AGENTS.md`、`doc/`、`openapi.yaml` 和 `integration-contracts` 为准。
 
 ## Repository Guidelines
 
 ### 项目结构
 
-Kotlin 源码位于各模块 `src/main/kotlin`，资源位于 `src/main/resources`，测试位于 `src/test/kotlin`；数据库迁移位于各模块 `src/main/resources/db/migration`。共享构建与依赖管理在根 `build.gradle`，模块注册在 `settings.gradle`。改动某模块架构前，先阅读该模块的 `doc/README.md`。
+Kotlin 源码位于各模块 `src/main/kotlin`，资源位于 `src/main/resources`，测试位于 `src/test/kotlin`；数据库迁移位于各模块 `src/main/resources/db/migration`。共享构建与依赖管理在根 `build.gradle`，模块注册在 `settings.gradle`。改动某模块架构前，先阅读该模块的 `AGENTS.md`（导航）与 `doc/README.md`（概览）。
 
 ### 代码风格与命名
 
@@ -109,7 +146,12 @@ Kotlin 使用四空格缩进和惯用空安全写法；类与对象用 `PascalCa
 
 ### 提交与 PR
 
-提交信息使用简短祈使句摘要（如 `Add ...`、`Refactor ...`、`Enhance ...`），每次提交聚焦一件事。PR 说明行为变化、受影响模块、关联议题或计划和验证命令；外部可见变化附 API 示例或截图。涉及 PostgreSQL、Nacos、Kafka、Authentik、Dify 或对象存储的改动必须说明所需环境。
+提交信息使用约定式提交（Conventional Commits）：`<type>(<scope>): <简短摘要>`。
+
+- `type` 取值：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`、`perf`、`build`、`ci`、`revert`。
+- `scope` 可选，用受影响的模块名：`gateway`、`orion`、`nutrimemo`、`healthmind`、`integration-contracts`、`healthmind-control`、`agentdeveloper`。
+- 摘要使用简短祈使句，不加句号；破坏性变更在 type/scope 后加 `!` 并在正文说明影响面与迁移方式。
+- 每次提交聚焦一件事。PR 说明行为变化、受影响模块、关联议题或计划和验证命令；外部可见变化附 API 示例或截图。涉及 PostgreSQL、Nacos、Kafka、Authentik、Dify 或对象存储的改动必须说明所需环境。
 
 ### 安全与配置
 
