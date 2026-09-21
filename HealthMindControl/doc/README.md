@@ -36,6 +36,8 @@ uv run --project HealthMindControl pytest -q
 
 ## 进一步阅读
 
+- [模块 AGENTS.md](../AGENTS.md)：AI 导航（任务 → 读什么、关键事实与易错点、安全边界）。
 - [AI 分析链路](./analysis-chain.md)：从 NutriMemo 提交到结果回写的时序、表状态和 Kafka 变化。
 - [数据构造与 MCP 手测](./fixture.md)：如何跳过 Kafka 直接准备 Dify 草稿所需 ID。
 - [需求与合规状态](./requirements.md)：当前实现边界和验收状态。
+- [根 AGENTS.md](../../AGENTS.md)：仓库规范、阅读导航与项目背景。
