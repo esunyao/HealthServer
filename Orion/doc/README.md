@@ -22,7 +22,7 @@ HealthServer 的用户身份、画像、健康记录和头像文件服务（默�
 
 ## 接口范围
 
-`/v1/users/self` 及其子资源覆盖用户资料、身体测量、健康目标、过敏、疾病、饮食限制、烹饪偏好、临床观察和同意记录；`/v1/files/avatar/*` 负责头像上传流程。
+`/v1/users/self` 及其子资源覆盖用户资料、身体测量、健康目标、过敏、疾病、饮食限制、烹饪偏好、临床观察和同意记录；`/v1/files/avatar/*` 负责头像上传流程。其中菜系偏好使用 `PUT` 整体替换；临床观察与同意记录只增不改。
 
 头像流程使用对象存储直传：
 
@@ -35,7 +35,7 @@ HealthServer 的用户身份、画像、健康记录和头像文件服务（默�
 - `controller/rest/`：用户、健康记录和文件 HTTP 接口。
 - `identity/`：可信用户主体与 `@CurrentUser` 解析。
 - `internal/nutrition/`：供 HealthMind 使用的营养上下文查询。
-- `service/`、`mapper/`、`model/`：业务服务、MyBatis 映射和领域数据。
+- `service/`、`mapper/`、`model/`：业务服务、MyBatis 映射和领域数据；含雪花 ID 生成与头像清理任务（`FileCleanupTaskService`、`AvatarOrphanReconciler`）。
 - `config/`、`handler/`：基础设施配置和统一错误处理。
 
 ## 验证
@@ -46,3 +46,8 @@ HealthServer 的用户身份、画像、健康记录和头像文件服务（默�
 ```
 
 `bootRun` 需要 PostgreSQL、Nacos、Authentik 和 S3 兼容对象存储的环境配置。
+
+## 进一步阅读
+
+- [模块 AGENTS.md](../AGENTS.md)：AI 导航（任务 → 读什么、关键事实与易错点、内部 M2M 安全链）。
+- [根 AGENTS.md](../AGENTS.md)：仓库规范、阅读导航与项目背景（Orion 是用户画像系统）。
