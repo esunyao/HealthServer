@@ -1,2 +1,2 @@
-> 本仓库规范的唯一来源是根目录 [`AGENTS.md`](../AGENTS.md) 与 `<模块>/doc/`。
+> 本仓库规范的唯一来源是根 [`AGENTS.md`](../AGENTS.md) 与 `<模块>/doc/`；本目录 [`AGENTS.md`](./AGENTS.md) 是 AI 导航与理解指南。
 > 本文件仅为兼容性存根（部分工具默认读取 `CLAUDE.md`），请勿在此添加内容。

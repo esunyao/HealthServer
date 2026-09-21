@@ -22,7 +22,9 @@ NutriMemo 和 HealthMind 共享本模块；修改事件结构时，应同时检�
 | `nutrition.analysis.completed.v1` | HealthMind → NutriMemo |
 | `nutrition.analysis.failed.v1` | HealthMind → NutriMemo |
 
-物理 topic 使用短横线，例如 `nutrition-capture-ready`；逻辑 `event_type` 使用点号和版本。两者不是同一个字符串。
+物理 topic 使用短横线，例如 `nutrition-capture-ready`；逻辑 `event_type` 使用点号和版本。两者不是同一个字符串。AsyncAPI 中的地址是参数化占位符，物理名称属于部署配置。
+
+Schema 的 `$id` 统一使用 `https://healthmind.local/schema/...` 命名空间；信封 `schema_version` 固定为 `"1.0"`，文件名后缀 `v1` 表示事件契约主版本，两者不是同一套编号。
 
 事件信封中的 `aggregate_id` 是 meal ID。NutriMemo 数据库 outbox 的内部 `aggregate_id` 是 capture session UUID，并作为该发布器的 Kafka key；阅读实现时不能将两者混称。
 
@@ -34,3 +36,9 @@ NutriMemo 和 HealthMind 共享本模块；修改事件结构时，应同时检�
 ./gradlew :integration-contracts:test
 ./gradlew :integration-contracts:build
 ```
+
+## 进一步阅读
+
+- [模块 AGENTS.md](../AGENTS.md)：AI 导航（契约内容、任务 → 读什么、易错点）。
+- [根 AGENTS.md](../../AGENTS.md)：仓库规范、阅读导航与跨服务链路入口。
+- [NutriMemo/AGENTS.md](../../NutriMemo/AGENTS.md) 与 [HealthMind/AGENTS.md](../../HealthMind/AGENTS.md)：契约的消费/发布实现端。
