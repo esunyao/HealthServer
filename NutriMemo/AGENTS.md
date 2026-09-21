@@ -19,7 +19,7 @@
 | 端口 | `${SERVER_PORT:8099}` |
 | 技术栈 | WebMVC（Servlet）+ PostgreSQL（`nutri` schema）+ Kafka + S3 兼容对象存储（客户端直传） |
 | 配置来源 | [`application.yaml`](./src/main/resources/application.yaml)；Nacos `NutriMemo_Application.yaml`（group `NUTRIMEMO_GROUP`） |
-| 迁移 | [`db/migration/V1__create_nutri_data_collection.sql`](./src/main/resources/db/migration/V1__create_nutri_data_collection.sql)（10 张表 + 11 条营养素种子）、[`V2__enable_kafka_delivery.sql`](./src/main/resources/db/migration/V2__enable_kafka_delivery.sql)（outbox `publishing`/`locked_at`、inbox `attempt_count`） |
+| 迁移 | [`db/migration/V1__create_nutri_data_collection.sql`](./src/main/resources/db/migration/V1__create_nutri_data_collection.sql)（11 张表 + 11 条营养素种子）、[`V2__enable_kafka_delivery.sql`](./src/main/resources/db/migration/V2__enable_kafka_delivery.sql)（outbox `publishing`/`locked_at`、inbox `attempt_count`） |
 | 契约 | [`openapi.yaml`](./openapi.yaml) v2.0.0；跨服务事件见 [../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md) |
 | Kafka 消费 | `enable-auto-commit: false`、`ack-mode: record`、消费组 `nutrimemo-analysis-result-v1` |
 | 持久层 | 主体是 [`persistence/NutriRepository.kt`](./src/main/kotlin/cn/esuny/nutrimemo/persistence/NutriRepository.kt)（JdbcTemplate 手写 SQL）；MyBatis-Plus 仅用于 ID/配置 |
@@ -35,6 +35,8 @@
 | [`identity/CurrentUserArgumentResolver.kt`](./src/main/kotlin/cn/esuny/nutrimemo/identity/CurrentUserArgumentResolver.kt) | 从 Gateway 头解析当前用户 |
 | [`config/`](./src/main/kotlin/cn/esuny/nutrimemo/config/) | `FlywayConfig`（独占 `nutri` schema）、`CaptureProperties`（TTL 24h、草稿上限 5、清理 15m）、`OssConfig/OssProperties`、`WebMvcConfig`、`MyBatisPlusConfig` |
 | [`persistence/`](./src/main/kotlin/cn/esuny/nutrimemo/persistence/) | JdbcTemplate 仓储、`PgUuidTypeHandler` |
+| [`handler/`](./src/main/kotlin/cn/esuny/nutrimemo/handler/) | `GlobalExceptionHandler`（`@RestControllerAdvice`：校验/JSON 解析失败→400、业务异常→自定义 code、唯一键冲突→409、`DataIntegrityViolation` **按 SQL state `23xxx` 区分 400 与 500**、404、兜底→500）、`BusinessException`（`code` + `httpStatus`） |
+| [`model/`](./src/main/kotlin/cn/esuny/nutrimemo/model/) | `NutriModels.kt`（领域模型）、`ApiResponse`（对外响应外壳，决定 `openapi.yaml` 响应体形态） |
 
 ## 任务 → 读什么
 
@@ -47,6 +49,7 @@
 | 改内部上下文接口 | [`internal/CaptureAnalysisContext.kt`](./src/main/kotlin/cn/esuny/nutrimemo/internal/CaptureAnalysisContext.kt) + `NutriInternalSecurityConfig.kt` |
 | 排查分析链路卡住 | [../HealthMindControl/doc/analysis-chain.md](../HealthMindControl/doc/analysis-chain.md) 的「故障定位顺序」 |
 | 改数据模型/表 | `db/migration/` 下迁移 + `persistence/NutriRepository.kt` + [`model/NutriModels.kt`](./src/main/kotlin/cn/esuny/nutrimemo/model/NutriModels.kt) |
+| 改错误响应/错误码 | [`handler/GlobalExceptionHandler.kt`](./src/main/kotlin/cn/esuny/nutrimemo/handler/GlobalExceptionHandler.kt) → [`handler/BusinessException.kt`](./src/main/kotlin/cn/esuny/nutrimemo/handler/BusinessException.kt) → `model/ApiResponse`（与 [`openapi.yaml`](./openapi.yaml) 的状态码对齐） |
 
 ## 关键事实与易错点
 
@@ -63,7 +66,7 @@
 
 - 对外：`/v1/nutri/capture-policy`、`/v1/nutri/capture-sessions/**`（创建/草稿/查询/取消/presign/confirm/删除图片/submit/retry）、`/v1/nutri/meals/**`、`/v1/nutri/summaries/**`；契约以 [`openapi.yaml`](./openapi.yaml) 为准（有 `OpenApiContractTest` 守护）。
 - 内部：`/internal/v1/analysis-context/capture`（POST，M2M，scope `nutrimemo.ai-context.read`，校验 `azp == healthmind-nutrimemo`），不经 Gateway。
-- 事件：生产 `nutrition.capture.ready.v1`（Kafka key = captureSessionId）；消费 `nutrition.analysis.completed.v1` / `nutrition.analysis.failed.v1`。契约单一来源在 `integration-contracts` 模块。
+- 事件：生产 `nutrition.capture.ready.v1`（物理 topic `nutrition-capture-ready`，Kafka key = captureSessionId）；消费 `nutrition.analysis.completed.v1` / `nutrition.analysis.failed.v1`（物理 topic `nutrition-analysis-completed` / `nutrition-analysis-failed`）。物理 topic 名默认值见 [`integration/NutriIntegrationProperties.kt`](./src/main/kotlin/cn/esuny/nutrimemo/integration/NutriIntegrationProperties.kt)，可被环境变量覆盖。契约单一来源在 `integration-contracts` 模块。
 
 ## 测试与验证
 

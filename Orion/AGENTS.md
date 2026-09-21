@@ -35,6 +35,7 @@
 | [`service/impl/`](./src/main/kotlin/cn/esuny/orion/service/impl/) | `UserServiceImpl`、`HealthRecordServiceImpl`、`FileServiceImpl`、`AvatarOrphanReconciler`（孤儿头像对账）、`FileCleanupTaskServiceImpl` |
 | [`mapper/`](./src/main/kotlin/cn/esuny/orion/mapper/) | MyBatis-Plus 映射（`UserMapper`、`UserProfileMapper`、`HealthRecordMappers`、`FileCleanupTaskMapper`） |
 | [`model/`](./src/main/kotlin/cn/esuny/orion/model/) | `dto/`、`entity/`、`enums/`、`vo/`、`result/ApiResponse`、`typehandler/`（`PgJsonbTypeHandler`、`PgUuidTypeHandler`） |
+| [`handler/`](./src/main/kotlin/cn/esuny/orion/handler/) | `GlobalExceptionHandler`（`@RestControllerAdvice`：校验/JSON 解析失败→400、业务异常→自定义 code、唯一键冲突→409、数据完整性→400、404、兜底→500）、`BusinessException`（`code` + `httpStatus`，默认 400） |
 | [`config/`](./src/main/kotlin/cn/esuny/orion/config/) | Flyway、MyBatis-Plus、OSS、WebMvc、清理调度（`CleanupSchedulingConfig`） |
 | [`service/SnowflakeIdGenerator.kt`](./src/main/kotlin/cn/esuny/orion/service/SnowflakeIdGenerator.kt) | 雪花 ID 生成（与 NutriMemo 同款方案） |
 
@@ -48,12 +49,14 @@
 | 改头像上传流程 | [`controller/rest/FileController.kt`](./src/main/kotlin/cn/esuny/orion/controller/rest/FileController.kt) → [`service/impl/FileServiceImpl.kt`](./src/main/kotlin/cn/esuny/orion/service/impl/FileServiceImpl.kt) → [`config/OssProperties.kt`](./src/main/kotlin/cn/esuny/orion/config/OssProperties.kt) |
 | 改头像清理/对账 | [`service/impl/AvatarOrphanReconciler.kt`](./src/main/kotlin/cn/esuny/orion/service/impl/AvatarOrphanReconciler.kt) + `application.yaml` 的 `orion.oss.cleanup` |
 | 改内部营养上下文（AI 链路） | [`internal/nutrition/`](./src/main/kotlin/cn/esuny/orion/internal/nutrition/) → [`OrionInternalSecurityConfig.kt`](./src/main/kotlin/cn/esuny/orion/internal/nutrition/OrionInternalSecurityConfig.kt) → 根 `doc-project/0920HealthMindOrionMCP返回结构说明.md`（私有背景） |
-| 改身份解析 | [`identity/CurrentUserArgumentResolver.kt`](./src/main/kotlin/cn/esuny/orion/identity/CurrentUserArgumentResolver.kt) |
+| 改身份解析 | [`identity/CurrentUserArgumentResolver.kt`](./src/main/kotlin/cn/esuny/orion/identity/CurrentUserArgumentResolver.kt) → [`service/IdentityProvisioningService.kt`](./src/main/kotlin/cn/esuny/orion/service/IdentityProvisioningService.kt)（首次请求自动建档） |
+| 改错误响应/错误码 | [`handler/GlobalExceptionHandler.kt`](./src/main/kotlin/cn/esuny/orion/handler/GlobalExceptionHandler.kt) → [`handler/BusinessException.kt`](./src/main/kotlin/cn/esuny/orion/handler/BusinessException.kt) → `model/result/ApiResponse`（对外响应外壳，与 [`openapi.yaml`](./openapi.yaml) 的状态码对齐） |
 | 排查鉴权问题 | 根 [`AGENTS.md`](../AGENTS.md)（Gateway 头模型）→ `identity/` + `application.yaml` 的 `orion.internal.security.*` |
 
 ## 关键事实与易错点
 
 - **身份边界**：用户侧认证由 Gateway 完成；Orion 用 `@CurrentUser` 把可信头解析为主体，控制器一律按当前用户主体查询数据，不接受请求体携带的用户 ID。
+- **首次请求会自动建档**：`@CurrentUser` 解析时经 [`IdentityProvisioningService.provision()`](./src/main/kotlin/cn/esuny/orion/service/IdentityProvisioningService.kt) 落库，不只是「读主体」——未验证邮箱 → 403；用户名/邮箱已关联其他业务用户 → 409；业务账户非 `active` 或已软删 → 403。改动身份或用户表约束时，这是每个用户请求都会走到的路径。
 - **内部接口独立安全链**：`securityMatcher("/internal/**")`，要求 `SCOPE_orion.ai-context.read` 并校验 JWT 的 `azp`/`client_id`（默认允许 `healthmind-orion`；audience 默认 `orion-internal`）——与用户链路互不共用过滤器链。
 - **Flyway 手动装配**：`spring.flyway.enabled=false`，schema 由 `FlywayConfig` 显式指定为 `orion`；新增迁移文件放 `db/migration`，本地不会自动执行（需要相应环境）。
 - **头像直传三步**：presign（`avatar-staging/{userId}/...` 短时地址，5 分钟、最大 5MB、jpeg/png/webp/gif）→ confirm（校验对象存在、归属与 staging 前缀）→ 服务端转入 `avatars/{userId}/...` 并更新头像记录。

@@ -86,14 +86,14 @@ src/healthmind_control/
 ├─ main.py / app.py        # 入口与薄装配（lifespan 注入 + routers）
 ├─ config.py security.py audit.py models.py util.py debug_store.py
 ├─ db/database.py          # 连接池 + 表结构自检 + 15s statement_timeout
-├─ services/               # kafka / dify / debug / expert
+├─ services/               # kafka / dify / debug / expert / events / fixture_reaper
 ├─ repositories/           # overview/tasks/fixtures/rows/trace/releases/recovery → 门面 Repository
-├─ api/                    # overview/tasks/fixtures/rows/trace/kafka/releases/recovery/audit/events
+├─ api/                    # overview/tasks/fixtures/rows/trace/kafka/releases/recovery/auditlog/debug/expert/events
 ├─ ui/                     # page（视图路由）/ parts（片段）/ fmt（模板辅助）
 ├─ templates/              # base + views/* + partials/*
 └─ static/                 # css（tokens/theme/base/components/views） js（模块 + views/*） img
 tests/                     # pytest 单测（无外部依赖）+ _smoke.py 可选真库冒烟
-doc/requirements.md       # 公开合规状态摘要（三态）
+doc/                       # README（大体说明）/ analysis-chain.md（链路排障）/ fixture.md（数据构造）/ requirements.md（合规三态）
 ```
 
 约定：模板全局 fmt_ts / col_label / badge_cls 见 ui/fmt.py；前端 hx-* 属性为 htmx 兼容子集

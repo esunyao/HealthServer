@@ -32,6 +32,7 @@ HealthServer 的统一流量入口（默认端口 `8091`），基于 Spring Clou
 | [`config/`](./src/main/kotlin/cn/esuny/gateway/config/) | `AuthentikJwtDecoderConfig`/`AuthentikProperties`（OIDC）、`CorsConfig`/`CorsProperties`（CORS）、`OidcAuthProperties`（白名单）、`RateLimitProperties`、`JacksonConfig` |
 | [`security/AudienceValidator.kt`](./src/main/kotlin/cn/esuny/gateway/security/AudienceValidator.kt) | JWT audience 校验 |
 | [`handler/`](./src/main/kotlin/cn/esuny/gateway/handler/) | `FallbackController`（`/fallback`）、`GlobalExceptionHandler` |
+| [`model/ApiResponse.kt`](./src/main/kotlin/cn/esuny/gateway/model/ApiResponse.kt) | 统一响应外壳（`code`/`message`/`data`/`traceId`/`timestamp` + `success()`/`error()`）；**认证失败、限流、`/fallback`、全局异常四条路径共用**，改错误响应体先看这里 |
 | [`health/GatewayHealthIndicator.kt`](./src/main/kotlin/cn/esuny/gateway/health/GatewayHealthIndicator.kt) | 自定义健康指示器 |
 
 注：模块根的 `gateway/config/` 是空目录，真实配置在 `src/main/resources/application.yaml`。
@@ -45,6 +46,7 @@ HealthServer 的统一流量入口（默认端口 `8091`），基于 Spring Clou
 | 改限流阈值/算法 | [`filter/RateLimitFilter.kt`](./src/main/kotlin/cn/esuny/gateway/filter/RateLimitFilter.kt) + `application.yaml` 的 `gateway.rate-limit` |
 | 改认证/白名单/身份头 | [`filter/AuthentikAuthFilter.kt`](./src/main/kotlin/cn/esuny/gateway/filter/AuthentikAuthFilter.kt)、[`config/OidcAuthProperties.kt`](./src/main/kotlin/cn/esuny/gateway/config/OidcAuthProperties.kt) |
 | 改 CORS | [`config/CorsConfig.kt`](./src/main/kotlin/cn/esuny/gateway/config/CorsConfig.kt) + `application.yaml` 的 `gateway.cors` |
+| 改错误响应格式 | [`model/ApiResponse.kt`](./src/main/kotlin/cn/esuny/gateway/model/ApiResponse.kt)（四条错误路径共用）→ [`handler/GlobalExceptionHandler.kt`](./src/main/kotlin/cn/esuny/gateway/handler/GlobalExceptionHandler.kt)、[`filter/AuthentikAuthFilter.kt`](./src/main/kotlin/cn/esuny/gateway/filter/AuthentikAuthFilter.kt)、[`filter/RateLimitFilter.kt`](./src/main/kotlin/cn/esuny/gateway/filter/RateLimitFilter.kt)、[`handler/FallbackController.kt`](./src/main/kotlin/cn/esuny/gateway/handler/FallbackController.kt) |
 | 排查请求链路 | `X-Trace-Id` 透传（[`filter/TraceIdFilter.kt`](./src/main/kotlin/cn/esuny/gateway/filter/TraceIdFilter.kt)）→ 后端模块 `AGENTS.md` |
 
 ## 关键事实与易错点
@@ -69,7 +71,7 @@ HealthServer 的统一流量入口（默认端口 `8091`），基于 Spring Clou
 ./gradlew :gateway:bootRun   # 需要可用 Nacos、Authentik 与后端发现实例
 ```
 
-- 测试仅 [`AuthentikAuthFilterTest.kt`](./src/test/kotlin/cn/esuny/gateway/filter/AuthentikAuthFilterTest.kt)；`filter/`、`security/` 测试目录存在但为空。
+- 测试仅 [`AuthentikAuthFilterTest.kt`](./src/test/kotlin/cn/esuny/gateway/filter/AuthentikAuthFilterTest.kt)（位于 `filter/` 测试包）；`security/` 测试目录存在但为空。
 - 改动认证、过滤器顺序或路由时补回归测试。
 
 ## 相关文档

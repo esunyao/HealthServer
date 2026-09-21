@@ -16,7 +16,7 @@
 |---|---|
 | Gradle | `:integration-contracts`（`bootJar` 禁用、`jar` 启用，见 [`build.gradle`](./build.gradle)） |
 | 唯一源码 | [`src/main/kotlin/cn/esuny/contracts/integration/v1/IntegrationEvents.kt`](./src/main/kotlin/cn/esuny/contracts/integration/v1/IntegrationEvents.kt) |
-| Schema | [`src/main/resources/schema/`](./src/main/resources/schema/)：`nutrition-{capture-ready,analysis-completed,analysis-failed}-v1.schema.json`（`$id` 命名空间 `https://healthmind.local/schema/...`） |
+| Schema | [`nutrition-capture-ready-v1.schema.json`](./src/main/resources/schema/nutrition-capture-ready-v1.schema.json)、[`nutrition-analysis-completed-v1.schema.json`](./src/main/resources/schema/nutrition-analysis-completed-v1.schema.json)、[`nutrition-analysis-failed-v1.schema.json`](./src/main/resources/schema/nutrition-analysis-failed-v1.schema.json)（`$id` 命名空间 `https://healthmind.local/schema/...`） |
 | AsyncAPI | [`src/main/resources/asyncapi/nutrition-analysis-v1.yaml`](./src/main/resources/asyncapi/nutrition-analysis-v1.yaml)（AsyncAPI 3.0.0，「HealthMind Nutrition Analysis Events」v1.0.0） |
 | 依赖 | `api jackson-annotations`；无 Nacos/Kafka/数据库依赖 |
 | 使用方 | NutriMemo（生产 capture-ready；消费 completed/failed）与 HealthMind（消费 capture-ready；生产 completed/failed） |
@@ -29,8 +29,8 @@
 
 Payload：
 - `NutritionCaptureReadyPayload`：`capture_session_id`、`meal_id`。
-- `NutritionAnalysisCompletedPayload`：`task_id`、`result_version`、`overall_confidence`、`items: List<AnalyzedMealItem>`（含 `List<AnalyzedNutrient>`）。
-- `NutritionAnalysisFailedPayload`：`error_code`、`failure_category`、`retryable`、`error_summary`。
+- `NutritionAnalysisCompletedPayload`：`task_id`、`capture_session_id`、`meal_id`、`result_version`、`overall_confidence`、`items: List<AnalyzedMealItem>`（含 `List<AnalyzedNutrient>`）。
+- `NutritionAnalysisFailedPayload`：`task_id`、`capture_session_id`、`meal_id`、`error_code`、`failure_category`、`retryable`、`error_summary`。
 
 ## 任务 → 读什么
 
@@ -64,4 +64,4 @@ Payload：
 - [../AGENTS.md](../AGENTS.md) — 仓库规范（跨服务链路阅读入口在这里指向本模块）。
 - [../NutriMemo/AGENTS.md](../NutriMemo/AGENTS.md)、[../HealthMind/AGENTS.md](../HealthMind/AGENTS.md) — 实现端导航。
 - [../HealthMindControl/doc/analysis-chain.md](../HealthMindControl/doc/analysis-chain.md) — 含 Kafka topic 的端到端时序。
-- 私有：`doc-project/`（背景与规范，不提交）；`docp/`（若存在，只读参考、不写入）。
+- 私有（在**仓库根**，非本模块内）：`doc-project/`（背景与规范，不提交）；`docp/`（若存在，只读参考、不写入）。

@@ -132,6 +132,15 @@
 
 各模块 `AGENTS.md` 是进入该模块的最短路径；它们只做导航，规范与契约以根 `AGENTS.md`、`doc/`、`openapi.yaml` 和 `integration-contracts` 为准。
 
+> [!note]
+> **本地私有层缺失时的降级路径**：`doc-project/` 与 `<模块>/docp/` 都被 `.gitignore` 排除，**在新克隆、CI 或其他机器上并不存在**。此时上表「首次接触项目」的第二站不可达，属正常情况，**不阻塞工作**——改为：
+>
+> 1. 读本文件「项目背景与不可变边界」一节的内联服务角色表（Orion / NutriMemo / HealthMind 分工）；
+> 2. 读目标模块 `doc/README.md` 建立该模块概览；
+> 3. 涉及跨服务链路的细节，改以下列**已提交**内容为准：`integration-contracts` 的 schema/AsyncAPI、各模块 `openapi.yaml` 与源码。
+>
+> 凡文档中以「私有」「不提交」标注的路径同理处理；不要因为找不到它们而停下，也不要据此猜测其内容。
+
 ## Repository Guidelines
 
 ### 项目结构

@@ -19,7 +19,7 @@
 | 端口 | `${HEALTHMIND_PORT:8100}` |
 | 技术栈 | WebMVC + Spring AI MCP Server（`STREAMABLE`，端点 `/mcp`，spring-ai-bom 2.0.0）+ PostgreSQL（`healthmind` schema）+ Kafka + Dify Workflow（blocking） |
 | 配置来源 | [`application.yaml`](./src/main/resources/application.yaml)；Nacos `HealthMind_Application.yaml`；业务配置集中在 `healthmind.*`（[`HealthMindProperties.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/config/HealthMindProperties.kt)） |
-| 迁移 | [`db/migration/`](./src/main/resources/db/migration/)：V1 schema（11 张表）、V2 稳定定义种子（任务类型 `nutrition.meal_analysis` + 两个工具定义含内嵌 JSON Schema 与 sha256）、V3 审计 action `tools_bound` |
+| 迁移 | [`db/migration/`](./src/main/resources/db/migration/)：V1 schema（12 张表）、V2 稳定定义种子（任务类型 `nutrition.meal_analysis` + 两个工具定义含内嵌 JSON Schema 与 sha256）、V3 审计 action `tools_bound` |
 | release 提升 | [`db/manual/promote_workflow_release.sql`](./src/main/resources/db/manual/promote_workflow_release.sql)（psql 变量驱动；咨询锁 + candidate→production、旧 production→retired + 审计）——**手动脚本，不随 Flyway 自动执行** |
 | 业务 API | 无 REST 业务 API、无 `openapi.yaml`；业务入口是 MCP `/mcp` |
 | 保留期 | 结果与集成记录默认 30 天，任务与工具审计默认 180 天（`healthmind.*.retention`） |
@@ -49,7 +49,7 @@
 | 改任务状态机/重试 | [`domain/task/TaskModels.kt`](./src/main/kotlin/cn/esuny/healthmind/domain/task/TaskModels.kt) → [`infrastructure/database/TaskCommandRepository.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/database/TaskCommandRepository.kt) → [`application/service/TaskExecutionService.kt`](./src/main/kotlin/cn/esuny/healthmind/application/service/TaskExecutionService.kt) |
 | 改 Dify 调用 | [`infrastructure/dify/DifyWorkflowClient.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/dify/DifyWorkflowClient.kt) + `application.yaml` 的 `healthmind.dify.*` |
 | 改 MCP 工具/授权 | [`interfaces/mcp/HealthMindMcpTools.kt`](./src/main/kotlin/cn/esuny/healthmind/interfaces/mcp/HealthMindMcpTools.kt) → [`infrastructure/database/ToolInvocationRepository.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/database/ToolInvocationRepository.kt) → [`infrastructure/config/SecurityConfig.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/config/SecurityConfig.kt) |
-| 改结果契约/校验 | [`infrastructure/json/JsonSchemaService.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/json/JsonSchemaService.kt) + [../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md) + 私有 `doc-project/0917Dify餐食AI结构化输出规范.md` |
+| 改结果契约/校验 | [`infrastructure/json/JsonSchemaService.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/json/JsonSchemaService.kt) + [../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md) + 私有（仓库根）`doc-project/0917Dify餐食AI结构化输出规范.md` |
 | 改事件进出 | [`interfaces/messaging/NutritionCaptureReadyListener.kt`](./src/main/kotlin/cn/esuny/healthmind/interfaces/messaging/NutritionCaptureReadyListener.kt)、[`infrastructure/messaging/HealthMindOutboxPublisher.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/messaging/HealthMindOutboxPublisher.kt) |
 | 发布新工作流版本 | [`db/manual/promote_workflow_release.sql`](./src/main/resources/db/manual/promote_workflow_release.sql)（手动脚本，注意咨询锁与审计） |
 | 排查链路卡住 | [../HealthMindControl/doc/analysis-chain.md](../HealthMindControl/doc/analysis-chain.md) 的「故障定位顺序」+ [`RecoveryAndRetentionJobs.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/database/RecoveryAndRetentionJobs.kt) |
@@ -69,7 +69,7 @@
 
 - MCP：`/mcp`（STREAMABLE）；工具 `nutrimemo.capture_context.get`、`orion.nutrition_context.get`。
 - 其他端点：Actuator（health/info/metrics/prometheus）、`/.well-known/oauth-protected-resource/**`。
-- Kafka：消费 `nutrition-capture-ready`（校验 `event_type`/`schema_version`/`producer == "NutriMemo"`/`aggregate_type == "meal"`，消费组 `healthmind-nutrition-v1`）；生产 `nutrition-analysis-completed` / `nutrition-analysis-failed`（key = captureSessionId）。
+- Kafka：消费物理 topic `nutrition-capture-ready`（对应 `event_type` = `nutrition.capture.ready.v1`；校验 `event_type`/`schema_version`/`producer == "NutriMemo"`/`aggregate_type == "meal"`，消费组 `healthmind-nutrition-v1`）；生产 `nutrition-analysis-completed` / `nutrition-analysis-failed`（key = captureSessionId）。物理 topic 名与本模块 `doc/README.md` 使用的事件类型名是两套命名，勿混称。
 - 事件契约单一来源：[../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md)。
 
 ## 测试与验证

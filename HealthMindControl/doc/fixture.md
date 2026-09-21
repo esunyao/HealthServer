@@ -39,3 +39,9 @@ outbox 的推荐模板默认保持到 2099，不会被发布器领取。只有�
 MCP 测试 attempt 的数据库超时为一小时，HMC 租期默认 50 分钟。可以续期，也可以主动结束；
 结束只把测试 task/attempt 标为 cancelled，不删除记录、不生成业务 outbox。到期扫描执行同样的
 关闭操作，避免 HealthMind 将测试 attempt 当作正式超时任务恢复。
+
+## 相关文档
+
+- [../AGENTS.md](../AGENTS.md) — 本模块（HealthMindControl）导航：页面、API 与安全边界。
+- [analysis-chain.md](./analysis-chain.md) — 完整链路时序与「故障定位顺序」；本页构造的测试任务服务于该链路的定点验证。
+- [../../HealthMind/AGENTS.md](../../HealthMind/AGENTS.md) — MCP 双层授权（任务/attempt、release 绑定、scope 与调用上限）的实现方。

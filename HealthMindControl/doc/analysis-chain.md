@@ -79,3 +79,12 @@ sequenceDiagram
 6. Dify 报 MCP authentication：重新授权 Dify MCP 连接，确认 Authentik redirect URI、client/scope。
 7. HM outbox `published` 但 Nutri inbox 没有：查结果 topic 与 Nutri group lag。
 8. Nutri inbox `processed` 但餐食仍 analysing：查人工修订保护、meal/capture 状态一致性和回写事务日志。
+
+## 相关文档
+
+- [../AGENTS.md](../AGENTS.md) — 本模块（HealthMindControl）导航：页面、API、调试能力与安全边界。
+- [../doc/README.md](./README.md) — 本模块公开文档入口。
+- 链路两端：[../../NutriMemo/AGENTS.md](../../NutriMemo/AGENTS.md)（发布方/回写方）、[../../HealthMind/AGENTS.md](../../HealthMind/AGENTS.md)（消费方/执行方）。
+- [../../Orion/AGENTS.md](../../Orion/AGENTS.md) — MCP 取数的另一来源（最小营养健康上下文）。
+- [../../integration-contracts/AGENTS.md](../../integration-contracts/AGENTS.md) — 本链路事件的字段契约（含物理 topic 与 event_type 的区别）。
+- [../../AGENTS.md](../../AGENTS.md) — 仓库规范、阅读导航与项目背景。

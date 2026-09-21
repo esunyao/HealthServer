@@ -77,4 +77,6 @@ uv run --project HealthMindControl python HealthMindControl\tests\_smoke.py   # 
 - [README.md](./README.md) — 运行手册（环境、`.env` 变量、页面、最短 MCP 草稿测试）。
 - [doc/README.md](./doc/README.md) — 模块大体说明与合规状态指引。
 - [../AGENTS.md](../AGENTS.md) — 仓库规范、阅读导航与项目背景。
+- 被观测/操作的服务（本控制台的下钻出口）：[../HealthMind/AGENTS.md](../HealthMind/AGENTS.md)（任务与 MCP 授权）、[../NutriMemo/AGENTS.md](../NutriMemo/AGENTS.md)（采集与回写）、[../Orion/AGENTS.md](../Orion/AGENTS.md)（营养上下文来源）。
+- [../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md) — 链路事件的字段契约与物理 topic。
 - 私有：`docp/`（若存在）是维护者详细核查材料，AI 只读参考、不写入。

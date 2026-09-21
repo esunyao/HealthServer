@@ -22,3 +22,9 @@
 - ❓ Redpanda/Testcontainers 并发集成套件和全链路自动化浏览器写操作尚未加入持续集成。
 
 本公开摘要不等于生产就绪声明；危险操作仍以页面预览、当前快照、确认文本和审计记录为准。
+
+## 相关文档
+
+- [../AGENTS.md](../AGENTS.md) — 本模块（HealthMindControl）导航：页面、API、调试能力与安全边界。
+- [analysis-chain.md](./analysis-chain.md) — 餐食 AI 分析链路的端到端时序与故障定位顺序。
+- [fixture.md](./fixture.md) — 数据构造器与 MCP 手动测试链路。
