@@ -34,14 +34,14 @@
 | 模块根 `openapi.yaml` | HTTP 接口字段契约 | 以契约为准 | 是 | 维护者 |
 | `integration-contracts/src/main/resources/{schema,asyncapi}` | 跨服务事件契约 | 以契约为准 | 是 | 维护者 |
 | 根 `AGENTS.md` | 本文件，规范的唯一来源 | — | 是 | 维护者与 AI |
-| 根或模块 `CLAUDE.md` | 兼容存根，指向根 `AGENTS.md`、`<模块>/AGENTS.md` 与本模块 `doc/` | — | 是 | 同 `AGENTS.md` |
+| 根或模块 `CLAUDE.md` | 兼容存根，指向根 `AGENTS.md`、`<模块>/AGENTS.md` 与本模块本地说明 | — | 是 | 同 `AGENTS.md` |
 
 - 每个模块的 `doc/README.md` 是公开入口；只有确有必要时才增加主题文件。
 - 每个模块的 `AGENTS.md` 是 AI 导航入口：写「读什么、去哪找、边界在哪」，不复制规范、不维护第二套规则；规范、契约与细节以根 `AGENTS.md`、`doc/`、`openapi.yaml`、`integration-contracts` 与源码为准。
 - 公开文档文件名使用小写英文、单数，不加日期和版本前缀；`README.md` 是入口文件的固定例外。
 - `docp/` 的组织方式、文件名和文件头由维护者自行决定，AI 不代为规定，也不写入。
 - `doc-project/` 是项目背景特例，不受公开文档命名规则约束。
-- 所有模块级 `CLAUDE.md` 若存在，必须是相同格式的两行兼容存根（指向根 `AGENTS.md`、`<模块>/AGENTS.md` 与本模块 `doc/`），不维护第二套规则。
+- 所有模块级 `CLAUDE.md` 若存在，必须是相同格式的两行兼容存根（指向根 `AGENTS.md`、`<模块>/AGENTS.md` 与本模块的本地说明；无 `doc/` 的目录用其本地说明文件，如 `AgentDeveloper/skills/README.md`），不维护第二套规则。
 
 ## 仓库速查
 
