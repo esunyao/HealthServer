@@ -54,5 +54,5 @@ outbox 负责可靠发布；Kafka 是服务间事件通道。分析结果消费�
 ## 进一步阅读
 
 - [模块 AGENTS.md](../AGENTS.md)：AI 导航（任务 → 读什么、状态机与易错点）。
-- [根 AGENTS.md](../AGENTS.md)：仓库规范、阅读导航与项目背景。
-- [integration-contracts/doc/README.md](../integration-contracts/doc/README.md)：跨服务事件契约。
+- [根 AGENTS.md](../../AGENTS.md)：仓库规范、阅读导航与项目背景。
+- [integration-contracts/doc/README.md](../../integration-contracts/doc/README.md)：跨服务事件契约。

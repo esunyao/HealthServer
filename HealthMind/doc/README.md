@@ -58,5 +58,5 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 ## 进一步阅读
 
 - [模块 AGENTS.md](../AGENTS.md)：AI 导航（任务 → 读什么、状态机与重试、MCP 双层授权、Dify 调用细节）。
-- [根 AGENTS.md](../AGENTS.md)：仓库规范、阅读导航与项目背景（HealthMind 是通用 AI 能力层）。
-- [NutriMemo/AGENTS.md](../NutriMemo/AGENTS.md) 与 [integration-contracts/doc/README.md](../integration-contracts/doc/README.md)：链路对端与事件契约。
+- [根 AGENTS.md](../../AGENTS.md)：仓库规范、阅读导航与项目背景（HealthMind 是通用 AI 能力层）。
+- [NutriMemo/AGENTS.md](../../NutriMemo/AGENTS.md) 与 [integration-contracts/doc/README.md](../../integration-contracts/doc/README.md)：链路对端与事件契约。

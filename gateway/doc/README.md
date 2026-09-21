@@ -56,4 +56,4 @@ HealthServer 的统一流量入口（默认端口 `8091`），基于 Spring Clou
 ## 进一步阅读
 
 - [模块 AGENTS.md](../AGENTS.md)：AI 导航（任务 → 读什么、关键事实与易错点）。
-- [根 AGENTS.md](../AGENTS.md)：仓库规范、路由表与阅读导航。
+- [根 AGENTS.md](../../AGENTS.md)：仓库规范、路由表与阅读导航。

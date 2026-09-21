@@ -50,4 +50,4 @@ HealthServer 的用户身份、画像、健康记录和头像文件服务（默�
 ## 进一步阅读
 
 - [模块 AGENTS.md](../AGENTS.md)：AI 导航（任务 → 读什么、关键事实与易错点、内部 M2M 安全链）。
-- [根 AGENTS.md](../AGENTS.md)：仓库规范、阅读导航与项目背景（Orion 是用户画像系统）。
+- [根 AGENTS.md](../../AGENTS.md)：仓库规范、阅读导航与项目背景（Orion 是用户画像系统）。
