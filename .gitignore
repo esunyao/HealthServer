@@ -55,6 +55,9 @@ plans
 ### 本地环境变量（含真实凭据），禁止提交 ###
 .env
 
+# 临时文件
+**.tmp
+
 # HealthMindControl local state
 HealthMindControl/var/
 HealthMindControl/.env

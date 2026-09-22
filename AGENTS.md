@@ -56,6 +56,7 @@
 | [`integration-contracts/`](./integration-contracts/AGENTS.md) | `integration-contracts` | — | — | JSON Schema + AsyncAPI + Kotlin 数据类 | 跨服务事件契约的单一来源 |
 | [`HealthMindControl/`](./HealthMindControl/AGENTS.md) | 非 Gradle 模块 | 8765 | `HMC_PORT` | FastAPI + Jinja2 + 原生 ES modules（Python `>=3.12,<3.13`） | 本地运维控制台，仅监听 `127.0.0.1` |
 | [`AgentDeveloper/`](./AgentDeveloper/AGENTS.md) | 非 Gradle 模块 | — | — | Dify 膳食分析技能套件（`SKILL.md` + `evals/`） | AI 提示词技能资产：餐食证据分析、膳食纤维、结果契约 |
+| [`AgentDevelop/`](./AgentDevelop/AGENTS.md) | 非 Gradle 模块 | — | — | LangGraph + deepagents（Python 3.11，uv） | LangGraph 学习样板（两段示例）；**未接入链路，未替代 Dify** |
 
 > Gradle 项目名为小写；目录名 `Orion` 对应 `:orion`。模块名即链接：点击进入该模块的 `AGENTS.md`（模块导航），再向下到 `doc/`、契约与源码。
 
@@ -95,6 +96,8 @@
 ```
 
 `HealthMindControl` 不是 Gradle 模块；其 Python 版本、依赖和测试入口见 [`HealthMindControl/README.md`](./HealthMindControl/README.md)，模块导航见 [`HealthMindControl/AGENTS.md`](./HealthMindControl/AGENTS.md)。`AgentDeveloper` 同样不是 Gradle 模块，是 Dify 技能资产目录，说明见 [`AgentDeveloper/AGENTS.md`](./AgentDeveloper/AGENTS.md)。
+
+`AgentDevelop/`（注意与上一行 `AgentDeveloper/` 只差两个字母，二者无关）也是非 Gradle 模块，是 LangGraph 学习样板目录，运行方式见 [`AgentDevelop/README.md`](./AgentDevelop/README.md)、导航见 [`AgentDevelop/AGENTS.md`](./AgentDevelop/AGENTS.md)；它**尚未**接入任何链路，不承担运行时职责。
 
 ## 项目背景与不可变边界
 

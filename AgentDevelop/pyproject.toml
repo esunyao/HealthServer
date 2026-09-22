@@ -1,0 +1,32 @@
+[project]
+name = "agentdevelop"
+version = "0.1.0"
+description = "LangGraph 学习样板（尚未接入 HealthServer AI 分析链路）"
+readme = "README.md"
+authors = [
+    { name = "Esuny", email = "esun.yao@hotmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "deepagents==0.7.17",
+    "langchain==1.4.2",
+    "langchain-openai>=1.6.3",
+    "langgraph==1.2.12",
+    "python-dotenv>=1.2.3",
+]
+
+[project.scripts]
+agentdevelop = "agentdevelop.main:main"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=9.1.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"
