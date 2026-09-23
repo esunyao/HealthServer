@@ -46,6 +46,10 @@ plans
 .mcp.json
 .mcp
 
+# Agent Skills（npx skills add 的项目级产物，与 .claude 同样只在本地生效）
+.agents/
+skills-lock.json
+
 #python
 **/.venv
 
