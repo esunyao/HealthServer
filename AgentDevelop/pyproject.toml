@@ -1,7 +1,7 @@
 [project]
 name = "agentdevelop"
 version = "0.1.0"
-description = "LangGraph 学习样板（尚未接入 HealthServer AI 分析链路）"
+description = "HealthMind meal-analysis Agent prototype (manual use; not wired into service orchestration)"
 readme = "README.md"
 authors = [
     { name = "Esuny", email = "esun.yao@hotmail.com" }
@@ -10,8 +10,12 @@ requires-python = ">=3.11"
 dependencies = [
     "deepagents==0.7.17",
     "langchain==1.4.2",
+    "langchain-core>=1.6.4",
+    "langchain-mcp-adapters>=0.3.2,<0.4",
     "langchain-openai>=1.6.3",
     "langgraph==1.2.12",
+    "httpx>=0.27,<1",
+    "pydantic>=2.7,<3",
     "python-dotenv>=1.2.3",
 ]
 
