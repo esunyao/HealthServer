@@ -6,8 +6,10 @@ import cn.esuny.healthmind.domain.task.TaskExecution
 import java.util.UUID
 
 interface AgentRunPort {
-    /** The runtime must return the same run for repeated submissions of one attempt. */
+    /** Launch once for an attempt; an uncertain response must be reconciled instead of retried. */
     fun start(command: TaskExecution): UUID
+    /** Read-only reconciliation; never launches a new run. */
+    fun reconcile(command: TaskExecution): UUID?
     fun inspect(command: TaskExecution): AgentRunState
     fun cancel(command: TaskExecution)
 }

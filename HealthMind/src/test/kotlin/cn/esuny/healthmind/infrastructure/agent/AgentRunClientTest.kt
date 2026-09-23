@@ -31,16 +31,20 @@ class AgentRunClientTest {
         server.start()
         val command = command()
         val runId = UUID.randomUUID()
+        server.enqueue(jsonResponse("{\"thread_id\":\"${command.attemptId}\"}"))
         server.enqueue(jsonResponse(run(runId, command, "pending")))
         val client = client()
 
         assertEquals(runId, client.start(command))
 
         val request = server.takeRequest()
-        assertEquals("/runs", request.path)
+        assertEquals("/threads", request.path)
+        assertEquals(command.attemptId.toString(), mapper.readTree(request.body.readUtf8()).path("thread_id").asString())
+        val runRequest = server.takeRequest()
+        assertEquals("/threads/${command.attemptId}/runs", runRequest.path)
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
-        assertEquals(command.attemptId.toString(), request.getHeader("Idempotency-Key"))
-        val body = mapper.readTree(request.body.readUtf8())
+        assertEquals(command.attemptId.toString(), runRequest.getHeader("Idempotency-Key"))
+        val body = mapper.readTree(runRequest.body.readUtf8())
         assertEquals(command.agentAssistantId, body.path("assistant_id").asString())
         assertEquals(command.taskId.toString(), body.path("input").path("task_id").asString())
         assertEquals(command.attemptId.toString(), body.path("input").path("attempt_id").asString())
@@ -50,21 +54,57 @@ class AgentRunClientTest {
     }
 
     @Test
-    fun `retrying an unacknowledged submission uses the same idempotency key`() {
+    fun `reconciliation only lists the attempt thread and never posts another run`() {
         server.start()
         val command = command()
         val runId = UUID.randomUUID()
-        server.enqueue(jsonResponse(run(runId, command, "pending")))
-        server.enqueue(jsonResponse(run(runId, command, "pending")))
+        server.enqueue(jsonResponse("[${run(runId, command, "pending")}]"))
         val client = client()
 
-        assertEquals(runId, client.start(command))
-        assertEquals(runId, client.start(command))
+        assertEquals(runId, client.reconcile(command))
 
-        val first = server.takeRequest()
-        val second = server.takeRequest()
-        assertEquals(first.getHeader("Idempotency-Key"), second.getHeader("Idempotency-Key"))
-        assertEquals(first.body.readUtf8(), second.body.readUtf8())
+        assertEquals("/threads/${command.attemptId}/runs", server.takeRequest().path)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `missing run remains unresolved without another launch`() {
+        server.start()
+        val command = command()
+        server.enqueue(jsonResponse("[]"))
+
+        assertEquals(null, client().reconcile(command))
+        assertEquals("GET", server.takeRequest().method)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `multiple runs for one attempt are rejected`() {
+        server.start()
+        val command = command()
+        val first = run(UUID.randomUUID(), command, "pending")
+        val second = run(UUID.randomUUID(), command, "pending")
+        server.enqueue(jsonResponse("[$first,$second]"))
+
+        val error = assertFailsWith<TaskExecutionException> { client().reconcile(command) }
+
+        assertEquals("AGENT_DUPLICATE_RUNS", error.code)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `existing attempt thread is reused after a lost creation response`() {
+        server.start()
+        val command = command()
+        val runId = UUID.randomUUID()
+        server.enqueue(MockResponse().setResponseCode(409))
+        server.enqueue(jsonResponse("{\"thread_id\":\"${command.attemptId}\"}"))
+        server.enqueue(jsonResponse(run(runId, command, "pending")))
+
+        assertEquals(runId, client().start(command))
+        assertEquals("POST", server.takeRequest().method)
+        assertEquals("/threads/${command.attemptId}", server.takeRequest().path)
+        assertEquals("/threads/${command.attemptId}/runs", server.takeRequest().path)
     }
 
     @Test
@@ -91,6 +131,7 @@ class AgentRunClientTest {
     fun `rejects a run not matching the pinned attempt and release`() {
         server.start()
         val command = command()
+        server.enqueue(jsonResponse("{\"thread_id\":\"${command.attemptId}\"}"))
         server.enqueue(jsonResponse("""{"run_id":"${UUID.randomUUID()}","metadata":{}}"""))
 
         val error = assertFailsWith<TaskExecutionException> { client().start(command) }

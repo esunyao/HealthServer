@@ -11,6 +11,7 @@ class HealthMindMigrationScriptTest {
     private val migration = requireNotNull(javaClass.getResource("/db/migration/V1__create_healthmind_schema.sql")).readText()
     private val seeds = requireNotNull(javaClass.getResource("/db/migration/V2__seed_stable_definitions.sql")).readText()
     private val cutover = requireNotNull(javaClass.getResource("/db/migration/V4__replace_dify_with_agent_runs.sql")).readText()
+    private val submission = requireNotNull(javaClass.getResource("/db/migration/V5__track_agent_submission_state.sql")).readText()
 
     @Test
     fun `migration declares workbook twelve tables`() {
@@ -52,6 +53,12 @@ class HealthMindMigrationScriptTest {
         assertTrue(cutover.contains("DROP COLUMN dify_workflow_run_id"))
         assertTrue(cutover.contains("trg_protect_agent_release_identity"))
         assertTrue(cutover.contains("trg_protect_promoted_agent_tools"))
+    }
+
+    @Test
+    fun `submission state migration preserves the existing cutover history`() {
+        assertTrue(submission.contains("ADD COLUMN agent_submission_state"))
+        assertTrue(submission.contains("'new', 'submitting', 'uncertain', 'attached'"))
     }
 
     @Test

@@ -3,6 +3,7 @@ package cn.esuny.healthmind.application.service
 import cn.esuny.healthmind.application.port.out.AgentRunPort
 import cn.esuny.healthmind.application.port.out.AgentRunState
 import cn.esuny.healthmind.domain.task.FailureCategory
+import cn.esuny.healthmind.domain.task.AgentSubmissionState
 import cn.esuny.healthmind.domain.task.TaskExecution
 import cn.esuny.healthmind.domain.task.TaskExecutionException
 import cn.esuny.healthmind.infrastructure.database.TaskCommandRepository
@@ -33,9 +34,19 @@ class TaskExecutionService(
         val command = repository.claimDue() ?: return
         if (command.agentRunId == null) {
             try {
-                repository.attachRun(command, agent.start(command))
+                val runId = if (command.agentSubmissionState == AgentSubmissionState.NEW) {
+                    agent.start(command)
+                } else {
+                    agent.reconcile(command)
+                }
+                if (runId == null) repository.schedulePoll(command) else repository.attachRun(command, runId)
             } catch (exception: TaskExecutionException) {
-                handleAgentError(command, exception)
+                if (exception.category.retryable && command.agentSubmissionState == AgentSubmissionState.NEW) {
+                    if (exception.safeToRetrySubmission) repository.resetSubmission(command)
+                    else repository.markSubmissionUnknown(command)
+                } else {
+                    handleAgentError(command, exception)
+                }
             }
             return
         }

@@ -55,7 +55,7 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 
 `bootRun` 需要 PostgreSQL、Kafka、Nacos、Authentik，以及登记在 release 中的自托管 Agent 部署。没有生产 release 时不会接收新 AI 任务。
 
-V4 迁移是一次性破坏性切换：清空 HealthMind 的旧运行记录（含 inbox/outbox、release、任务、attempt、工具调用），删除旧提供方字段；保留任务类型和工具定义。执行前停止 HealthMind 消费者/发布器并备份 `healthmind` schema。它不更改 NutriMemo、Kafka 消费位点或其他模块；旧事件不会自动重新消费。当前 HMC 的旧版本管理界面尚未适配 Agent release，本轮不修改 HMC。详见 [Agent 运行端契约](./agent-runtime.md)。
+V4 迁移是一次性破坏性切换：清空 HealthMind 的旧运行记录（含 inbox/outbox、release、任务、attempt、工具调用），删除旧提供方字段；V5 增加 Agent 提交对账状态。它们保留任务类型和工具定义。执行前停止 HealthMind 消费者/发布器并备份 `healthmind` schema。迁移不更改 NutriMemo、Kafka 消费位点或其他模块；旧事件不会自动重新消费。当前 HMC 的旧版本管理界面尚未适配 Agent release，本轮不修改 HMC。详见 [Agent 运行端契约](./agent-runtime.md)。
 
 ## 进一步阅读
 

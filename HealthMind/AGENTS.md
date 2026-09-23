@@ -19,7 +19,7 @@
 | 端口 | `${HEALTHMIND_PORT:8100}` |
 | 技术栈 | WebMVC + Spring AI MCP Server（`STREAMABLE`，端点 `/mcp`，spring-ai-bom 2.0.0）+ PostgreSQL（`healthmind` schema）+ Kafka + 自托管 LangGraph HTTP 后台 run |
 | 配置来源 | [`application.yaml`](./src/main/resources/application.yaml)；Nacos `HealthMind_Application.yaml`；业务配置集中在 `healthmind.*`（[`HealthMindProperties.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/config/HealthMindProperties.kt)） |
-| 迁移 | [`db/migration/`](./src/main/resources/db/migration/)：V1 schema（12 张表）、V2 稳定定义种子、V3 审计 action `tools_bound`、V4 清理旧运行数据并替换 Agent 字段（破坏性） |
+| 迁移 | [`db/migration/`](./src/main/resources/db/migration/)：V1 schema（12 张表）、V2 稳定定义种子、V3 审计 action `tools_bound`、V4 清理旧运行数据并替换 Agent 字段（破坏性）、V5 持久化提交对账状态 |
 | release 提升 | [`db/manual/promote_workflow_release.sql`](./src/main/resources/db/manual/promote_workflow_release.sql)（psql 变量驱动；咨询锁 + candidate→production、旧 production→retired + 审计）——**手动脚本，不随 Flyway 自动执行** |
 | 业务 API | 无 REST 业务 API、无 `openapi.yaml`；业务入口是 MCP `/mcp` |
 | 保留期 | 结果与集成记录默认 30 天，任务与工具审计默认 180 天（`healthmind.*.retention`） |
@@ -28,7 +28,7 @@
 
 | 层 | 位置 | 职责 |
 |---|---|---|
-| application | [`application/service/TaskExecutionService.kt`](./src/main/kotlin/cn/esuny/healthmind/application/service/TaskExecutionService.kt) | 认领任务 → 幂等提交后台 run → 轮询 → 校验 → complete/fail |
+| application | [`application/service/TaskExecutionService.kt`](./src/main/kotlin/cn/esuny/healthmind/application/service/TaskExecutionService.kt) | 认领任务 → 固定 thread 启动或只读对账 → 轮询 → 校验 → complete/fail |
 | application | [`application/port/out/`](./src/main/kotlin/cn/esuny/healthmind/application/port/out/) | 出站端口：`AgentRunPort`、`InternalContextPort` |
 | domain | [`domain/task/TaskModels.kt`](./src/main/kotlin/cn/esuny/healthmind/domain/task/TaskModels.kt) | `TaskExecution`、`AgentRunResult`、`FailureCategory`（TRANSIENT/PERMANENT/CONTRACT/TIMEOUT/CANCELLED） |
 | infrastructure | [`infrastructure/database/TaskCommandRepository.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/database/TaskCommandRepository.kt) | inbox 接收、任务认领、完成/失败、outbox 写入（事务核心） |
@@ -60,7 +60,7 @@
 - **attempt 状态**：`{pending, running, succeeded, failed, timed_out, cancelled}`；超时由固定 release 的 `timeout_seconds` 决定，恢复任务只处理最新 attempt。运行中任务数量受 `agent.max-in-flight` 限制。
 - **MCP 双层授权**：JWT 层（`SecurityConfig`）要求 issuer + audience `healthmind-mcp` + `azp == langgraph-healthmind`，并发布 RFC 9728 protected resource metadata（scope `healthmind.tool.nutrimemo.capture-context.read`、`healthmind.tool.orion.nutrition-context.read`）；工具层（`ToolInvocationRepository.authorizeAndStart`）要求任务/attempt 为 running、release 已绑定该工具、调用方 scope 与 `allowed_scope` 匹配、未超 `max_calls`，随后写 `ai_tool_invocations`（含请求/响应 sha256 审计）。调用方只能传 `taskId`/`attemptId`。
 - **Release 固定语义**：接收事件时固定当时的 production Workflow Release；运行中和重试任务不切换到新版本。改任务流程时不要引入"实时取最新版本"。
-- **Agent 调用细节**：`POST /runs` 幂等提交，`GET /runs/{run_id}` 轮询，成功后 `GET /runs/{run_id}/wait` 取结果；输入只有 `task_id`/`attempt_id`/`trace_id`。运行端必须按 attempt ID 保证提交幂等并回报实际部署制品 SHA-256，详见 [`doc/agent-runtime.md`](./doc/agent-runtime.md)。
+- **Agent 调用细节**：attempt ID 是固定 thread ID；首次 `POST /threads/{attempt_id}/runs` 后，响应不明时只用 `GET /threads/{attempt_id}/runs` 对账，不盲目再次启动；已知 run 经 `GET /runs/{run_id}` 轮询，成功后用 `/wait` 取结果。输入只有 `task_id`/`attempt_id`/`trace_id`；详见 [`doc/agent-runtime.md`](./doc/agent-runtime.md)。
 - **认证**：HealthMind 使用 Authentik `client_credentials` 访问 Agent，Agent 使用独立服务身份访问 MCP；密钥只从环境或 Nacos 注入。
 - **Inbox 幂等**：`acceptCaptureReady` 用 `ON CONFLICT DO NOTHING`；同事务新建 `queued` 任务并把 inbox 标 `processed`；无 production release 时抛异常，listener `nack(30s)` 延迟重试（重投不会重置已有 inbox）。
 - **结果哈希**：`CanonicalJson` 对键排序后 SHA-256，用于 result hash 与工具调用审计；改输出结构时注意规范化不受字段顺序影响。

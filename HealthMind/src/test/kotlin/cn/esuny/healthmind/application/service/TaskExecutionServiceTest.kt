@@ -3,6 +3,7 @@ package cn.esuny.healthmind.application.service
 import cn.esuny.healthmind.application.port.out.AgentRunPort
 import cn.esuny.healthmind.application.port.out.AgentRunState
 import cn.esuny.healthmind.domain.task.AgentRunResult
+import cn.esuny.healthmind.domain.task.AgentSubmissionState
 import cn.esuny.healthmind.domain.task.FailureCategory
 import cn.esuny.healthmind.domain.task.TaskExecution
 import cn.esuny.healthmind.domain.task.TaskExecutionException
@@ -38,7 +39,7 @@ class TaskExecutionServiceTest {
     }
 
     @Test
-    fun `transient submission error keeps the attempt running for idempotent retry`() {
+    fun `uncertain submission is reconciled without posting another run`() {
         val command = command()
         every { repository.claimDue() } returns command
         every { agent.start(command) } throws TaskExecutionException("AGENT_UNAVAILABLE", FailureCategory.TRANSIENT, "offline")
@@ -47,7 +48,31 @@ class TaskExecutionServiceTest {
 
         verify(exactly = 0) { repository.fail(any(), any(), any(), any()) }
         verify(exactly = 0) { repository.attachRun(any(), any()) }
-        verify(exactly = 1) { repository.schedulePoll(command) }
+        verify(exactly = 1) { repository.markSubmissionUnknown(command) }
+
+        val uncertain = command.copy(agentSubmissionState = AgentSubmissionState.UNCERTAIN)
+        every { repository.claimDue() } returns uncertain
+        every { agent.reconcile(uncertain) } returns null
+        service.advanceNext()
+
+        verify(exactly = 1) { agent.start(command) }
+        verify(exactly = 1) { agent.reconcile(uncertain) }
+        verify(exactly = 1) { repository.schedulePoll(uncertain) }
+    }
+
+    @Test
+    fun `failure before run submission can retry after the service recovers`() {
+        val command = command()
+        every { repository.claimDue() } returns command
+        every { agent.start(command) } throws TaskExecutionException(
+            "AGENT_UNAVAILABLE", FailureCategory.TRANSIENT, "thread unavailable",
+            safeToRetrySubmission = true,
+        )
+
+        service.advanceNext()
+
+        verify(exactly = 1) { repository.resetSubmission(command) }
+        verify(exactly = 0) { repository.markSubmissionUnknown(command) }
     }
 
     @Test

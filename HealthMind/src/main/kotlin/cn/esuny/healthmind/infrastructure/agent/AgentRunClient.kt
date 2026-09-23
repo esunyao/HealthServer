@@ -43,6 +43,30 @@ class AgentRunClient(
     }
 
     override fun start(command: TaskExecution): UUID {
+        val thread = try {
+            request(command) { client, bearer ->
+                try {
+                    client.post().uri("/threads")
+                        .header("Authorization", "Bearer $bearer")
+                        .body(mapOf("thread_id" to command.attemptId.toString(),
+                            "metadata" to mapOf("task_id" to command.taskId.toString())))
+                        .retrieve().body(JsonNode::class.java)
+                } catch (exception: RestClientResponseException) {
+                    if (exception.statusCode.value() != 409) throw exception
+                    client.get().uri("/threads/{threadId}", command.attemptId)
+                        .header("Authorization", "Bearer $bearer")
+                        .retrieve().body(JsonNode::class.java)
+                }
+            }
+        } catch (exception: TaskExecutionException) {
+            if (!exception.category.retryable) throw exception
+            // No run POST has been attempted yet, so retrying thread creation is safe.
+            throw TaskExecutionException(exception.code, exception.category, "Agent thread is unavailable",
+                exception, safeToRetrySubmission = true)
+        }
+        if (thread?.path("thread_id")?.asString() != command.attemptId.toString()) {
+            throw TaskExecutionException("AGENT_THREAD_MISMATCH", FailureCategory.CONTRACT, "Agent returned another thread")
+        }
         val request = mapOf(
             "assistant_id" to command.agentAssistantId,
             "input" to mapOf(
@@ -59,13 +83,35 @@ class AgentRunClient(
             "on_completion" to "keep",
         )
         val response = request(command) { client, bearer ->
-            client.post().uri("/runs")
+            client.post().uri("/threads/{threadId}/runs", command.attemptId)
                 .header("Authorization", "Bearer $bearer")
                 .header("Idempotency-Key", command.attemptId.toString())
                 .body(request).retrieve().body(JsonNode::class.java)
         }
         verifyRunIdentity(response, command)
         return parseRunId(response)
+    }
+
+    override fun reconcile(command: TaskExecution): UUID? {
+        val runs = try {
+            request(command) { client, bearer ->
+                client.get().uri("/threads/{threadId}/runs", command.attemptId)
+                    .header("Authorization", "Bearer $bearer")
+                    .retrieve().body(JsonNode::class.java)
+            }
+        } catch (exception: TaskExecutionException) {
+            if (exception.code == "AGENT_RESOURCE_MISSING") return null
+            throw exception
+        }
+        if (runs == null || !runs.isArray) {
+            throw TaskExecutionException("AGENT_RUN_LIST_INVALID", FailureCategory.CONTRACT, "Agent returned an invalid run list")
+        }
+        if (runs.size() > 1) {
+            throw TaskExecutionException("AGENT_DUPLICATE_RUNS", FailureCategory.CONTRACT, "Multiple runs exist for one attempt")
+        }
+        val run = runs.firstOrNull() ?: return null
+        verifyRunIdentity(run, command)
+        return parseRunId(run)
     }
 
     override fun inspect(command: TaskExecution): AgentRunState {

@@ -4,6 +4,7 @@ import cn.esuny.contracts.integration.v1.IntegrationEvent
 import cn.esuny.contracts.integration.v1.NutritionCaptureReadyPayload
 import cn.esuny.contracts.integration.v1.NutritionEventTypes
 import cn.esuny.healthmind.domain.task.AgentRunResult
+import cn.esuny.healthmind.domain.task.AgentSubmissionState
 import cn.esuny.healthmind.domain.task.FailureCategory
 import cn.esuny.healthmind.domain.task.TaskExecution
 import cn.esuny.healthmind.domain.task.TaskExecutionException
@@ -189,7 +190,7 @@ class TaskCommandRepository(
                    (t.context_manifest->>'meal_id')::bigint AS meal_id,
                    wr.release_id, wr.agent_deployment_key, wr.agent_assistant_id, wr.agent_artifact_sha256,
                    wr.output_schema_version, wr.output_schema::text, wr.timeout_seconds, wr.max_attempts,
-                   a.attempt_id, a.attempt_no, a.agent_run_id
+                   a.attempt_id, a.attempt_no, a.agent_run_id, a.agent_submission_state
               FROM healthmind.ai_task_attempts a
               JOIN healthmind.ai_tasks t ON t.task_id=a.task_id
               JOIN healthmind.workflow_releases wr ON wr.release_id=t.workflow_release_id
@@ -204,10 +205,14 @@ class TaskCommandRepository(
         ) { rs, _ -> rowToExecution(rs).copy(
             attemptId = rs.getObject("attempt_id", UUID::class.java),
             agentRunId = rs.getObject("agent_run_id", UUID::class.java),
+            agentSubmissionState = AgentSubmissionState.valueOf(rs.getString("agent_submission_state").uppercase()),
         ) }
         val selected = rows.singleOrNull() ?: return null
         jdbc.update(
-            "UPDATE healthmind.ai_task_attempts SET agent_next_check_at=:nextCheck WHERE attempt_id=:attemptId AND status='running'",
+            """UPDATE healthmind.ai_task_attempts
+                  SET agent_next_check_at=:nextCheck,
+                      agent_submission_state=CASE WHEN agent_submission_state='new' THEN 'submitting' ELSE agent_submission_state END
+                WHERE attempt_id=:attemptId AND status='running'""",
             mapOf(
                 "attemptId" to selected.attemptId,
                 "nextCheck" to Timestamp.from(Instant.now().plus(
@@ -224,12 +229,35 @@ class TaskCommandRepository(
         val updated = jdbc.update(
             """
             UPDATE healthmind.ai_task_attempts
-               SET agent_run_id=:runId, agent_next_check_at=NOW()
-             WHERE attempt_id=:attemptId AND status='running' AND agent_run_id IS NULL
+               SET agent_run_id=:runId, agent_submission_state='attached', agent_next_check_at=NOW()
+             WHERE attempt_id=:attemptId AND status='running' AND (agent_run_id IS NULL OR agent_run_id=:runId)
             """.trimIndent(),
             mapOf("attemptId" to command.attemptId, "runId" to runId),
         )
         check(updated == 1) { "Agent run could not be attached to the running attempt" }
+    }
+
+    @Transactional
+    fun markSubmissionUnknown(command: TaskExecution) {
+        jdbc.update(
+            """UPDATE healthmind.ai_task_attempts
+                  SET agent_submission_state='uncertain', agent_next_check_at=:nextCheck
+                WHERE attempt_id=:attemptId AND status='running' AND agent_run_id IS NULL""",
+            mapOf("attemptId" to command.attemptId,
+                "nextCheck" to Timestamp.from(Instant.now().plus(properties.agent.pollInterval))),
+        )
+    }
+
+    @Transactional
+    fun resetSubmission(command: TaskExecution) {
+        jdbc.update(
+            """UPDATE healthmind.ai_task_attempts
+                  SET agent_submission_state='new', agent_next_check_at=:nextCheck
+                WHERE attempt_id=:attemptId AND status='running'
+                  AND agent_run_id IS NULL AND agent_submission_state='submitting'""",
+            mapOf("attemptId" to command.attemptId,
+                "nextCheck" to Timestamp.from(Instant.now().plus(properties.agent.pollInterval))),
+        )
     }
 
     @Transactional
@@ -251,7 +279,7 @@ class TaskCommandRepository(
                (t.context_manifest->>'meal_id')::bigint AS meal_id,
                wr.release_id, wr.agent_deployment_key, wr.agent_assistant_id, wr.agent_artifact_sha256,
                wr.output_schema_version, wr.output_schema::text, wr.timeout_seconds, wr.max_attempts,
-               a.attempt_id, a.attempt_no, a.agent_run_id
+               a.attempt_id, a.attempt_no, a.agent_run_id, a.agent_submission_state
           FROM healthmind.ai_tasks t
           JOIN healthmind.workflow_releases wr ON wr.release_id=t.workflow_release_id
           JOIN healthmind.ai_task_attempts a ON a.task_id=t.task_id
@@ -266,17 +294,21 @@ class TaskCommandRepository(
     ) { rs, _ -> rowToExecution(rs).copy(
         attemptId = rs.getObject("attempt_id", UUID::class.java),
         agentRunId = rs.getObject("agent_run_id", UUID::class.java),
+        agentSubmissionState = AgentSubmissionState.valueOf(rs.getString("agent_submission_state").uppercase()),
     ) }
 
     @Transactional
     fun recoverTimedOut(): List<TaskExecution> {
         val expired = claimTimedOut()
         expired.forEach { command ->
+            val unknownSubmission = command.agentRunId == null && command.agentSubmissionState != AgentSubmissionState.NEW
+            val code = if (unknownSubmission) "AGENT_SUBMISSION_INDETERMINATE" else "ATTEMPT_TIMEOUT"
+            val category = if (unknownSubmission) FailureCategory.PERMANENT else FailureCategory.TIMEOUT
             fail(
                 command,
-                TaskExecutionException("ATTEMPT_TIMEOUT", FailureCategory.TIMEOUT, "Execution exceeded configured timeout"),
-                FailureCategory.TIMEOUT,
-                "ATTEMPT_TIMEOUT",
+                TaskExecutionException(code, category, if (unknownSubmission) "Agent run submission could not be confirmed" else "Execution exceeded configured timeout"),
+                category,
+                code,
             )
         }
         return expired

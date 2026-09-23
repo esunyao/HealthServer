@@ -10,6 +10,8 @@ enum class FailureCategory(val wireValue: String, val retryable: Boolean) {
     CANCELLED("cancelled", false),
 }
 
+enum class AgentSubmissionState { NEW, SUBMITTING, UNCERTAIN, ATTACHED }
+
 data class TaskExecution(
     val taskId: UUID,
     val attemptId: UUID,
@@ -27,6 +29,7 @@ data class TaskExecution(
     val agentAssistantId: String,
     val agentArtifactSha256: String,
     val agentRunId: UUID? = null,
+    val agentSubmissionState: AgentSubmissionState = AgentSubmissionState.NEW,
     val outputSchemaVersion: String,
     val outputSchema: String,
     val timeoutSeconds: Int,
@@ -47,4 +50,5 @@ class TaskExecutionException(
     val category: FailureCategory,
     message: String,
     cause: Throwable? = null,
+    val safeToRetrySubmission: Boolean = false,
 ) : RuntimeException(message, cause)
