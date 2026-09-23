@@ -17,17 +17,24 @@ class ClientCredentialsTokenProvider(
     private val cache = ConcurrentHashMap<String, CachedToken>()
 
     fun token(config: HealthMindProperties.OAuth.Client): String {
-        val key = "${config.clientId}|${config.audience}|${config.scope}"
+        return token(config.tokenUri, config.clientId, config.clientSecret, config.audience, config.scope)
+    }
+
+    fun token(config: HealthMindProperties.OAuth.Credentials): String =
+        token(config.tokenUri, config.clientId, config.clientSecret, config.audience, config.scope)
+
+    private fun token(tokenUri: String, clientId: String, clientSecret: String, audience: String, scope: String): String {
+        val key = "$tokenUri|$clientId|$audience|$scope"
         cache[key]?.takeIf { it.expiresAt.isAfter(Instant.now().plusSeconds(20)) }?.let { return it.value }
         synchronized(cache) {
             cache[key]?.takeIf { it.expiresAt.isAfter(Instant.now().plusSeconds(20)) }?.let { return it.value }
             val form = LinkedMultiValueMap<String, String>().apply {
                 add("grant_type", "client_credentials")
-                add("client_id", config.clientId)
-                add("client_secret", config.clientSecret)
-                add("scope", config.scope)
+                add("client_id", clientId)
+                add("client_secret", clientSecret)
+                add("scope", scope)
             }
-            val response = builder.clone().build().post().uri(config.tokenUri)
+            val response = builder.clone().build().post().uri(tokenUri)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(form)
                 .retrieve()

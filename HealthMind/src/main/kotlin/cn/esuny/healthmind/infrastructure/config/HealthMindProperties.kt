@@ -12,7 +12,7 @@ import java.time.Duration
 @ConfigurationProperties("healthmind")
 data class HealthMindProperties(
     @field:Valid val kafka: Kafka = Kafka(),
-    @field:Valid val dify: Dify = Dify(),
+    @field:Valid val agent: Agent = Agent(),
     @field:Valid val oauth: OAuth = OAuth(),
     @field:Valid val scheduler: Scheduler = Scheduler(),
     @field:Valid val retention: Retention = Retention(),
@@ -25,26 +25,35 @@ data class HealthMindProperties(
         val publishTimeout: Duration = Duration.ofSeconds(15),
     )
 
-    data class Dify(
-        @field:NotBlank val baseUrl: String = "http://localhost:8080/v1",
-        val appKeys: Map<String, String> = emptyMap(),
+    data class Agent(
+        val deployments: Map<String, String> = emptyMap(),
+        @field:Min(1) @field:Max(1000) val maxInFlight: Int = 10,
         val connectTimeout: Duration = Duration.ofSeconds(3),
-        val readTimeout: Duration = Duration.ofSeconds(130),
-        @field:NotBlank val deploymentVersion: String = "1.17.0",
+        val readTimeout: Duration = Duration.ofSeconds(15),
+        val pollInterval: Duration = Duration.ofSeconds(5),
     )
 
     data class OAuth(
         @field:NotBlank val issuerUri: String = "http://localhost:9000/application/o/healthmind-mcp/",
         @field:NotBlank val jwkSetUri: String = "http://localhost:9000/application/o/healthmind-mcp/jwks/",
         @field:NotBlank val expectedMcpAudience: String = "healthmind-mcp",
-        @field:NotBlank val allowedDifyClientId: String = "dify-healthmind",
+        @field:NotBlank val allowedAgentClientId: String = "langgraph-healthmind",
         @field:NotBlank val mcpResourceUri: String = "http://localhost:8100/mcp",
         @field:NotBlank val protectedResourceMetadataUri: String = "http://localhost:8100/.well-known/oauth-protected-resource/mcp",
         val connectTimeout: Duration = Duration.ofSeconds(3),
         val readTimeout: Duration = Duration.ofSeconds(15),
         @field:Valid val orion: Client = Client(audience = "orion-internal", scope = "orion.ai-context.read"),
         @field:Valid val nutrimemo: Client = Client(audience = "nutrimemo-internal", scope = "nutrimemo.ai-context.read"),
+        @field:Valid val agent: Credentials = Credentials(audience = "healthmind-agent", scope = "healthmind.agent.run"),
     ) {
+        data class Credentials(
+            @field:NotBlank val tokenUri: String = "http://localhost:9000/application/o/token/",
+            @field:NotBlank val clientId: String = "healthmind-agent",
+            @field:NotBlank val clientSecret: String = "",
+            @field:NotBlank val audience: String,
+            @field:NotBlank val scope: String,
+        )
+
         data class Client(
             @field:NotBlank val baseUrl: String = "http://localhost:8090",
             @field:NotBlank val tokenUri: String = "http://localhost:9000/application/o/token/",

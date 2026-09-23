@@ -68,7 +68,7 @@ class SecurityConfig(private val properties: HealthMindProperties) {
         }
         val caller = OAuth2TokenValidator<Jwt> { token ->
             val clientId = token.getClaimAsString("azp") ?: token.getClaimAsString("client_id")
-            if (clientId == properties.oauth.allowedDifyClientId) OAuth2TokenValidatorResult.success()
+            if (clientId == properties.oauth.allowedAgentClientId) OAuth2TokenValidatorResult.success()
             else OAuth2TokenValidatorResult.failure(OAuth2Error("invalid_token", "Caller client is not allowed", null))
         }
         decoder.setJwtValidator(DelegatingOAuth2TokenValidator(JwtValidators.createDefaultWithIssuer(properties.oauth.issuerUri), audience, caller))

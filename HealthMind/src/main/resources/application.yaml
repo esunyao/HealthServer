@@ -4,6 +4,11 @@ server:
 
 # HealthMind 本地基础配置；未在本文件覆盖的业务配置可从 Nacos 加载。
 spring:
+  task:
+    scheduling:
+      # Agent HTTP 轮询不可占住 outbox 和恢复任务的唯一调度线程。
+      pool:
+        size: ${HEALTHMIND_SCHEDULER_THREADS:4}
   output:
     ansi:
       enabled: always
@@ -122,18 +127,14 @@ healthmind:
     consumer-group: ${HEALTHMIND_KAFKA_CONSUMER_GROUP:healthmind-nutrition-v1}
     # Kafka 消息发布超时时间。
     publish-timeout: ${HEALTHMIND_KAFKA_PUBLISH_TIMEOUT:15s}
-  # Dify 工作流服务配置。
-  dify:
-    # Dify API 基础地址。
-    base-url: ${DIFY_BASE_URL:}
-    # 对接的 Dify 部署版本，用于兼容性校验或请求适配。
-    deployment-version: ${DIFY_DEPLOYMENT_VERSION:1.17.0}
-    # 调用 Dify 建立连接的超时时间。
-    connect-timeout: ${DIFY_CONNECT_TIMEOUT:3s}
-    # 调用 Dify 读取响应的超时时间；应覆盖工作流执行耗时。
-    read-timeout: ${DIFY_READ_TIMEOUT:130s}
-    app-keys:
-      ${DIFY_APP_KEY_1:-}: ${DIFY_API_KEY_1:-}
+  # 自托管 Agent Protocol 运行端；每个 release 固定一个部署 key。
+  agent:
+    deployments:
+      meal-v1: ${HEALTHMIND_AGENT_BASE_URL:https://agent.example.invalid}
+    max-in-flight: ${HEALTHMIND_AGENT_MAX_IN_FLIGHT:10}
+    connect-timeout: ${HEALTHMIND_AGENT_CONNECT_TIMEOUT:3s}
+    read-timeout: ${HEALTHMIND_AGENT_READ_TIMEOUT:15s}
+    poll-interval: ${HEALTHMIND_AGENT_POLL_INTERVAL:5s}
   # OAuth2 资源保护与内部服务调用配置。
   oauth:
     # 业务侧 OAuth2 签发方地址。
@@ -142,8 +143,8 @@ healthmind:
     jwk-set-uri: ${AUTHENTIK_JWK_SET_URI:}
     # MCP 访问令牌必须具备的 audience。
     expected-mcp-audience: ${HEALTHMIND_MCP_AUDIENCE:healthmind-mcp}
-    # 允许调用 MCP 的 Dify OAuth2 客户端 ID。
-    allowed-dify-client-id: ${HEALTHMIND_DIFY_CLIENT_ID:dify-healthmind}
+    # 允许调用 MCP 的自托管 Agent OAuth2 客户端 ID。
+    allowed-agent-client-id: ${HEALTHMIND_AGENT_CLIENT_ID:langgraph-healthmind}
     # MCP 资源标识，用于 OAuth2 资源元数据与令牌校验。
     mcp-resource-uri: ${HEALTHMIND_MCP_RESOURCE_URI:}
     # MCP 受保护资源元数据地址。
@@ -179,6 +180,13 @@ healthmind:
       audience: ${NUTRIMEMO_OAUTH_AUDIENCE:nutrimemo-internal}
       # 请求 NutriMemo 令牌时申请的 scope。
       scope: ${NUTRIMEMO_OAUTH_SCOPE:nutrimemo.ai-context.read}
+    # HealthMind 调用 Agent 服务的 client_credentials 配置。
+    agent:
+      token-uri: ${AGENT_OAUTH_TOKEN_URI:}
+      client-id: ${AGENT_OAUTH_CLIENT_ID:healthmind-agent}
+      client-secret: ${AGENT_OAUTH_CLIENT_SECRET:}
+      audience: ${AGENT_OAUTH_AUDIENCE:healthmind-agent}
+      scope: ${AGENT_OAUTH_SCOPE:healthmind.agent.run}
   # 后台任务调度配置。
   scheduler:
     # 每轮批量处理的任务数量。

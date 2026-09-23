@@ -22,17 +22,18 @@ data class TaskExecution(
     val captureSessionId: UUID,
     val mealId: Long,
     val traceId: String,
-    val difyAppId: String,
-    val difyWorkflowId: String,
-    val difyWorkflowVersion: String,
+    val releaseId: UUID,
+    val agentDeploymentKey: String,
+    val agentAssistantId: String,
+    val agentArtifactSha256: String,
+    val agentRunId: UUID? = null,
     val outputSchemaVersion: String,
     val outputSchema: String,
     val timeoutSeconds: Int,
 )
 
-data class DifyWorkflowResult(
-    val workflowRunId: String,
-    val workflowId: String,
+data class AgentRunResult(
+    val runId: UUID,
     val outputJson: String,
     val providerName: String? = null,
     val modelName: String? = null,

@@ -49,7 +49,7 @@ class HealthMindMcpTools(
         val auth = SecurityContextHolder.getContext().authentication as? JwtAuthenticationToken
             ?: throw IllegalStateException("MCP caller is not authenticated")
         val clientId = auth.token.getClaimAsString("azp") ?: auth.token.getClaimAsString("client_id")
-        require(clientId == properties.oauth.allowedDifyClientId) { "MCP caller client is not allowed" }
+        require(clientId == properties.oauth.allowedAgentClientId) { "MCP caller client is not allowed" }
         val scopes = auth.authorities.mapNotNull { it.authority?.removePrefix("SCOPE_")?.takeIf(String::isNotBlank) }.toSet()
         val callerSubject = auth.token.subject?.let { runCatching { UUID.fromString(it) }.getOrNull() }
         val invocation = repository.authorizeAndStart(toolCode, UUID.fromString(taskId), UUID.fromString(attemptId), callerSubject, scopes)

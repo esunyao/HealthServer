@@ -1,7 +1,7 @@
 package cn.esuny.healthmind.infrastructure.database
 
-import cn.esuny.healthmind.domain.task.FailureCategory
-import cn.esuny.healthmind.domain.task.TaskExecutionException
+import cn.esuny.healthmind.application.port.out.AgentRunPort
+import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -11,9 +11,11 @@ import org.springframework.transaction.annotation.Transactional
 class RecoveryAndRetentionJobs(
     private val jdbc: JdbcTemplate,
     private val tasks: TaskCommandRepository,
+    private val agent: AgentRunPort,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @Scheduled(fixedDelayString = "\${healthmind.scheduler.recovery-fixed-delay:PT1M}")
-    @Transactional
     fun recoverStaleWork() {
         jdbc.update(
             """
@@ -22,26 +24,12 @@ class RecoveryAndRetentionJobs(
              WHERE status='publishing' AND next_attempt_at < NOW()
             """.trimIndent(),
         )
-        jdbc.update(
-            """
-            UPDATE healthmind.ai_task_attempts a
-               SET status='timed_out', finished_at=NOW(), failure_category='timeout', failure_code='ATTEMPT_TIMEOUT',
-                   failure_message='Execution exceeded configured timeout'
-              FROM healthmind.ai_tasks t
-             WHERE a.task_id=t.task_id AND a.status='running' AND a.started_at + (a.timeout_ms * INTERVAL '1 millisecond') < NOW()
-            """.trimIndent(),
-        )
-        tasks.claimTimedOut().forEach { execution ->
-            tasks.fail(
-                execution,
-                TaskExecutionException(
-                    "ATTEMPT_TIMEOUT",
-                    FailureCategory.TIMEOUT,
-                    "Execution exceeded configured timeout",
-                ),
-                FailureCategory.TIMEOUT,
-                "ATTEMPT_TIMEOUT",
-            )
+        tasks.recoverTimedOut().forEach { execution ->
+            try {
+                agent.cancel(execution)
+            } catch (exception: Exception) {
+                log.warn("Could not cancel expired agent run for attempt {}", execution.attemptId)
+            }
         }
     }
 

@@ -3,9 +3,10 @@ package cn.esuny.healthmind.infrastructure.database
 import cn.esuny.contracts.integration.v1.IntegrationEvent
 import cn.esuny.contracts.integration.v1.NutritionCaptureReadyPayload
 import cn.esuny.contracts.integration.v1.NutritionEventTypes
-import cn.esuny.healthmind.domain.task.DifyWorkflowResult
+import cn.esuny.healthmind.domain.task.AgentRunResult
 import cn.esuny.healthmind.domain.task.FailureCategory
 import cn.esuny.healthmind.domain.task.TaskExecution
+import cn.esuny.healthmind.domain.task.TaskExecutionException
 import cn.esuny.healthmind.infrastructure.config.HealthMindProperties
 import cn.esuny.healthmind.infrastructure.json.CanonicalJson
 import cn.esuny.healthmind.infrastructure.json.JsonSchemaService
@@ -16,6 +17,7 @@ import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ObjectMapper
 import java.sql.ResultSet
 import java.sql.Timestamp
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import kotlin.math.min
@@ -126,23 +128,30 @@ class TaskCommandRepository(
 
     @Transactional
     fun claimNext(): TaskExecution? {
+        // Serialize the in-flight count and claim across HealthMind replicas.
+        jdbc.query(
+            "SELECT pg_advisory_xact_lock(hashtextextended('healthmind.agent.claim', 0))",
+            emptyMap<String, Any>(),
+        ) { _, _ -> Unit }
         val rows = jdbc.query(
             """
             SELECT t.task_id, t.lock_version, t.subject_id, t.aggregate_type, t.aggregate_id, t.trace_id,
                    (t.context_manifest->>'capture_session_id')::uuid AS capture_session_id,
                    (t.context_manifest->>'meal_id')::bigint AS meal_id,
-                   wr.dify_app_id, wr.dify_workflow_id, wr.dify_workflow_version,
+                   wr.release_id, wr.agent_deployment_key, wr.agent_assistant_id, wr.agent_artifact_sha256,
                    wr.output_schema_version, wr.output_schema::text, wr.timeout_seconds, wr.max_attempts,
                    COALESCE((SELECT MAX(a.attempt_no) FROM healthmind.ai_task_attempts a WHERE a.task_id=t.task_id), 0) + 1 AS attempt_no
               FROM healthmind.ai_tasks t
               JOIN healthmind.workflow_releases wr ON wr.release_id=t.workflow_release_id
              WHERE t.status='queued' AND t.scheduled_at<=NOW() AND t.next_attempt_at<=NOW()
                AND (t.deadline_at IS NULL OR t.deadline_at>NOW())
+               AND (SELECT COUNT(*) FROM healthmind.ai_task_attempts active
+                     WHERE active.agent_managed AND active.status='running') < :maxInFlight
              ORDER BY t.priority DESC, t.scheduled_at, t.created_at
              FOR UPDATE OF t SKIP LOCKED
              LIMIT 1
             """.trimIndent(),
-            emptyMap<String, Any>(),
+            mapOf("maxInFlight" to properties.agent.maxInFlight),
         ) { rs, _ -> rowToExecution(rs) }
         val selected = rows.singleOrNull() ?: return null
         val attemptId = UUID.randomUUID()
@@ -158,8 +167,8 @@ class TaskCommandRepository(
         jdbc.update(
             """
             INSERT INTO healthmind.ai_task_attempts
-                (attempt_id, task_id, attempt_no, status, started_at, timeout_ms)
-            VALUES (:attemptId, :taskId, :attemptNo, 'running', NOW(), :timeoutMs)
+                (attempt_id, task_id, attempt_no, status, started_at, timeout_ms, agent_managed, agent_next_check_at)
+            VALUES (:attemptId, :taskId, :attemptNo, 'running', NOW(), :timeoutMs, TRUE, NOW())
             """.trimIndent(),
             mapOf(
                 "attemptId" to attemptId,
@@ -172,35 +181,116 @@ class TaskCommandRepository(
     }
 
     @Transactional
+    fun claimDue(): TaskExecution? {
+        val rows = jdbc.query(
+            """
+            SELECT t.task_id, t.lock_version, t.subject_id, t.aggregate_type, t.aggregate_id, t.trace_id,
+                   (t.context_manifest->>'capture_session_id')::uuid AS capture_session_id,
+                   (t.context_manifest->>'meal_id')::bigint AS meal_id,
+                   wr.release_id, wr.agent_deployment_key, wr.agent_assistant_id, wr.agent_artifact_sha256,
+                   wr.output_schema_version, wr.output_schema::text, wr.timeout_seconds, wr.max_attempts,
+                   a.attempt_id, a.attempt_no, a.agent_run_id
+              FROM healthmind.ai_task_attempts a
+              JOIN healthmind.ai_tasks t ON t.task_id=a.task_id
+              JOIN healthmind.workflow_releases wr ON wr.release_id=t.workflow_release_id
+             WHERE t.status='running' AND a.status='running' AND a.agent_managed AND a.agent_next_check_at<=NOW()
+               AND a.started_at + (a.timeout_ms * INTERVAL '1 millisecond') >= NOW()
+               AND a.attempt_no=(SELECT MAX(latest.attempt_no) FROM healthmind.ai_task_attempts latest WHERE latest.task_id=t.task_id)
+             ORDER BY a.agent_next_check_at, a.created_at
+             FOR UPDATE OF a SKIP LOCKED
+             LIMIT 1
+            """.trimIndent(),
+            emptyMap<String, Any>(),
+        ) { rs, _ -> rowToExecution(rs).copy(
+            attemptId = rs.getObject("attempt_id", UUID::class.java),
+            agentRunId = rs.getObject("agent_run_id", UUID::class.java),
+        ) }
+        val selected = rows.singleOrNull() ?: return null
+        jdbc.update(
+            "UPDATE healthmind.ai_task_attempts SET agent_next_check_at=:nextCheck WHERE attempt_id=:attemptId AND status='running'",
+            mapOf(
+                "attemptId" to selected.attemptId,
+                "nextCheck" to Timestamp.from(Instant.now().plus(
+                    maxOf(properties.agent.pollInterval,
+                        properties.agent.readTimeout.multipliedBy(2).plus(properties.agent.connectTimeout).plus(Duration.ofSeconds(5))),
+                )),
+            ),
+        )
+        return selected
+    }
+
+    @Transactional
+    fun attachRun(command: TaskExecution, runId: UUID) {
+        val updated = jdbc.update(
+            """
+            UPDATE healthmind.ai_task_attempts
+               SET agent_run_id=:runId, agent_next_check_at=NOW()
+             WHERE attempt_id=:attemptId AND status='running' AND agent_run_id IS NULL
+            """.trimIndent(),
+            mapOf("attemptId" to command.attemptId, "runId" to runId),
+        )
+        check(updated == 1) { "Agent run could not be attached to the running attempt" }
+    }
+
+    @Transactional
+    fun schedulePoll(command: TaskExecution) {
+        jdbc.update(
+            "UPDATE healthmind.ai_task_attempts SET agent_next_check_at=:nextCheck WHERE attempt_id=:attemptId AND status='running'",
+            mapOf(
+                "attemptId" to command.attemptId,
+                "nextCheck" to Timestamp.from(Instant.now().plus(properties.agent.pollInterval)),
+            ),
+        )
+    }
+
+    @Transactional
     fun claimTimedOut(limit: Int = 100): List<TaskExecution> = jdbc.query(
         """
         SELECT t.task_id, t.lock_version, t.subject_id, t.aggregate_type, t.aggregate_id, t.trace_id,
                (t.context_manifest->>'capture_session_id')::uuid AS capture_session_id,
                (t.context_manifest->>'meal_id')::bigint AS meal_id,
-               wr.dify_app_id, wr.dify_workflow_id, wr.dify_workflow_version,
+               wr.release_id, wr.agent_deployment_key, wr.agent_assistant_id, wr.agent_artifact_sha256,
                wr.output_schema_version, wr.output_schema::text, wr.timeout_seconds, wr.max_attempts,
-               a.attempt_id, a.attempt_no
+               a.attempt_id, a.attempt_no, a.agent_run_id
           FROM healthmind.ai_tasks t
           JOIN healthmind.workflow_releases wr ON wr.release_id=t.workflow_release_id
           JOIN healthmind.ai_task_attempts a ON a.task_id=t.task_id
-         WHERE t.status='running' AND a.status='timed_out'
+         WHERE t.status='running' AND a.status='running' AND a.agent_managed
+           AND a.started_at + (a.timeout_ms * INTERVAL '1 millisecond') < NOW()
            AND a.attempt_no=(SELECT MAX(latest.attempt_no) FROM healthmind.ai_task_attempts latest WHERE latest.task_id=t.task_id)
-         ORDER BY a.finished_at
-         FOR UPDATE OF t SKIP LOCKED
+         ORDER BY a.started_at
+         FOR UPDATE OF a SKIP LOCKED
          LIMIT :limit
         """.trimIndent(),
         mapOf("limit" to limit),
-    ) { rs, _ -> rowToExecution(rs).copy(attemptId = rs.getObject("attempt_id", UUID::class.java)) }
+    ) { rs, _ -> rowToExecution(rs).copy(
+        attemptId = rs.getObject("attempt_id", UUID::class.java),
+        agentRunId = rs.getObject("agent_run_id", UUID::class.java),
+    ) }
 
     @Transactional
-    fun complete(command: TaskExecution, result: DifyWorkflowResult, resultNode: JsonNode) {
+    fun recoverTimedOut(): List<TaskExecution> {
+        val expired = claimTimedOut()
+        expired.forEach { command ->
+            fail(
+                command,
+                TaskExecutionException("ATTEMPT_TIMEOUT", FailureCategory.TIMEOUT, "Execution exceeded configured timeout"),
+                FailureCategory.TIMEOUT,
+                "ATTEMPT_TIMEOUT",
+            )
+        }
+        return expired
+    }
+
+    @Transactional
+    fun complete(command: TaskExecution, result: AgentRunResult, resultNode: JsonNode) {
         val digest = canonicalJson.sha256(resultNode)
         val resultId = UUID.randomUUID()
         val eventId = UUID.randomUUID()
         val confidence = resultNode.path("overall_confidence").takeUnless { it.isMissingNode || it.isNull }?.decimalValue()
-        jdbc.update(
+        val attemptCompleted = jdbc.update(
             """
-            UPDATE healthmind.ai_task_attempts SET status='succeeded', dify_workflow_run_id=:runId,
+            UPDATE healthmind.ai_task_attempts SET status='succeeded', agent_run_id=:runId,
                    provider_name=:provider, model_name=:model, model_version=:modelVersion,
                    finished_at=NOW(), duration_ms=GREATEST(0, EXTRACT(EPOCH FROM (NOW()-started_at))*1000)::bigint,
                    input_tokens=:inputTokens, output_tokens=:outputTokens
@@ -208,7 +298,7 @@ class TaskCommandRepository(
             """.trimIndent(),
             mapOf(
                 "attemptId" to command.attemptId,
-                "runId" to result.workflowRunId,
+                "runId" to result.runId,
                 "provider" to result.providerName,
                 "model" to result.modelName,
                 "modelVersion" to result.modelVersion,
@@ -216,6 +306,7 @@ class TaskCommandRepository(
                 "outputTokens" to result.outputTokens,
             ),
         )
+        check(attemptCompleted == 1) { "Attempt completion lost its running state" }
         jdbc.update(
             """
             INSERT INTO healthmind.ai_task_results
@@ -247,7 +338,7 @@ class TaskCommandRepository(
     @Transactional
     fun fail(command: TaskExecution, failure: Throwable, category: FailureCategory, code: String) {
         val sanitized = failure.message?.take(500) ?: code
-        jdbc.update(
+        val attemptFailed = jdbc.update(
             """
             UPDATE healthmind.ai_task_attempts
                SET status=:status, finished_at=NOW(), failure_category=:category, failure_code=:code,
@@ -263,10 +354,11 @@ class TaskCommandRepository(
                 "message" to sanitized,
             ),
         )
+        check(attemptFailed == 1) { "Attempt failure lost its running state" }
         if (category.retryable && command.attemptNo < command.maxAttempts) {
             val baseSeconds = min(20, 5 shl (command.attemptNo - 1))
             val jitterMillis = Random.nextLong(0, 1000)
-            jdbc.update(
+            val retried = jdbc.update(
                 """
                 UPDATE healthmind.ai_tasks
                    SET status='queued', next_attempt_at=:nextAttempt, failure_code=NULL, failure_message=NULL,
@@ -279,6 +371,7 @@ class TaskCommandRepository(
                     "nextAttempt" to Timestamp.from(Instant.now().plusSeconds(baseSeconds.toLong()).plusMillis(jitterMillis)),
                 ),
             )
+            check(retried == 1) { "Task retry lost optimistic lock" }
             return
         }
         val failed = jdbc.update(
@@ -290,7 +383,7 @@ class TaskCommandRepository(
             """.trimIndent(),
             mapOf("taskId" to command.taskId, "lockVersion" to command.lockVersion, "code" to code, "message" to sanitized),
         )
-        if (failed != 1) return
+        check(failed == 1) { "Task failure lost optimistic lock" }
         val eventId = UUID.randomUUID()
         val node = objectMapper.createObjectNode()
             .put("event_id", eventId.toString())
@@ -372,9 +465,10 @@ class TaskCommandRepository(
         captureSessionId = rs.getObject("capture_session_id", UUID::class.java),
         mealId = rs.getLong("meal_id"),
         traceId = rs.getString("trace_id"),
-        difyAppId = rs.getString("dify_app_id"),
-        difyWorkflowId = rs.getString("dify_workflow_id"),
-        difyWorkflowVersion = rs.getString("dify_workflow_version"),
+        releaseId = rs.getObject("release_id", UUID::class.java),
+        agentDeploymentKey = rs.getString("agent_deployment_key"),
+        agentAssistantId = rs.getString("agent_assistant_id"),
+        agentArtifactSha256 = rs.getString("agent_artifact_sha256"),
         outputSchemaVersion = rs.getString("output_schema_version"),
         outputSchema = rs.getString("output_schema"),
         timeoutSeconds = rs.getInt("timeout_seconds"),

@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 class HealthMindMigrationScriptTest {
     private val migration = requireNotNull(javaClass.getResource("/db/migration/V1__create_healthmind_schema.sql")).readText()
     private val seeds = requireNotNull(javaClass.getResource("/db/migration/V2__seed_stable_definitions.sql")).readText()
+    private val cutover = requireNotNull(javaClass.getResource("/db/migration/V4__replace_dify_with_agent_runs.sql")).readText()
 
     @Test
     fun `migration declares workbook twelve tables`() {
@@ -38,6 +39,19 @@ class HealthMindMigrationScriptTest {
         assertTrue(seeds.contains("\"required\":[\"capture_session_id\",\"meal_id\",\"meal_type\""))
         assertTrue(seeds.contains("\"required\":[\"subject_id\",\"age_years\",\"gender\""))
         assertTrue(seeds.contains("'{}'::jsonb").not())
+    }
+
+    @Test
+    fun `agent cutover keeps stable definitions and replaces provider fields`() {
+        assertTrue(cutover.contains("TRUNCATE TABLE"))
+        assertFalse(cutover.contains("healthmind.ai_task_types,"))
+        assertFalse(cutover.contains("healthmind.ai_tool_definitions,"))
+        assertTrue(cutover.contains("ADD COLUMN agent_deployment_key"))
+        assertTrue(cutover.contains("ADD COLUMN agent_run_id UUID"))
+        assertTrue(cutover.contains("ADD COLUMN agent_managed BOOLEAN NOT NULL DEFAULT FALSE"))
+        assertTrue(cutover.contains("DROP COLUMN dify_workflow_run_id"))
+        assertTrue(cutover.contains("trg_protect_agent_release_identity"))
+        assertTrue(cutover.contains("trg_protect_promoted_agent_tools"))
     }
 
     @Test

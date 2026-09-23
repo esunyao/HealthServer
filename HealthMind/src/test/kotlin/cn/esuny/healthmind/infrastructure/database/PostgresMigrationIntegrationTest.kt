@@ -38,6 +38,22 @@ class PostgresMigrationIntegrationTest {
                     assertEquals(1, result.getInt(1))
                 }
             }
+            connection.prepareStatement(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='healthmind' AND column_name LIKE 'dify_%'",
+            ).use { statement ->
+                statement.executeQuery().use { result ->
+                    result.next()
+                    assertEquals(0, result.getInt(1))
+                }
+            }
+            connection.prepareStatement(
+                "SELECT COUNT(*) FROM healthmind.ai_tool_definitions",
+            ).use { statement ->
+                statement.executeQuery().use { result ->
+                    result.next()
+                    assertEquals(2, result.getInt(1))
+                }
+            }
         }
     }
 
