@@ -28,6 +28,7 @@
 | 位置 | 职责 |
 |---|---|
 | [`src/agentdevelop/basic_graph.py`](./src/agentdevelop/basic_graph.py) | **① 纯图**：`StateGraph`、`TypedDict` 状态、`operator.add` reducer、条件边、`stream`/`invoke`。不调用模型，离线可跑 |
+| [`langgraph.json`](./langgraph.json) | `langgraph dev` 的本地配置；仅加载 `basic_graph` 教学图 |
 | [`src/agentdevelop/simple_agent.py`](./src/agentdevelop/simple_agent.py) | **② 最小 agent**：`create_agent` + `@tool` 自定义工具，打印消息轨迹让工具循环可见 |
 | [`src/agentdevelop/meal_agent.py`](./src/agentdevelop/meal_agent.py) | 手动餐食 Agent：传入图片/证据，连接授权 MCP 读取，并在本地校验输出 |
 | [`src/agentdevelop/mcp_tools.py`](./src/agentdevelop/mcp_tools.py) | Authentik client-credentials 与两个允许的 HealthMind MCP 只读工具封装；服务端 IDs 由 CLI 注入 |
@@ -52,6 +53,7 @@
 ## 关键事实与易错点
 
 - **餐食 Agent 只手动运行**：没有任务轮询、Kafka 消费、业务数据库连接、结果回写或生产部署。
+- **`langgraph dev` 只提供教学图**：不暴露餐食 Agent；其运行方式仍是 `agentdevelop meal`。
 - **本地图片才是视觉输入**：`meal` 只接收命令行提供的 JPEG/PNG/WebP 文件；不会尝试下载 capture MCP 返回的预签名 URL。
 - **MCP 只读且最小化**：只暴露 `nutrimemo.capture_context.get` 和 `orion.nutrition_context.get`。Wrapper 固定注入 task/attempt IDs，过滤签名 URL 和不需要回显的业务 ID，并限制每个工具每次运行至多调用一次。
 - **OAuth 由操作者配置**：手动运行者需配置与 HealthMind allowlist 匹配的 client ID、secret、audience 和只读 scopes；token 不进入模型 prompt 或终端输出。

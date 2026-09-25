@@ -34,6 +34,19 @@ uv run agentdevelop meal --task-id 11111111-1111-4111-8111-111111111111 --attemp
 uv run agentdevelop meal --help
 ```
 
+### LangGraph 本地开发服务器
+
+在 `AgentDevelop/` 目录执行：
+
+```powershell
+$env:PYTHONUTF8 = "1"   # Windows：避免 LangGraph CLI 以 GBK 读取自身的 UTF-8 文件
+uv run --env-file .env langgraph dev
+```
+
+`langgraph.json` 目前只加载无需模型或外部服务的 `basic_graph` 教学图，可用于在本地 API / Studio 查看并运行该图；示例输入为 `{"text":"午饭吃了番茄炒蛋和米饭","notes":[]}`。餐食分析 `meal` 仍是上面的手动 CLI，不会因为启动开发服务器就暴露为 HTTP Agent 或接入 HealthMind。
+
+在 Bash 中可用 `PYTHONUTF8=1 uv run --env-file .env langgraph dev`。`PYTHONUTF8` 只调整 Python 源码/文件的默认编码，不是模型或 MCP 配置；现有 `.env` 无需改动。
+
 餐食结果 JSON 写到标准输出，诊断信息写到标准错误。`needs_review` 是正常的分析结果，不代表程序崩溃。
 
 `task_id` / `attempt_id` 必须是 HealthMind 已授权的任务与 attempt UUID；建议从 HealthMindControl 的“MCP 测试”会话取得。Agent 不创建或修改这些记录。测试前确认相应 workflow release 已绑定 `nutrimemo.capture_context.get` 和 `orion.nutrition_context.get`。

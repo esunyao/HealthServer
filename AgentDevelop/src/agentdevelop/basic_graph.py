@@ -87,6 +87,10 @@ def build_graph():
     return graph.compile()
 
 
+# LangGraph CLI loads this compiled graph through langgraph.json.
+graph = build_graph()
+
+
 def run(text: str = DEFAULT_TEXT) -> ReviewState:
     """跑一遍图：先看每个节点返回的增量，再看合并后的最终状态。"""
     app = build_graph()
