@@ -2,6 +2,7 @@ package cn.esuny.healthmind.application.service
 
 import cn.esuny.healthmind.application.port.out.AgentRunPort
 import cn.esuny.healthmind.application.port.out.AgentRunState
+import cn.esuny.healthmind.application.port.out.TaskOutcomePort
 import cn.esuny.healthmind.domain.task.FailureCategory
 import cn.esuny.healthmind.domain.task.AgentSubmissionState
 import cn.esuny.healthmind.domain.task.TaskExecution
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service
 class TaskExecutionService(
     private val repository: TaskCommandRepository,
     private val agent: AgentRunPort,
+    private val taskOutcomes: TaskOutcomePort,
     private val schemaService: JsonSchemaService,
     private val canonicalJson: CanonicalJson,
     private val meters: MeterRegistry,
@@ -60,6 +62,10 @@ class TaskExecutionService(
             AgentRunState.Active -> repository.schedulePoll(command)
             is AgentRunState.Failed -> fail(command, TaskExecutionException(state.code, state.category, state.summary))
             is AgentRunState.Succeeded -> {
+                if (command.agentRunId != state.result.runId) {
+                    fail(command, TaskExecutionException("AGENT_RUN_MISMATCH", FailureCategory.CONTRACT, "Agent result belongs to another run"))
+                    return
+                }
                 val output = try {
                     val node = canonicalJson.parse(state.result.outputJson)
                     if (node.path("status").asString() == "needs_review") {
@@ -75,7 +81,7 @@ class TaskExecutionService(
                     fail(command, TaskExecutionException("AGENT_OUTPUT_INVALID", FailureCategory.CONTRACT, "Agent output is not valid JSON", exception))
                     return
                 }
-                repository.complete(command, state.result, output)
+                repository.complete(command, state.result, output, taskOutcomes.completedEvent(command, output))
                 meters.counter("healthmind.tasks", "outcome", "succeeded").increment()
             }
         }
@@ -91,7 +97,13 @@ class TaskExecutionService(
     }
 
     private fun fail(command: TaskExecution, exception: TaskExecutionException) {
-        repository.fail(command, exception, exception.category, exception.code)
+        repository.fail(
+            command,
+            exception,
+            exception.category,
+            exception.code,
+            taskOutcomes.failedEvent(command, exception.category, exception.code, exception.message ?: exception.code),
+        )
         meters.counter("healthmind.tasks", "outcome", "failed", "category", exception.category.wireValue).increment()
         log.warn("HealthMind task {} attempt {} failed with code {}", command.taskId, command.attemptNo, exception.code)
     }

@@ -3,6 +3,7 @@ package cn.esuny.healthmind.interfaces.messaging
 import cn.esuny.contracts.integration.v1.IntegrationEvent
 import cn.esuny.contracts.integration.v1.NutritionCaptureReadyPayload
 import cn.esuny.contracts.integration.v1.NutritionEventTypes
+import cn.esuny.healthmind.application.service.MealTaskAdapter
 import cn.esuny.healthmind.infrastructure.database.TaskCommandRepository
 import cn.esuny.healthmind.infrastructure.json.CanonicalJson
 import org.springframework.kafka.annotation.KafkaListener
@@ -18,6 +19,7 @@ import cn.esuny.healthmind.domain.task.ProductionWorkflowUnavailableException
 class NutritionCaptureReadyListener(
     private val canonicalJson: CanonicalJson,
     private val repository: TaskCommandRepository,
+    private val mealTaskAdapter: MealTaskAdapter,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     @KafkaListener(
@@ -49,7 +51,8 @@ class NutritionCaptureReadyListener(
             ),
         )
         try {
-            repository.acceptCaptureReady(event, root, canonicalJson.sha256(root))
+            val submission = mealTaskAdapter.submission(event.payload)
+            repository.accept(event, root, canonicalJson.sha256(root), submission.taskTypeCode, submission.contextManifest)
         } catch (_: ProductionWorkflowUnavailableException) {
             log.warn("Nutrition event {} deferred: no production workflow for nutrition.meal_analysis; retry in 30s", event.eventId)
             acknowledgment.nack(Duration.ofSeconds(30))

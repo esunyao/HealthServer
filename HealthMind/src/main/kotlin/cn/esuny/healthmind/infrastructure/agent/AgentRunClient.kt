@@ -49,7 +49,10 @@ class AgentRunClient(
                     client.post().uri("/threads")
                         .header("Authorization", "Bearer $bearer")
                         .body(mapOf("thread_id" to command.attemptId.toString(),
-                            "metadata" to mapOf("task_id" to command.taskId.toString())))
+                            "metadata" to mapOf(
+                                "task_id" to command.taskId.toString(),
+                                "attempt_id" to command.attemptId.toString(),
+                            )))
                         .retrieve().body(JsonNode::class.java)
                 } catch (exception: RestClientResponseException) {
                     if (exception.statusCode.value() != 409) throw exception
@@ -64,9 +67,7 @@ class AgentRunClient(
             throw TaskExecutionException(exception.code, exception.category, "Agent thread is unavailable",
                 exception, safeToRetrySubmission = true)
         }
-        if (thread?.path("thread_id")?.asString() != command.attemptId.toString()) {
-            throw TaskExecutionException("AGENT_THREAD_MISMATCH", FailureCategory.CONTRACT, "Agent returned another thread")
-        }
+        verifyThreadIdentity(thread, command)
         val request = mapOf(
             "assistant_id" to command.agentAssistantId,
             "input" to mapOf(
@@ -174,6 +175,17 @@ class AgentRunClient(
             metadata.path("artifact_sha256").asString() != command.agentArtifactSha256
         ) {
             throw TaskExecutionException("AGENT_IDENTITY_MISMATCH", FailureCategory.CONTRACT, "Agent run identity does not match the pinned release")
+        }
+    }
+
+    private fun verifyThreadIdentity(response: JsonNode?, command: TaskExecution) {
+        val metadata = response?.path("metadata")
+            ?: throw TaskExecutionException("AGENT_THREAD_MISMATCH", FailureCategory.CONTRACT, "Agent returned no thread identity")
+        if (response.path("thread_id").asString() != command.attemptId.toString() ||
+            metadata.path("task_id").asString() != command.taskId.toString() ||
+            metadata.path("attempt_id").asString() != command.attemptId.toString()
+        ) {
+            throw TaskExecutionException("AGENT_THREAD_MISMATCH", FailureCategory.CONTRACT, "Agent thread identity does not match the attempt")
         }
     }
 

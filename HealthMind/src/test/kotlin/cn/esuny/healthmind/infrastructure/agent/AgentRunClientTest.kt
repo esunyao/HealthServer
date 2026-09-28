@@ -31,7 +31,7 @@ class AgentRunClientTest {
         server.start()
         val command = command()
         val runId = UUID.randomUUID()
-        server.enqueue(jsonResponse("{\"thread_id\":\"${command.attemptId}\"}"))
+        server.enqueue(jsonResponse(thread(command)))
         server.enqueue(jsonResponse(run(runId, command, "pending")))
         val client = client()
 
@@ -39,7 +39,10 @@ class AgentRunClientTest {
 
         val request = server.takeRequest()
         assertEquals("/threads", request.path)
-        assertEquals(command.attemptId.toString(), mapper.readTree(request.body.readUtf8()).path("thread_id").asString())
+        val threadBody = mapper.readTree(request.body.readUtf8())
+        assertEquals(command.attemptId.toString(), threadBody.path("thread_id").asString())
+        assertEquals(command.taskId.toString(), threadBody.path("metadata").path("task_id").asString())
+        assertEquals(command.attemptId.toString(), threadBody.path("metadata").path("attempt_id").asString())
         val runRequest = server.takeRequest()
         assertEquals("/threads/${command.attemptId}/runs", runRequest.path)
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
@@ -98,7 +101,7 @@ class AgentRunClientTest {
         val command = command()
         val runId = UUID.randomUUID()
         server.enqueue(MockResponse().setResponseCode(409))
-        server.enqueue(jsonResponse("{\"thread_id\":\"${command.attemptId}\"}"))
+        server.enqueue(jsonResponse(thread(command)))
         server.enqueue(jsonResponse(run(runId, command, "pending")))
 
         assertEquals(runId, client().start(command))
@@ -131,7 +134,7 @@ class AgentRunClientTest {
     fun `rejects a run not matching the pinned attempt and release`() {
         server.start()
         val command = command()
-        server.enqueue(jsonResponse("{\"thread_id\":\"${command.attemptId}\"}"))
+        server.enqueue(jsonResponse(thread(command)))
         server.enqueue(jsonResponse("""{"run_id":"${UUID.randomUUID()}","metadata":{}}"""))
 
         val error = assertFailsWith<TaskExecutionException> { client().start(command) }
@@ -153,11 +156,11 @@ class AgentRunClientTest {
         attemptNo = 1,
         maxAttempts = 3,
         lockVersion = 1,
+        taskTypeCode = "nutrition.meal_analysis",
         subjectId = UUID.randomUUID(),
         aggregateType = "meal",
         aggregateId = "42",
-        captureSessionId = UUID.randomUUID(),
-        mealId = 42,
+        contextManifest = "{}",
         traceId = "trace-1",
         releaseId = UUID.randomUUID(),
         agentDeploymentKey = "meal-v1",
@@ -167,6 +170,10 @@ class AgentRunClientTest {
         outputSchema = "{}",
         timeoutSeconds = 120,
     )
+
+    private fun thread(command: TaskExecution) = """
+        {"thread_id":"${command.attemptId}","metadata":{"task_id":"${command.taskId}","attempt_id":"${command.attemptId}"}}
+    """.trimIndent()
 
     private fun run(runId: UUID, command: TaskExecution, status: String) = """
         {"run_id":"$runId","assistant_id":"${command.agentAssistantId}","status":"$status","metadata":{

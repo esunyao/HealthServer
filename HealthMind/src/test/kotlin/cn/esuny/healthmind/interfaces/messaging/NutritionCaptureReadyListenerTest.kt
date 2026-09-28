@@ -1,6 +1,7 @@
 package cn.esuny.healthmind.interfaces.messaging
 
 import cn.esuny.healthmind.domain.task.ProductionWorkflowUnavailableException
+import cn.esuny.healthmind.application.service.MealTaskAdapter
 import cn.esuny.healthmind.infrastructure.database.TaskCommandRepository
 import cn.esuny.healthmind.infrastructure.json.CanonicalJson
 import io.mockk.every
@@ -14,8 +15,9 @@ import kotlin.test.assertFailsWith
 
 class NutritionCaptureReadyListenerTest {
     private val repository = mockk<TaskCommandRepository>()
+    private val mealTaskAdapter = mockk<MealTaskAdapter>()
     private val acknowledgment = mockk<Acknowledgment>(relaxed = true)
-    private val listener = NutritionCaptureReadyListener(CanonicalJson(JsonMapper.builder().build()), repository)
+    private val listener = NutritionCaptureReadyListener(CanonicalJson(JsonMapper.builder().build()), repository, mealTaskAdapter)
     private val raw = """{
       "event_id":"11111111-1111-4111-8111-111111111111",
       "event_type":"nutrition.capture.ready.v1","occurred_at":"2026-09-09T00:00:00Z",
@@ -26,7 +28,8 @@ class NutritionCaptureReadyListenerTest {
 
     @Test
     fun `missing production release defers without acknowledging or throwing`() {
-        every { repository.acceptCaptureReady(any(), any(), any()) } throws ProductionWorkflowUnavailableException()
+        every { mealTaskAdapter.submission(any()) } returns MealTaskAdapter.TaskSubmission("nutrition.meal_analysis", "{}")
+        every { repository.accept(any(), any(), any(), any(), any()) } throws ProductionWorkflowUnavailableException()
         listener.receive(raw, acknowledgment)
         verify(exactly = 1) { acknowledgment.nack(Duration.ofSeconds(30)) }
         verify(exactly = 0) { acknowledgment.acknowledge() }
@@ -34,7 +37,8 @@ class NutritionCaptureReadyListenerTest {
 
     @Test
     fun `successful or duplicate event is acknowledged`() {
-        every { repository.acceptCaptureReady(any(), any(), any()) } returns null
+        every { mealTaskAdapter.submission(any()) } returns MealTaskAdapter.TaskSubmission("nutrition.meal_analysis", "{}")
+        every { repository.accept(any(), any(), any(), any(), any()) } returns null
         listener.receive(raw, acknowledgment)
         verify(exactly = 1) { acknowledgment.acknowledge() }
         verify(exactly = 0) { acknowledgment.nack(any<Duration>()) }
@@ -42,7 +46,8 @@ class NutritionCaptureReadyListenerTest {
 
     @Test
     fun `unexpected failure is not swallowed`() {
-        every { repository.acceptCaptureReady(any(), any(), any()) } throws IllegalStateException("database unavailable")
+        every { mealTaskAdapter.submission(any()) } returns MealTaskAdapter.TaskSubmission("nutrition.meal_analysis", "{}")
+        every { repository.accept(any(), any(), any(), any(), any()) } throws IllegalStateException("database unavailable")
         assertFailsWith<IllegalStateException> { listener.receive(raw, acknowledgment) }
         verify(exactly = 0) { acknowledgment.acknowledge() }
     }

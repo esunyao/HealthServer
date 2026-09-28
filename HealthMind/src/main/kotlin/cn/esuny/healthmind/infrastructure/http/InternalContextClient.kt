@@ -1,6 +1,7 @@
 package cn.esuny.healthmind.infrastructure.http
 
 import cn.esuny.healthmind.application.port.out.InternalContextPort
+import cn.esuny.healthmind.application.service.MealTaskAdapter
 import cn.esuny.healthmind.infrastructure.config.HealthMindProperties
 import cn.esuny.healthmind.infrastructure.database.ToolInvocationRepository
 import cn.esuny.healthmind.infrastructure.oauth.ClientCredentialsTokenProvider
@@ -14,6 +15,7 @@ class InternalContextClient(
     @Qualifier("internalRestClientBuilder") builder: RestClient.Builder,
     private val tokens: ClientCredentialsTokenProvider,
     private val properties: HealthMindProperties,
+    private val mealTaskAdapter: MealTaskAdapter,
 ) : InternalContextPort {
     private val builder = builder
 
@@ -26,16 +28,22 @@ class InternalContextClient(
         )
     }
 
-    override fun getCaptureContext(grant: ToolInvocationRepository.ToolGrant): JsonNode = post(
-        properties.oauth.nutrimemo,
-        "/internal/v1/analysis-context/capture",
-        mapOf(
-            "subject_id" to requireNotNull(grant.subjectId).toString(),
-            "capture_session_id" to grant.captureSessionId.toString(),
-            "meal_id" to grant.mealId,
-            "task_id" to grant.taskId.toString(),
-        ),
-    )
+    override fun getCaptureContext(grant: ToolInvocationRepository.ToolGrant): JsonNode {
+        require(grant.taskTypeCode == MealTaskAdapter.MEAL_ANALYSIS_TASK_TYPE) {
+            "Meal capture context is available only to meal-analysis tasks"
+        }
+        val meal = mealTaskAdapter.context(grant.contextManifest)
+        return post(
+            properties.oauth.nutrimemo,
+            "/internal/v1/analysis-context/capture",
+            mapOf(
+                "subject_id" to requireNotNull(grant.subjectId).toString(),
+                "capture_session_id" to meal.captureSessionId.toString(),
+                "meal_id" to meal.mealId,
+                "task_id" to grant.taskId.toString(),
+            ),
+        )
+    }
 
     private fun post(config: HealthMindProperties.OAuth.Client, path: String, body: Any): JsonNode =
         builder.clone().baseUrl(config.baseUrl).build().post().uri(path)

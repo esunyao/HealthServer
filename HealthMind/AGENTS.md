@@ -19,7 +19,7 @@
 | 端口 | `${HEALTHMIND_PORT:8100}` |
 | 技术栈 | WebMVC + Spring AI MCP Server（`STREAMABLE`，端点 `/mcp`，spring-ai-bom 2.0.0）+ PostgreSQL（`healthmind` schema）+ Kafka + 自托管 LangGraph HTTP 后台 run |
 | 配置来源 | [`application.yaml`](./src/main/resources/application.yaml)；Nacos `HealthMind_Application.yaml`；业务配置集中在 `healthmind.*`（[`HealthMindProperties.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/config/HealthMindProperties.kt)） |
-| 迁移 | [`db/migration/`](./src/main/resources/db/migration/)：V1 schema（12 张表）、V2 稳定定义种子、V3 审计 action `tools_bound`、V4 清理旧运行数据并替换 Agent 字段（破坏性）、V5 持久化提交对账状态 |
+| 迁移 | [`db/migration/`](./src/main/resources/db/migration/)：V1 schema（12 张表）、V2 稳定定义种子、V3 审计 action `tools_bound`、V4 清理旧运行数据并替换 Agent 字段（破坏性）、V5 持久化提交对账状态、V6 增加任务/attempt provenance、lease fencing 与工具 schema 快照 |
 | release 提升 | [`db/manual/promote_workflow_release.sql`](./src/main/resources/db/manual/promote_workflow_release.sql)（psql 变量驱动；咨询锁 + candidate→production、旧 production→retired + 审计）——**手动脚本，不随 Flyway 自动执行** |
 | 业务 API | 无 REST 业务 API、无 `openapi.yaml`；业务入口是 MCP `/mcp` |
 | 保留期 | 结果与集成记录默认 30 天，任务与工具审计默认 180 天（`healthmind.*.retention`） |
@@ -29,7 +29,8 @@
 | 层 | 位置 | 职责 |
 |---|---|---|
 | application | [`application/service/TaskExecutionService.kt`](./src/main/kotlin/cn/esuny/healthmind/application/service/TaskExecutionService.kt) | 认领任务 → 固定 thread 启动或只读对账 → 轮询 → 校验 → complete/fail |
-| application | [`application/port/out/`](./src/main/kotlin/cn/esuny/healthmind/application/port/out/) | 出站端口：`AgentRunPort`、`InternalContextPort` |
+| application | [`application/port/out/`](./src/main/kotlin/cn/esuny/healthmind/application/port/out/) | 出站端口：`AgentRunPort`、`InternalContextPort`、`TaskOutcomePort`；跨边界 outbox DTO 为通用类型 |
+| application adapter | [`application/service/MealTaskAdapter.kt`](./src/main/kotlin/cn/esuny/healthmind/application/service/MealTaskAdapter.kt) | 仅在餐食边界转换捕获事件、上下文 manifest 和餐食完成/失败事件 |
 | domain | [`domain/task/TaskModels.kt`](./src/main/kotlin/cn/esuny/healthmind/domain/task/TaskModels.kt) | `TaskExecution`、`AgentRunResult`、`FailureCategory`（TRANSIENT/PERMANENT/CONTRACT/TIMEOUT/CANCELLED） |
 | infrastructure | [`infrastructure/database/TaskCommandRepository.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/database/TaskCommandRepository.kt) | inbox 接收、任务认领、完成/失败、outbox 写入（事务核心） |
 | infrastructure | [`infrastructure/database/ToolInvocationRepository.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/database/ToolInvocationRepository.kt) | MCP 工具授权与 `ai_tool_invocations` 审计 |
@@ -58,11 +59,12 @@
 
 - **任务状态机**：`ai_tasks.status ∈ {queued, running, succeeded, failed, cancelled, expired}`（V1 CHECK 约束）；代码实际写入路径是 `queued → running → succeeded/failed`，可重试失败回 `queued`（退避 `5s × 2^(n-1)`，封顶 20s，加 0–1s 抖动）。`expired`/`cancelled` 在 schema 存在但**当前代码无写入路径**，不要据此假设行为。
 - **attempt 状态**：`{pending, running, succeeded, failed, timed_out, cancelled}`；超时由固定 release 的 `timeout_seconds` 决定，恢复任务只处理最新 attempt。运行中任务数量受 `agent.max-in-flight` 限制。
-- **MCP 双层授权**：JWT 层（`SecurityConfig`）要求 issuer + audience `healthmind-mcp` + `azp == langgraph-healthmind`，并发布 RFC 9728 protected resource metadata（scope `healthmind.tool.nutrimemo.capture-context.read`、`healthmind.tool.orion.nutrition-context.read`）；工具层（`ToolInvocationRepository.authorizeAndStart`）要求任务/attempt 为 running、release 已绑定该工具、调用方 scope 与 `allowed_scope` 匹配、未超 `max_calls`，随后写 `ai_tool_invocations`（含请求/响应 sha256 审计）。调用方只能传 `taskId`/`attemptId`。
+- **MCP 双层授权**：JWT 层（`SecurityConfig`）要求 issuer + audience `healthmind-mcp` + `azp == langgraph-healthmind`，并发布 RFC 9728 protected resource metadata（scope `healthmind.tool.nutrimemo.capture-context.read`、`healthmind.tool.orion.nutrition-context.read`）；工具层（`ToolInvocationRepository.authorizeAndStart`）要求任务/attempt 为 running、release 已绑定该工具、调用方 scope 与 `allowed_scope` 匹配、未超 `max_calls`，随后写 `ai_tool_invocations`（含请求/响应 sha256 审计）。业务参数只能有 `taskId`/`attemptId`；稳定 UUID `tool_call_id` 来自 MCP `_meta`，同键同请求复用 invocation 且不重复占额度，同键异请求拒绝，同键处理中不并发读取。
 - **Release 固定语义**：接收事件时固定当时的 production Workflow Release；运行中和重试任务不切换到新版本。改任务流程时不要引入"实时取最新版本"。
-- **Agent 调用细节**：attempt ID 是固定 thread ID；首次 `POST /threads/{attempt_id}/runs` 后，响应不明时只用 `GET /threads/{attempt_id}/runs` 对账，不盲目再次启动；已知 run 经 `GET /runs/{run_id}` 轮询，成功后用 `/wait` 取结果。输入只有 `task_id`/`attempt_id`/`trace_id`；详见 [`doc/agent-runtime.md`](./doc/agent-runtime.md)。
+- **Agent 调用细节**：attempt ID 是固定 thread ID；每 attempt 同时最多一个 pending/running attempt。首次 `POST /threads/{attempt_id}/runs` 前持久化 `submitting`；响应不明时只用 `GET /threads/{attempt_id}/runs` 对账，不盲目再次启动；已知 run 经 `GET /runs/{run_id}` 轮询，成功后用 `/wait` 取结果。attempt lease 的 owner/version fence 所有写入；已过期 worker 的迟到结果不得覆盖新 owner。输入只有 `task_id`/`attempt_id`/`trace_id`；详见 [`doc/agent-runtime.md`](./doc/agent-runtime.md)。
 - **认证**：HealthMind 使用 Authentik `client_credentials` 访问 Agent，Agent 使用独立服务身份访问 MCP；密钥只从环境或 Nacos 注入。
-- **Inbox 幂等**：`acceptCaptureReady` 用 `ON CONFLICT DO NOTHING`；同事务新建 `queued` 任务并把 inbox 标 `processed`；无 production release 时抛异常，listener `nack(30s)` 延迟重试（重投不会重置已有 inbox）。
+- **Inbox 幂等**：`TaskCommandRepository.accept` 用 `ON CONFLICT DO NOTHING`；同 event ID 且同 payload digest 是幂等重投，不同 digest 是冲突而非静默忽略；同事务新建 `queued` 任务并把 inbox 标 `processed`；无 production release 时抛异常，listener `nack(30s)` 延迟重试。
+- **V6 数据完整性**：升级前停止 HealthMind。V6 不改写 V1–V5；若发现多活动 attempt、无法映射的成功结果或 production 工具 schema 漂移，会报告具体 ID 并中止。lease 过期不代表可重发 run，旧 `running` attempt 只允许只读对账；result 必须指向成功 attempt 的 task/release/run provenance。过期清理按保留依赖顺序显式删除，outbox 未发布或 retention 未到期的记录受触发器保护。
 - **结果哈希**：`CanonicalJson` 对键排序后 SHA-256，用于 result hash 与工具调用审计；改输出结构时注意规范化不受字段顺序影响。
 
 ## 接口与契约
@@ -79,7 +81,7 @@
 ./gradlew :healthmind:bootRun   # 需要 PostgreSQL、Kafka、Nacos、Authentik 与自托管 Agent
 ```
 
-- 测试在 [`src/test/kotlin/cn/esuny/healthmind/`](./src/test/kotlin/cn/esuny/healthmind/)：迁移（脚本 + Testcontainers 集成）、OAuth 元数据、Agent 客户端（MockWebServer）、JSON 规范化与 schema、Kafka 监听。**MCP 工具层暂无测试**，改动工具授权要谨慎并考虑补测。
+- 测试在 [`src/test/kotlin/cn/esuny/healthmind/`](./src/test/kotlin/cn/esuny/healthmind/)：迁移（脚本 + PostgreSQL 17 集成，默认 Testcontainers；也可显式配置 `HEALTHMIND_TEST_JDBC_URL` 等测试专用变量）、V6 provenance/lease/outbox/tool 幂等、OAuth 元数据、Agent 客户端（MockWebServer）、JSON 规范化与 schema、Kafka 监听。修改 MCP 授权时同步考虑补充 MCP 边界测试。
 - 测试依赖：MockK、Testcontainers、MockWebServer。
 
 ## 相关文档

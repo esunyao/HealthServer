@@ -1,19 +1,24 @@
 package cn.esuny.healthmind.infrastructure.database
 
 import cn.esuny.healthmind.infrastructure.config.FlywayConfig
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
-import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
+import org.junit.jupiter.api.TestInstance
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-@Testcontainers(disabledWithoutDocker = true)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PostgresMigrationIntegrationTest {
+    @BeforeAll
+    fun startPostgres() = TestPostgres.start()
+
+    @AfterAll
+    fun stopPostgres() = TestPostgres.stop()
+
     @Test
     fun `postgres 17 applies migration and creates twelve tables`() {
-        val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+        val dataSource = TestPostgres.dataSource()
         val flyway = FlywayConfig().flyway(dataSource)
 
         val migrationResult = flyway.migrate()
@@ -21,7 +26,7 @@ class PostgresMigrationIntegrationTest {
         assertTrue(migrationResult.success)
         assertEquals("healthmind", flyway.configuration.defaultSchema)
 
-        postgres.createConnection("").use { connection ->
+        dataSource.connection.use { connection ->
             connection.prepareStatement(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='healthmind' AND table_type='BASE TABLE' AND table_name <> 'flyway_schema_history'",
             ).use { statement ->
@@ -54,12 +59,23 @@ class PostgresMigrationIntegrationTest {
                     assertEquals(2, result.getInt(1))
                 }
             }
+            connection.prepareStatement(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='healthmind' AND table_name='ai_task_attempts' AND column_name IN ('workflow_release_id','lease_owner','lease_expires_at','lease_version')",
+            ).use { statement ->
+                statement.executeQuery().use { result ->
+                    result.next()
+                    assertEquals(4, result.getInt(1))
+                }
+            }
+            connection.prepareStatement(
+                "SELECT COUNT(*) FROM pg_indexes WHERE schemaname='healthmind' AND indexname='uk_ai_task_attempts_active_task'",
+            ).use { statement ->
+                statement.executeQuery().use { result ->
+                    result.next()
+                    assertEquals(1, result.getInt(1))
+                }
+            }
         }
     }
 
-    companion object {
-        @Container
-        @JvmStatic
-        val postgres = PostgreSQLContainer("postgres:17-alpine")
-    }
 }

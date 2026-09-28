@@ -7,6 +7,7 @@ import cn.esuny.healthmind.domain.task.AgentSubmissionState
 import cn.esuny.healthmind.domain.task.FailureCategory
 import cn.esuny.healthmind.domain.task.TaskExecution
 import cn.esuny.healthmind.domain.task.TaskExecutionException
+import cn.esuny.healthmind.infrastructure.config.HealthMindProperties
 import cn.esuny.healthmind.infrastructure.database.TaskCommandRepository
 import cn.esuny.healthmind.infrastructure.json.CanonicalJson
 import cn.esuny.healthmind.infrastructure.json.JsonSchemaService
@@ -22,7 +23,8 @@ class TaskExecutionServiceTest {
     private val repository = mockk<TaskCommandRepository>(relaxed = true)
     private val agent = mockk<AgentRunPort>()
     private val canonical = CanonicalJson(ObjectMapper())
-    private val service = TaskExecutionService(repository, agent, JsonSchemaService(canonical), canonical, SimpleMeterRegistry())
+    private val mealTaskAdapter = MealTaskAdapter(ObjectMapper(), canonical, HealthMindProperties())
+    private val service = TaskExecutionService(repository, agent, mealTaskAdapter, JsonSchemaService(canonical), canonical, SimpleMeterRegistry())
 
     @Test
     fun `submits an unsubmitted attempt and stores the returned run id`() {
@@ -35,7 +37,7 @@ class TaskExecutionServiceTest {
 
         verify(exactly = 1) { agent.start(command) }
         verify(exactly = 1) { repository.attachRun(command, runId) }
-        verify(exactly = 0) { repository.fail(any(), any(), any(), any()) }
+        verify(exactly = 0) { repository.fail(any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -46,7 +48,7 @@ class TaskExecutionServiceTest {
 
         service.advanceNext()
 
-        verify(exactly = 0) { repository.fail(any(), any(), any(), any()) }
+        verify(exactly = 0) { repository.fail(any(), any(), any(), any(), any()) }
         verify(exactly = 0) { repository.attachRun(any(), any()) }
         verify(exactly = 1) { repository.markSubmissionUnknown(command) }
 
@@ -84,7 +86,7 @@ class TaskExecutionServiceTest {
         service.advanceNext()
 
         verify(exactly = 1) { repository.schedulePoll(command) }
-        verify(exactly = 0) { repository.complete(any(), any(), any()) }
+        verify(exactly = 0) { repository.complete(any(), any(), any(), any()) }
     }
 
     @Test
@@ -97,8 +99,22 @@ class TaskExecutionServiceTest {
 
         service.advanceNext()
 
-        verify(exactly = 1) { repository.complete(command, result, any()) }
-        verify(exactly = 0) { repository.fail(any(), any(), any(), any()) }
+        verify(exactly = 1) { repository.complete(command, result, any(), any()) }
+        verify(exactly = 0) { repository.fail(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `late result from another run cannot complete the current attempt`() {
+        val command = command().copy(agentRunId = UUID.randomUUID())
+        every { repository.claimDue() } returns command
+        every { agent.inspect(command) } returns AgentRunState.Succeeded(
+            AgentRunResult(UUID.randomUUID(), """{"overall_confidence":0.9,"items":[]}"""),
+        )
+
+        service.advanceNext()
+
+        verify(exactly = 1) { repository.fail(command, any(), FailureCategory.CONTRACT, "AGENT_RUN_MISMATCH", any()) }
+        verify(exactly = 0) { repository.complete(any(), any(), any(), any()) }
     }
 
     @Test
@@ -111,8 +127,8 @@ class TaskExecutionServiceTest {
 
         service.advanceNext()
 
-        verify(exactly = 1) { repository.fail(command, any(), FailureCategory.PERMANENT, "AGENT_NEEDS_REVIEW") }
-        verify(exactly = 0) { repository.complete(any(), any(), any()) }
+        verify(exactly = 1) { repository.fail(command, any(), FailureCategory.PERMANENT, "AGENT_NEEDS_REVIEW", any()) }
+        verify(exactly = 0) { repository.complete(any(), any(), any(), any()) }
     }
 
     @Test
@@ -124,14 +140,15 @@ class TaskExecutionServiceTest {
 
         service.advanceNext()
 
-        verify(exactly = 1) { repository.fail(command, any(), FailureCategory.CONTRACT, "AGENT_OUTPUT_INVALID") }
-        verify(exactly = 0) { repository.complete(any(), any(), any()) }
+        verify(exactly = 1) { repository.fail(command, any(), FailureCategory.CONTRACT, "AGENT_OUTPUT_INVALID", any()) }
+        verify(exactly = 0) { repository.complete(any(), any(), any(), any()) }
     }
 
     private fun command() = TaskExecution(
         taskId = UUID.randomUUID(), attemptId = UUID.randomUUID(), attemptNo = 1, maxAttempts = 3,
-        lockVersion = 1, subjectId = null, aggregateType = "meal", aggregateId = "42",
-        captureSessionId = UUID.randomUUID(), mealId = 42, traceId = "trace-1",
+        lockVersion = 1, taskTypeCode = MealTaskAdapter.MEAL_ANALYSIS_TASK_TYPE, subjectId = null,
+        aggregateType = "meal", aggregateId = "42",
+        contextManifest = "{\"capture_session_id\":\"${UUID.randomUUID()}\",\"meal_id\":42}", traceId = "trace-1",
         releaseId = UUID.randomUUID(), agentDeploymentKey = "meal-v1", agentAssistantId = "meal-analysis",
         agentArtifactSha256 = "a".repeat(64), outputSchemaVersion = "1.0", outputSchema = "{}", timeoutSeconds = 120,
     )

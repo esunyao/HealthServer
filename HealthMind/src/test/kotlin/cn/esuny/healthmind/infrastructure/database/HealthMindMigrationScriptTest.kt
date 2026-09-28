@@ -12,6 +12,7 @@ class HealthMindMigrationScriptTest {
     private val seeds = requireNotNull(javaClass.getResource("/db/migration/V2__seed_stable_definitions.sql")).readText()
     private val cutover = requireNotNull(javaClass.getResource("/db/migration/V4__replace_dify_with_agent_runs.sql")).readText()
     private val submission = requireNotNull(javaClass.getResource("/db/migration/V5__track_agent_submission_state.sql")).readText()
+    private val hardening = requireNotNull(javaClass.getResource("/db/migration/V6__harden_task_run_integrity.sql")).readText()
 
     @Test
     fun `migration declares workbook twelve tables`() {
@@ -59,6 +60,17 @@ class HealthMindMigrationScriptTest {
     fun `submission state migration preserves the existing cutover history`() {
         assertTrue(submission.contains("ADD COLUMN agent_submission_state"))
         assertTrue(submission.contains("'new', 'submitting', 'uncertain', 'attached'"))
+    }
+
+    @Test
+    fun `V6 adds fenced provenance without clearing existing rows`() {
+        assertFalse(hardening.contains("TRUNCATE TABLE", ignoreCase = true))
+        assertTrue(hardening.contains("multiple active attempts"))
+        assertTrue(hardening.contains("lease_version BIGINT NOT NULL DEFAULT 0"))
+        assertTrue(hardening.contains("uk_ai_task_attempts_active_task"))
+        assertTrue(hardening.contains("fk_ai_task_results_attempt_provenance"))
+        assertTrue(hardening.contains("request_schema_sha256"))
+        assertTrue(hardening.contains("claim_version BIGINT NOT NULL DEFAULT 0"))
     }
 
     @Test

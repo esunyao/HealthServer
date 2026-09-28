@@ -18,11 +18,11 @@ data class TaskExecution(
     val attemptNo: Int,
     val maxAttempts: Int,
     val lockVersion: Long,
+    val taskTypeCode: String,
     val subjectId: UUID?,
     val aggregateType: String,
     val aggregateId: String,
-    val captureSessionId: UUID,
-    val mealId: Long,
+    val contextManifest: String,
     val traceId: String,
     val releaseId: UUID,
     val agentDeploymentKey: String,
@@ -33,6 +33,8 @@ data class TaskExecution(
     val outputSchemaVersion: String,
     val outputSchema: String,
     val timeoutSeconds: Int,
+    val leaseOwner: String = "",
+    val leaseVersion: Long = 0,
 )
 
 data class AgentRunResult(
