@@ -1,4 +1,4 @@
-# AgentDevelop — AI 工作指南（导航）
+# NutriAthenaAgent — AI 工作指南（导航）
 
 > 本文件只做导航与理解，不新增规范；规范来源是根 [`AGENTS.md`](../AGENTS.md) 与 [`README.md`](./README.md)。行为与技术结论以源码、[`pyproject.toml`](./pyproject.toml)、`uv.lock` 与测试为准。本文件不复制规范、不维护第二套规则。
 
@@ -18,7 +18,7 @@
 | 项 | 值 |
 |---|---|
 | 类型 | 非 Gradle 模块；Python `>=3.11`，uv 管理（[`pyproject.toml`](./pyproject.toml)、`uv.lock`）；构建后端 `uv_build`，`src/` 布局 |
-| 入口 | [`src/agentdevelop/main.py`](./src/agentdevelop/main.py)：`graph`、`agent`、`meal` 子命令 |
+| 入口 | [`src/nutriathena_agent/main.py`](./src/nutriathena_agent/main.py)：`graph`、`agent`、`meal` 子命令 |
 | 依赖 | LangGraph、`deepagents`、LangChain OpenAI、`langchain-mcp-adapters`、httpx、Pydantic；测试依赖在 `test` extra |
 | 配置 | 模块自己的 `.env`（模板见 [`.env.example`](./.env.example)；AI 不读实际 `.env` 内容）；变量全部 `AGENTDEVELOP_*` 前缀 |
 | 文档 | 本文件 + [`README.md`](./README.md)（运行手册）。**无 `doc/` 目录**，按根 `AGENTS.md` 的约定以本地说明文件为准 |
@@ -27,33 +27,33 @@
 
 | 位置 | 职责 |
 |---|---|
-| [`src/agentdevelop/basic_graph.py`](./src/agentdevelop/basic_graph.py) | **① 纯图**：`StateGraph`、`TypedDict` 状态、`operator.add` reducer、条件边、`stream`/`invoke`。不调用模型，离线可跑 |
+| [`src/nutriathena_agent/basic_graph.py`](./src/nutriathena_agent/basic_graph.py) | **① 纯图**：`StateGraph`、`TypedDict` 状态、`operator.add` reducer、条件边、`stream`/`invoke`。不调用模型，离线可跑 |
 | [`langgraph.json`](./langgraph.json) | `langgraph dev` 的本地配置；仅加载 `basic_graph` 教学图 |
-| [`src/agentdevelop/simple_agent.py`](./src/agentdevelop/simple_agent.py) | **② 最小 agent**：`create_agent` + `@tool` 自定义工具，打印消息轨迹让工具循环可见 |
-| [`src/agentdevelop/meal_agent.py`](./src/agentdevelop/meal_agent.py) | 手动餐食 Agent：传入图片/证据，连接授权 MCP 读取，并在本地校验输出 |
-| [`src/agentdevelop/mcp_tools.py`](./src/agentdevelop/mcp_tools.py) | Authentik client-credentials 与两个允许的 HealthMind MCP 只读工具封装；服务端 IDs 由 CLI 注入 |
-| [`src/agentdevelop/images.py`](./src/agentdevelop/images.py) | 本地图片格式、张数和大小校验，以及多模态消息编码 |
-| [`src/agentdevelop/contracts.py`](./src/agentdevelop/contracts.py) | Pydantic 成功/`needs_review` 结果契约校验 |
-| [`src/agentdevelop/dietary_prompt.py`](./src/agentdevelop/dietary_prompt.py) | 只读装载 [`../AgentDeveloper/skills`](../AgentDeveloper/skills) 中的现有餐食、纤维和结果契约规范 |
-| [`src/agentdevelop/config.py`](./src/agentdevelop/config.py) | 教学模型与视觉餐食模型分别配置，读取模块 `.env` |
-| [`src/agentdevelop/main.py`](./src/agentdevelop/main.py) | `graph` / `agent` / `meal` 命令；无参数默认运行离线图示例 |
+| [`src/nutriathena_agent/simple_agent.py`](./src/nutriathena_agent/simple_agent.py) | **② 最小 agent**：`create_agent` + `@tool` 自定义工具，打印消息轨迹让工具循环可见 |
+| [`src/nutriathena_agent/meal_agent.py`](./src/nutriathena_agent/meal_agent.py) | 手动餐食 Agent：传入图片/证据，连接授权 MCP 读取，并在本地校验输出 |
+| [`src/nutriathena_agent/mcp_tools.py`](./src/nutriathena_agent/mcp_tools.py) | Authentik client-credentials 与两个允许的 HealthMind MCP 只读工具封装；服务端 IDs 由 CLI 注入 |
+| [`src/nutriathena_agent/images.py`](./src/nutriathena_agent/images.py) | 本地图片格式、张数和大小校验，以及多模态消息编码 |
+| [`src/nutriathena_agent/contracts.py`](./src/nutriathena_agent/contracts.py) | Pydantic 成功/`needs_review` 结果契约校验 |
+| [`src/nutriathena_agent/dietary_prompt.py`](./src/nutriathena_agent/dietary_prompt.py) | 只读装载 [`../AgentDeveloper/skills`](../AgentDeveloper/skills) 中的现有餐食、纤维和结果契约规范 |
+| [`src/nutriathena_agent/config.py`](./src/nutriathena_agent/config.py) | 教学模型与视觉餐食模型分别配置，读取模块 `.env` |
+| [`src/nutriathena_agent/main.py`](./src/nutriathena_agent/main.py) | `graph` / `agent` / `meal` 命令；无参数默认运行离线图示例 |
 | [`tests/`](./tests/) | 离线单元测试；不连接真实 API Key、OAuth、MCP、PostgreSQL 或 Kafka |
 
 ## 任务 → 读什么
 
 | 你要做的事 | 先读 |
 |---|---|
-| 搞懂 LangGraph 图怎么搭 | [`basic_graph.py`](./src/agentdevelop/basic_graph.py) |
-| 搞懂最小 agent 循环 | [`simple_agent.py`](./src/agentdevelop/simple_agent.py) |
-| 手动跑餐食 Agent | [`README.md`](./README.md) 的“餐食输入与边界”与“配置” + [`meal_agent.py`](./src/agentdevelop/meal_agent.py) |
-| 调整视觉模型或 MCP 地址 | [`config.py`](./src/agentdevelop/config.py) + [`.env.example`](./.env.example)；实际凭据留在本机 `.env` |
-| 调整成功/复核结果契约 | [`contracts.py`](./src/agentdevelop/contracts.py) + [`AgentDeveloper/skills/diet-result-contract`](../AgentDeveloper/skills/diet-result-contract/SKILL.md) |
+| 搞懂 LangGraph 图怎么搭 | [`basic_graph.py`](./src/nutriathena_agent/basic_graph.py) |
+| 搞懂最小 agent 循环 | [`simple_agent.py`](./src/nutriathena_agent/simple_agent.py) |
+| 手动跑餐食 Agent | [`README.md`](./README.md) 的“餐食输入与边界”与“配置” + [`meal_agent.py`](./src/nutriathena_agent/meal_agent.py) |
+| 调整视觉模型或 MCP 地址 | [`config.py`](./src/nutriathena_agent/config.py) + [`.env.example`](./.env.example)；实际凭据留在本机 `.env` |
+| 调整成功/复核结果契约 | [`contracts.py`](./src/nutriathena_agent/contracts.py) + [`AgentDeveloper/skills/diet-result-contract`](../AgentDeveloper/skills/diet-result-contract/SKILL.md) |
 | 让 Agent 接入 HealthMind 生产链路 | **本阶段不做**：这需要单独设计并修改服务端；先阅读 [../HealthMind/AGENTS.md](../HealthMind/AGENTS.md)、[../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md) 与 [../HealthMindControl/doc/analysis-chain.md](../HealthMindControl/doc/analysis-chain.md) |
 
 ## 关键事实与易错点
 
 - **餐食 Agent 只手动运行**：没有任务轮询、Kafka 消费、业务数据库连接、结果回写或生产部署。
-- **`langgraph dev` 只提供教学图**：不暴露餐食 Agent；其运行方式仍是 `agentdevelop meal`。
+- **`langgraph dev` 只提供教学图**：不暴露餐食 Agent；其运行方式仍是 `nutriathena-agent meal`。
 - **本地图片才是视觉输入**：`meal` 只接收命令行提供的 JPEG/PNG/WebP 文件；不会尝试下载 capture MCP 返回的预签名 URL。
 - **MCP 只读且最小化**：只暴露 `nutrimemo.capture_context.get` 和 `orion.nutrition_context.get`。Wrapper 固定注入 task/attempt IDs，过滤签名 URL 和不需要回显的业务 ID，并限制每个工具每次运行至多调用一次。
 - **OAuth 由操作者配置**：手动运行者需配置与 HealthMind allowlist 匹配的 client ID、secret、audience 和只读 scopes；token 不进入模型 prompt 或终端输出。
@@ -64,27 +64,27 @@
 - **视觉模型单独指定**：教学 agent 的 `AGENTDEVELOP_MODEL` 默认 `deepseek-chat`；餐食 Agent 必须显式配置支持图像输入的 `AGENTDEVELOP_MEAL_MODEL`。
 - **`graph` 不需要任何凭据**；`agent` 需要模型凭据；`meal` 需要视觉模型、Authentik 和 HealthMind MCP 配置。
 - **`.env` 不入库**：真实 key 只放在本地 `.env`（见 [`.gitignore`](./.gitignore)），模板 `.env.example` 里的地址是公开端点、不含凭据。
-- **`[project.scripts]` 指向 `agentdevelop.main:main`**（不是 `agentdevelop:main`）：让 `__init__.py` 保持干净，避免包初始化与入口互相 import。
+- **`[project.scripts]` 指向 `nutriathena_agent.main:main`**（不是 `nutriathena-agent:main`）：让 `__init__.py` 保持干净，避免包初始化与入口互相 import。
 
 ## 测试与验证
 
 ```bash
 uv sync --extra test
-uv run agentdevelop graph        # ① 离线纯图：应逐步打印每个节点
-uv run agentdevelop graph "嗯"   # 换输入：应走 reject 分支
+uv run nutriathena-agent graph        # ① 离线纯图：应逐步打印每个节点
+uv run nutriathena-agent graph "嗯"   # 换输入：应走 reject 分支
 uv run pytest -q                 # 所有自动化测试均离线
 ```
 
 餐食 Agent 的自动化测试覆盖结果契约、图片检查、MCP 参数绑定和敏感字段移除；不需要真实服务。人工 smoke test 需要 HealthMind/Authentik、有效任务和 attempt、模型 API Key、本地图片与 evidence JSON：
 
 ```bash
-uv run agentdevelop meal --task-id <task-uuid> --attempt-id <attempt-uuid> --image <local-image.jpg> --evidence <evidence.json>
+uv run nutriathena-agent meal --task-id <task-uuid> --attempt-id <attempt-uuid> --image <local-image.jpg> --evidence <evidence.json>
 ```
 
 最小 agent 教学样例需要真实凭据，不由自动测试执行；配置好 `.env` 后手动运行：
 
 ```bash
-uv run agentdevelop agent "统计一下这句话的词数：晚饭吃了清蒸鲈鱼"
+uv run nutriathena-agent agent "统计一下这句话的词数：晚饭吃了清蒸鲈鱼"
 ```
 
 - 测试在 [`tests/`](./tests/)：不连接真实服务。

@@ -9,8 +9,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-# 模块根目录 AgentDevelop/，.env 固定放在这里。
-# config.py 位于 AgentDevelop/src/agentdevelop/，故上溯三层。
+# 模块根目录 NutriAthenaAgent/，.env 固定放在这里。
+# config.py 位于 NutriAthenaAgent/src/nutriathena_agent/，故上溯三层。
 _MODULE_ROOT = Path(__file__).resolve().parents[2]
 
 _ENV_FILE = _MODULE_ROOT / ".env"
@@ -48,7 +48,7 @@ class MealSettings:
 
 
 def load_env() -> None:
-    """读取 AgentDevelop/.env。
+    """读取 NutriAthenaAgent/.env。
 
     `override=False`：已经在 shell 里导出的真实环境变量优先，.env 只做补充。
     """

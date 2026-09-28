@@ -20,7 +20,7 @@ def _uuid_argument(value: str) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="agentdevelop")
+    parser = argparse.ArgumentParser(prog="nutriathena-agent")
     commands = parser.add_subparsers(dest="command")
     graph = commands.add_parser("graph", help="运行离线 LangGraph 教学示例")
     graph.add_argument("text", nargs="?", default=DEFAULT_TEXT)

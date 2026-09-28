@@ -3,12 +3,12 @@
 import json
 from pathlib import Path
 
-from agentdevelop.basic_graph import build_graph, graph
+from nutriathena_agent.basic_graph import build_graph, graph
 
 
 def test_langgraph_dev_config_points_to_compiled_graph():
     config = json.loads((Path(__file__).resolve().parents[1] / "langgraph.json").read_text(encoding="utf-8"))
-    assert config["graphs"] == {"basic_graph": "./src/agentdevelop/basic_graph.py:graph"}
+    assert config["graphs"] == {"basic_graph": "./src/nutriathena_agent/basic_graph.py:graph"}
     assert graph.invoke({"text": "午饭吃了番茄炒蛋", "notes": []})["route"] == "accept"
 
 

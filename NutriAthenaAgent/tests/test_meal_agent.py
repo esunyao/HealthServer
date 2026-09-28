@@ -9,11 +9,11 @@ from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
 
-from agentdevelop.contracts import MealAnalysis, NeedsReview, parse_meal_result, result_dict
-from agentdevelop.dietary_prompt import build_system_prompt
-from agentdevelop.images import ImageInputError, image_message_parts, load_local_images
-from agentdevelop.meal_agent import build_meal_agent
-from agentdevelop.mcp_tools import bind_context_tools
+from nutriathena_agent.contracts import MealAnalysis, NeedsReview, parse_meal_result, result_dict
+from nutriathena_agent.dietary_prompt import build_system_prompt
+from nutriathena_agent.images import ImageInputError, image_message_parts, load_local_images
+from nutriathena_agent.meal_agent import build_meal_agent
+from nutriathena_agent.mcp_tools import bind_context_tools
 
 
 def test_local_images_preserve_order_and_encode_supported_types(tmp_path):

@@ -1,6 +1,6 @@
-# AgentDevelop
+# NutriAthenaAgent
 
-AgentDevelop 当前包含两段 LangGraph 教学样板，以及一个**手动运行的餐食分析 DeepAgent 原型**。原型用于在替换 Dify 前验证模型、图片、MCP 上下文和结果契约；它不会自动接收 HealthMind 任务，也不承担生产编排。
+NutriAthenaAgent 当前包含两段 LangGraph 教学样板，以及一个**手动运行的餐食分析 DeepAgent 原型**。原型用于在替换 Dify 前验证模型、图片、MCP 上下文和结果契约；它不会自动接收 HealthMind 任务，也不承担生产编排。
 
 本阶段只实现 Agent 客户端：不修改 HealthMind、NutriMemo、Orion、Kafka、MCP 工具或数据库；Agent 本身不调用 Dify、不写业务数据、不发布 Kafka 消息。
 
@@ -10,33 +10,33 @@ AI 导航入口见 [`AGENTS.md`](./AGENTS.md)（代码地图、配置与边界�
 
 | 功能 | 命令/文件 | 作用 |
 |---|---|---|
-| 离线图示例 | `agentdevelop graph` | 学习 `StateGraph`、状态、reducer、条件边与流式执行 |
-| 最小 Agent 示例 | `agentdevelop agent` | 学习 `create_agent` 与自定义工具 |
-| 餐食分析 Agent | `agentdevelop meal` / [`meal_agent.py`](./src/agentdevelop/meal_agent.py) | 读取本地图片和知识证据，连接现有 HealthMind MCP，输出经本地契约校验的 JSON |
+| 离线图示例 | `nutriathena-agent graph` | 学习 `StateGraph`、状态、reducer、条件边与流式执行 |
+| 最小 Agent 示例 | `nutriathena-agent agent` | 学习 `create_agent` 与自定义工具 |
+| 餐食分析 Agent | `nutriathena-agent meal` / [`meal_agent.py`](./src/nutriathena_agent/meal_agent.py) | 读取本地图片和知识证据，连接现有 HealthMind MCP，输出经本地契约校验的 JSON |
 
 ## 跑起来
 
 ```bash
-cd AgentDevelop
+cd NutriAthenaAgent
 
 # 安装（含测试依赖）
 uv sync --extra test
 
 # ① 纯图，不需要任何凭据
-uv run agentdevelop graph
-uv run agentdevelop graph "嗯"        # 换输入：太短会走 reject 分支
+uv run nutriathena-agent graph
+uv run nutriathena-agent graph "嗯"        # 换输入：太短会走 reject 分支
 
 # 测试（不需要外部服务或真实 API Key）
 uv run pytest -q
 
 # 完成配置后，手动运行餐食分析；每张图片使用一个 --image
-uv run agentdevelop meal --task-id 11111111-1111-4111-8111-111111111111 --attempt-id 22222222-2222-4222-8222-222222222222 --image ".\meal-1.jpg" --evidence ".\knowledge-evidence.json" --note "米饭吃完，鱼只吃了一半"
-uv run agentdevelop meal --help
+uv run nutriathena-agent meal --task-id 11111111-1111-4111-8111-111111111111 --attempt-id 22222222-2222-4222-8222-222222222222 --image ".\meal-1.jpg" --evidence ".\knowledge-evidence.json" --note "米饭吃完，鱼只吃了一半"
+uv run nutriathena-agent meal --help
 ```
 
 ### LangGraph 本地开发服务器
 
-在 `AgentDevelop/` 目录执行：
+在 `NutriAthenaAgent/` 目录执行：
 
 ```powershell
 $env:PYTHONUTF8 = "1"   # Windows：避免 LangGraph CLI 以 GBK 读取自身的 UTF-8 文件
@@ -76,8 +76,8 @@ Copy-Item .env.example .env
 然后可继续运行教学 Agent：
 
 ```bash
-uv run agentdevelop agent
-uv run agentdevelop agent "统计一下这句话的词数：晚饭吃了清蒸鲈鱼"
+uv run nutriathena-agent agent
+uv run nutriathena-agent agent "统计一下这句话的词数：晚饭吃了清蒸鲈鱼"
 ```
 
 `.env` 不在版本控制内；已在 shell 中导出的同名环境变量优先于 `.env`。

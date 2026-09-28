@@ -1,5 +1,5 @@
 [project]
-name = "agentdevelop"
+name = "nutriathena-agent"
 version = "0.1.0"
 description = "HealthMind meal-analysis Agent prototype (manual use; not wired into service orchestration)"
 readme = "README.md"
@@ -20,7 +20,8 @@ dependencies = [
 ]
 
 [project.scripts]
-agentdevelop = "agentdevelop.main:main"
+nutriathena-agent = "nutriathena_agent.main:main"
+agentdevelop = "nutriathena_agent.main:main"
 
 [project.optional-dependencies]
 test = [
