@@ -1,7 +1,0 @@
-{
-  "dependencies": ["."],
-  "graphs": {
-    "basic_graph": "./src/agentdevelop/basic_graph.py:graph"
-  },
-  "env": ".env"
-}

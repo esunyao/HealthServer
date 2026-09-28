@@ -1,26 +1,31 @@
 [project]
-name = "agentdevelop"
+name = "nutriathena-agent"
 version = "0.1.0"
-description = "HealthMind meal-analysis Agent prototype (manual use; not wired into service orchestration)"
+description = "HealthMind meal-analysis Agent runtime"
 readme = "README.md"
 authors = [
     { name = "Esuny", email = "esun.yao@hotmail.com" }
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.115,<1",
     "deepagents==0.7.17",
     "langchain==1.4.2",
     "langchain-core>=1.6.4",
-    "langchain-mcp-adapters>=0.3.2,<0.4",
     "langchain-openai>=1.6.3",
     "langgraph==1.2.12",
     "httpx>=0.27,<1",
+    "mcp>=1.30,<2",
+    "psycopg[binary,pool]>=3.2,<4",
+    "PyJWT[crypto]>=2.10,<3",
     "pydantic>=2.7,<3",
     "python-dotenv>=1.2.3",
+    "uvicorn[standard]>=0.34,<1",
 ]
 
 [project.scripts]
-agentdevelop = "agentdevelop.main:main"
+nutriathena-agent = "nutriathena_agent.main:main"
+agentdevelop = "nutriathena_agent.main:main"
 
 [project.optional-dependencies]
 test = [
@@ -34,6 +39,9 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-p no:cacheprovider"
+markers = [
+    "integration: starts an isolated ephemeral PostgreSQL container",
+]
 
 [dependency-groups]
 dev = [

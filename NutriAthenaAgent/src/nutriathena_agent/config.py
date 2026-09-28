@@ -1,4 +1,4 @@
-"""Model factories and settings for the teaching examples and meal agent."""
+"""Configuration for the runtime and its retained teaching examples."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-# 模块根目录 AgentDevelop/，.env 固定放在这里。
-# config.py 位于 AgentDevelop/src/agentdevelop/，故上溯三层。
+# 模块根目录 NutriAthenaAgent/，.env 固定放在这里。
+# config.py 位于 NutriAthenaAgent/src/nutriathena_agent/，故上溯三层。
 _MODULE_ROOT = Path(__file__).resolve().parents[2]
 
 _ENV_FILE = _MODULE_ROOT / ".env"
@@ -18,11 +18,22 @@ _ENV_EXAMPLE = _MODULE_ROOT / ".env.example"
 
 DEFAULT_MODEL = "deepseek-chat"
 
-# 用 AGENTDEVELOP_ 前缀而不是 OPENAI_*，避免和机器上其他项目的全局 OPENAI_API_KEY 串味。
-API_KEY_VAR = "AGENTDEVELOP_API_KEY"
-BASE_URL_VAR = "AGENTDEVELOP_BASE_URL"
-MODEL_VAR = "AGENTDEVELOP_MODEL"
-MEAL_MODEL_VAR = "AGENTDEVELOP_MEAL_MODEL"
+# 新变量使用 NUTRIATHENA_ 前缀；旧前缀作为兼容回退，避免丢失本地配置。
+API_KEY_VAR = "NUTRIATHENA_MODEL_API_KEY"
+BASE_URL_VAR = "NUTRIATHENA_MODEL_BASE_URL"
+MODEL_VAR = "NUTRIATHENA_MODEL_ID"
+MEAL_MODEL_VAR = "NUTRIATHENA_MEAL_MODEL_ID"
+_LEGACY_ENV = {
+    API_KEY_VAR: "AGENTDEVELOP_API_KEY",
+    BASE_URL_VAR: "AGENTDEVELOP_BASE_URL",
+    MODEL_VAR: "AGENTDEVELOP_MODEL",
+    MEAL_MODEL_VAR: "AGENTDEVELOP_MEAL_MODEL",
+    "NUTRIATHENA_MCP_URL": "AGENTDEVELOP_MCP_URL",
+    "NUTRIATHENA_MCP_OAUTH_TOKEN_URL": "AGENTDEVELOP_OAUTH_TOKEN_URL",
+    "NUTRIATHENA_MCP_CLIENT_ID": "AGENTDEVELOP_OAUTH_CLIENT_ID",
+    "NUTRIATHENA_MCP_CLIENT_SECRET": "AGENTDEVELOP_OAUTH_CLIENT_SECRET",
+    "NUTRIATHENA_MCP_SCOPES": "AGENTDEVELOP_MCP_SCOPES",
+}
 
 DEFAULT_MCP_SCOPES = "healthmind.tool.nutrimemo.capture-context.read healthmind.tool.orion.nutrition-context.read"
 MAX_MEAL_IMAGES = 10
@@ -45,14 +56,23 @@ class MealSettings:
     max_image_bytes: int = MAX_MEAL_IMAGE_BYTES
     max_total_image_bytes: int = MAX_MEAL_TOTAL_IMAGE_BYTES
     max_evidence_bytes: int = MAX_EVIDENCE_BYTES
+    media_allowed_hosts: frozenset[str] = field(default_factory=frozenset)
 
 
 def load_env() -> None:
-    """读取 AgentDevelop/.env。
+    """读取 NutriAthenaAgent/.env。
 
     `override=False`：已经在 shell 里导出的真实环境变量优先，.env 只做补充。
     """
     load_dotenv(_ENV_FILE, override=False)
+
+
+def _env(name: str, default: str | None = None) -> str | None:
+    value = os.environ.get(name)
+    if value:
+        return value
+    legacy = _LEGACY_ENV.get(name)
+    return os.environ.get(legacy, default) if legacy else default
 
 
 def build_model() -> ChatOpenAI:
@@ -62,7 +82,7 @@ def build_model() -> ChatOpenAI:
     """
     load_env()
 
-    missing = [name for name in (API_KEY_VAR, BASE_URL_VAR) if not os.environ.get(name)]
+    missing = [name for name in (API_KEY_VAR, BASE_URL_VAR) if not _env(name)]
     if missing:
         raise RuntimeError(
             f"缺少环境变量：{'、'.join(missing)}。"
@@ -70,9 +90,9 @@ def build_model() -> ChatOpenAI:
         )
 
     return ChatOpenAI(
-        model=os.environ.get(MODEL_VAR, DEFAULT_MODEL),
-        base_url=os.environ[BASE_URL_VAR],
-        api_key=os.environ[API_KEY_VAR],
+        model=_env(MODEL_VAR, DEFAULT_MODEL),
+        base_url=_env(BASE_URL_VAR) or "",
+        api_key=_env(API_KEY_VAR) or "",
     )
 
 
@@ -83,21 +103,27 @@ def load_meal_settings() -> MealSettings:
         "model": MEAL_MODEL_VAR,
         "api_key": API_KEY_VAR,
         "base_url": BASE_URL_VAR,
-        "mcp_url": "AGENTDEVELOP_MCP_URL",
-        "token_url": "AGENTDEVELOP_OAUTH_TOKEN_URL",
-        "oauth_client_id": "AGENTDEVELOP_OAUTH_CLIENT_ID",
-        "oauth_client_secret": "AGENTDEVELOP_OAUTH_CLIENT_SECRET",
+        "mcp_url": "NUTRIATHENA_MCP_URL",
+        "token_url": "NUTRIATHENA_MCP_OAUTH_TOKEN_URL",
+        "oauth_client_id": "NUTRIATHENA_MCP_CLIENT_ID",
+        "oauth_client_secret": "NUTRIATHENA_MCP_CLIENT_SECRET",
     }
-    missing = [env_name for env_name in names.values() if not os.environ.get(env_name)]
+    missing = [env_name for env_name in names.values() if not _env(env_name)]
     if missing:
         raise RuntimeError(
             f"缺少环境变量：{'、'.join(missing)}。"
             f"请复制 {_ENV_EXAMPLE} 为 {_ENV_FILE} 并填写后重试。"
         )
-    values = {field: os.environ[env_name] for field, env_name in names.items()}
+    values = {field: _env(env_name) or "" for field, env_name in names.items()}
+    hosts = frozenset(
+        host.strip().lower()
+        for host in (_env("NUTRIATHENA_MEDIA_ALLOWED_HOSTS", "") or "").split(",")
+        if host.strip()
+    )
     return MealSettings(
         **values,
-        mcp_scopes=os.environ.get("AGENTDEVELOP_MCP_SCOPES", DEFAULT_MCP_SCOPES),
+        mcp_scopes=_env("NUTRIATHENA_MCP_SCOPES", DEFAULT_MCP_SCOPES) or DEFAULT_MCP_SCOPES,
+        media_allowed_hosts=hosts,
     )
 
 

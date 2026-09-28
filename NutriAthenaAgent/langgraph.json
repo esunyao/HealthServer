@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "basic_graph": "./src/nutriathena_agent/basic_graph.py:graph"
+  },
+  "env": ".env"
+}

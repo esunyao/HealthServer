@@ -3,17 +3,18 @@ from __future__ import annotations
 import asyncio
 import json
 
+import httpx
 import pytest
 from pydantic import ValidationError
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
 
-from agentdevelop.contracts import MealAnalysis, NeedsReview, parse_meal_result, result_dict
-from agentdevelop.dietary_prompt import build_system_prompt
-from agentdevelop.images import ImageInputError, image_message_parts, load_local_images
-from agentdevelop.meal_agent import build_meal_agent
-from agentdevelop.mcp_tools import bind_context_tools
+from nutriathena_agent.contracts import MealAnalysis, NeedsReview, parse_meal_result, result_dict
+from nutriathena_agent.dietary_prompt import build_system_prompt
+from nutriathena_agent.images import CapturedImage, ImageInputError, image_message_parts, load_captured_images, load_local_images
+from nutriathena_agent.meal_agent import build_meal_agent
+from nutriathena_agent.mcp_tools import _McpSdkRemoteTool, bind_context_tools, _stable_tool_call_id
 
 
 def test_local_images_preserve_order_and_encode_supported_types(tmp_path):
@@ -44,6 +45,71 @@ def test_local_images_reject_invalid_format_and_limits(tmp_path):
 
     with pytest.raises(ImageInputError, match="最多 1 张"):
         load_local_images([valid, valid], max_images=1)
+
+
+def test_authorized_capture_images_are_downloaded_in_memory_with_limits():
+    content = b"\xff\xd8\xffmeal-bytes"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "media.example.test"
+        return httpx.Response(200, headers={"content-type": "image/jpeg"}, content=content)
+
+    async def load():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=False) as client:
+            return await load_captured_images(
+                [{"url": "https://media.example.test/signed?token=never-log"}],
+                allowed_hosts=frozenset({"media.example.test"}),
+                client=client,
+            )
+
+    images = asyncio.run(load())
+    assert images == [CapturedImage(name="image-1.jpeg", mime_type="image/jpeg", data=content)]
+    parts = image_message_parts(images)
+    assert "signed" not in json.dumps(parts)
+    assert "never-log" not in json.dumps(parts)
+
+
+@pytest.mark.parametrize(
+    "url,allowed_hosts,headers,content,max_bytes,message",
+    [
+        ("https://attacker.test/picture?token=secret", frozenset({"media.example.test"}), {}, b"\xff\xd8\xffok", 100, "地址"),
+        ("https://media.example.test:8443/picture?token=secret", frozenset({"media.example.test"}), {}, b"\xff\xd8\xffok", 100, "地址"),
+        ("https://media.example.test/picture?token=secret", frozenset({"media.example.test"}), {"content-type": "image/png"}, b"\xff\xd8\xffok", 100, "内容"),
+        ("https://media.example.test/picture?token=secret", frozenset({"media.example.test"}), {"content-type": "image/jpeg"}, b"\xff\xd8\xffoversize", 4, "大小"),
+    ],
+)
+def test_authorized_capture_images_fail_closed(url, allowed_hosts, headers, content, max_bytes, message):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers=headers, content=content)
+
+    async def load():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=False) as client:
+            return await load_captured_images(
+                [{"url": url}],
+                allowed_hosts=allowed_hosts,
+                max_image_bytes=max_bytes,
+                client=client,
+            )
+
+    with pytest.raises(ImageInputError, match=message) as captured:
+        asyncio.run(load())
+    assert "secret" not in str(captured.value)
+
+
+def test_authorized_capture_image_rejects_redirects():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"location": "https://other.example.test/image"})
+
+    async def load():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=False) as client:
+            return await load_captured_images(
+                [{"url": "https://media.example.test/signed?token=secret"}],
+                allowed_hosts=frozenset({"media.example.test"}),
+                client=client,
+            )
+
+    with pytest.raises(ImageInputError, match="重定向"):
+        asyncio.run(load())
 
 
 def test_contract_accepts_success_and_review_objects():
@@ -92,10 +158,11 @@ class FakeMcpTool:
         self.name = name
         self.result = result
         self.calls: list[dict[str, str]] = []
+        self.metadata: list[dict[str, str]] = []
 
     async def ainvoke(self, arguments):
-        arguments = arguments.get("args", arguments)
-        self.calls.append(arguments)
+        self.calls.append(arguments.get("args", arguments))
+        self.metadata.append(arguments.get("_meta", {}))
         return self.result
 
 
@@ -118,19 +185,61 @@ def test_mcp_wrappers_inject_ids_and_remove_urls():
     )
     task_id = "11111111-1111-4111-8111-111111111111"
     attempt_id = "22222222-2222-4222-8222-222222222222"
-    tools, called = bind_context_tools([capture, nutrition], task_id=task_id, attempt_id=attempt_id)
+    tools, called, presented = bind_context_tools([capture, nutrition], task_id=task_id, attempt_id=attempt_id)
 
     capture_result = asyncio.run(tools[0].ainvoke({}))
     nutrition_result = asyncio.run(tools[1].ainvoke({}))
 
     assert capture.calls == [{"taskId": task_id, "attemptId": attempt_id}]
     assert nutrition.calls == [{"taskId": task_id, "attemptId": attempt_id}]
+    assert capture.metadata == [{"tool_call_id": _stable_tool_call_id(attempt_id, "nutrimemo.capture_context.get")}]
+    assert nutrition.metadata == [{"tool_call_id": _stable_tool_call_id(attempt_id, "orion.nutrition_context.get")}]
     assert "X-Amz-Signature" not in capture_result
     assert "storage.invalid" not in capture_result
     assert "capture_session_id" not in capture_result
     assert json.loads(capture_result)["confirmed_image_count"] == 1
     assert "subject_id" not in nutrition_result
     assert {"capture_context", "nutrition_context"} == called
+    assert {"capture_context", "nutrition_context"} == presented
+
+
+def test_sdk_mcp_adapter_uses_reserved_request_meta_for_stable_tool_call_id():
+    class Session:
+        def __init__(self):
+            self.calls = []
+
+        async def call_tool(self, name, *, arguments, meta):
+            self.calls.append((name, arguments, meta))
+            return {"structuredContent": {"meal_type": "lunch"}}
+
+    async def invoke():
+        session = Session()
+        attempt_id = "22222222-2222-4222-8222-222222222222"
+        remote = [
+            _McpSdkRemoteTool(session, "nutrimemo.capture_context.get"),
+            _McpSdkRemoteTool(session, "orion.nutrition_context.get"),
+        ]
+        tools, _, _ = bind_context_tools(
+            remote,
+            task_id="11111111-1111-4111-8111-111111111111",
+            attempt_id=attempt_id,
+        )
+        await tools[0].ainvoke({})
+        await tools[1].ainvoke({})
+        assert session.calls == [
+            (
+                "nutrimemo.capture_context.get",
+                {"taskId": "11111111-1111-4111-8111-111111111111", "attemptId": attempt_id},
+                {"tool_call_id": _stable_tool_call_id(attempt_id, "nutrimemo.capture_context.get")},
+            ),
+            (
+                "orion.nutrition_context.get",
+                {"taskId": "11111111-1111-4111-8111-111111111111", "attemptId": attempt_id},
+                {"tool_call_id": _stable_tool_call_id(attempt_id, "orion.nutrition_context.get")},
+            ),
+        ]
+
+    asyncio.run(invoke())
 
 
 def test_mcp_structured_content_is_available_to_agent():
@@ -144,7 +253,7 @@ def test_mcp_structured_content_is_available_to_agent():
         FakeMcpTool("nutrimemo.capture_context.get", message),
         FakeMcpTool("orion.nutrition_context.get", "{}"),
     ]
-    tools, _ = bind_context_tools(
+    tools, _, _ = bind_context_tools(
         remote,
         task_id="11111111-1111-4111-8111-111111111111",
         attempt_id="22222222-2222-4222-8222-222222222222",
@@ -161,7 +270,7 @@ def test_mcp_context_tool_is_limited_to_one_call():
         FakeMcpTool("nutrimemo.capture_context.get", "{}"),
         FakeMcpTool("orion.nutrition_context.get", "{}"),
     ]
-    tools, _ = bind_context_tools(
+    tools, _, _ = bind_context_tools(
         remote,
         task_id="11111111-1111-4111-8111-111111111111",
         attempt_id="22222222-2222-4222-8222-222222222222",
@@ -180,7 +289,7 @@ def test_mcp_failed_call_is_not_counted_as_successful():
         FailingMcpTool("nutrimemo.capture_context.get", "{}"),
         FakeMcpTool("orion.nutrition_context.get", "{}"),
     ]
-    tools, called = bind_context_tools(
+    tools, called, _ = bind_context_tools(
         remote,
         task_id="11111111-1111-4111-8111-111111111111",
         attempt_id="22222222-2222-4222-8222-222222222222",
