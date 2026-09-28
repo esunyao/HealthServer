@@ -1,13 +1,14 @@
 [project]
 name = "nutriathena-agent"
 version = "0.1.0"
-description = "HealthMind meal-analysis Agent prototype (manual use; not wired into service orchestration)"
+description = "HealthMind meal-analysis Agent runtime"
 readme = "README.md"
 authors = [
     { name = "Esuny", email = "esun.yao@hotmail.com" }
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.115,<1",
     "deepagents==0.7.17",
     "langchain==1.4.2",
     "langchain-core>=1.6.4",
@@ -19,6 +20,7 @@ dependencies = [
     "PyJWT[crypto]>=2.10,<3",
     "pydantic>=2.7,<3",
     "python-dotenv>=1.2.3",
+    "uvicorn[standard]>=0.34,<1",
 ]
 
 [project.scripts]
@@ -37,6 +39,9 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-p no:cacheprovider"
+markers = [
+    "integration: starts an isolated ephemeral PostgreSQL container",
+]
 
 [dependency-groups]
 dev = [

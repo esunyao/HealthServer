@@ -1,14 +1,16 @@
-"""CLI for the LangGraph examples and the standalone meal-analysis agent."""
+"""CLI for the service runtime and retained LangGraph teaching examples."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
+import os
 import sys
 from uuid import UUID
 
 from .basic_graph import DEFAULT_TEXT, run as run_graph
+from .config import load_env
 from .simple_agent import DEFAULT_QUESTION, run as run_agent
 
 
@@ -26,14 +28,35 @@ def build_parser() -> argparse.ArgumentParser:
     graph.add_argument("text", nargs="?", default=DEFAULT_TEXT)
     agent = commands.add_parser("agent", help="运行最小 LangChain agent 教学示例")
     agent.add_argument("question", nargs="?", default=DEFAULT_QUESTION)
-    meal = commands.add_parser("meal", help="运行独立餐食分析 DeepAgent")
+    commands.add_parser("serve", help="启动 HealthMind-compatible HTTP 服务和持久 worker")
+    commands.add_parser("migrate", help="应用校验和保护的 PostgreSQL 版本迁移")
+    meal = commands.add_parser("meal", help="直接运行一个 HealthMind 餐食 attempt（生产使用 serve）")
     meal.add_argument("--task-id", required=True, type=_uuid_argument)
     meal.add_argument("--attempt-id", required=True, type=_uuid_argument)
-    meal.add_argument("--image", required=True, action="append", help="本地 JPEG、PNG 或 WebP；可重复传入")
-    meal.add_argument("--evidence", help="调用方导出的知识库证据 JSON（最大 1 MiB）")
-    meal.add_argument("--note", default="", help="用户明确提供的餐食备注")
-    parser.set_defaults(command="graph")
+    meal.add_argument("--trace-id", default="manual-run", help="调用链追踪标识")
+    smoke = commands.add_parser("smoke", help="通过 OAuth 对已部署服务运行安全真实 smoke")
+    smoke.add_argument("--task-id", required=True, type=_uuid_argument)
+    smoke.add_argument("--attempt-id", required=True, type=_uuid_argument)
+    smoke.add_argument("--trace-id", required=True)
+    parser.set_defaults(command="graph", text=DEFAULT_TEXT)
     return parser
+
+
+def _migrate() -> int:
+    load_env()
+    database_url = os.environ.get("NUTRIATHENA_DATABASE_URL", "").strip()
+    if not database_url:
+        print("缺少运行配置：NUTRIATHENA_DATABASE_URL", file=sys.stderr)
+        return 2
+    from .api import migrate_database
+
+    try:
+        applied = migrate_database(database_url)
+    except Exception as exception:
+        print(f"数据库迁移失败：{type(exception).__name__}", file=sys.stderr)
+        return 2
+    print(json.dumps({"applied": applied}, ensure_ascii=False, separators=(",", ":")))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,6 +67,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "agent":
         run_agent(args.question)
         return 0
+    if args.command == "migrate":
+        return _migrate()
+    if args.command == "serve":
+        from .api import create_app
+        from .runtime_config import load_runtime_settings
+        import uvicorn
+
+        settings = load_runtime_settings()
+        uvicorn.run(create_app(settings=settings), host=settings.host, port=settings.port)
+        return 0
     if args.command == "meal":
         from .meal_agent import run_meal_analysis
 
@@ -52,16 +85,28 @@ def main(argv: list[str] | None = None) -> int:
                 run_meal_analysis(
                     task_id=args.task_id,
                     attempt_id=args.attempt_id,
-                    image_paths=args.image,
-                    evidence_path=args.evidence,
-                    note=args.note,
+                    trace_id=args.trace_id,
                 )
             )
         except Exception as exception:
-            print(f"餐食 Agent 运行失败：{type(exception).__name__}: {exception}", file=sys.stderr)
+            print(f"餐食 Agent 运行失败：{type(exception).__name__}", file=sys.stderr)
             return 2
         print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
         return 0
+    if args.command == "smoke":
+        from .smoke import run_smoke
+
+        try:
+            result = asyncio.run(
+                run_smoke(task_id=args.task_id, attempt_id=args.attempt_id, trace_id=args.trace_id)
+            )
+        except Exception as exception:
+            print(f"真实 smoke 失败：{type(exception).__name__}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+        if result.get("status") == "success" and result.get("output_status") == "analysis":
+            return 0
+        return 2 if result.get("status") in {"error", "interrupted", "success"} else 3
     return 2
 
 
