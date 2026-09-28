@@ -1290,6 +1290,7 @@ dependencies = [
     { name = "mcp" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-dotenv" },
 ]
 
@@ -1314,6 +1315,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.30,<2" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2,<4" },
     { name = "pydantic", specifier = ">=2.7,<3" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10,<3" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=9.1.1" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
 ]
