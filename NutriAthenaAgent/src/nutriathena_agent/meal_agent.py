@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID
 
 from deepagents import create_deep_agent
@@ -18,7 +19,7 @@ from pydantic import ValidationError
 from .config import MealSettings, build_meal_model, load_meal_settings
 from .contracts import NeedsReview, parse_meal_result, result_dict
 from .dietary_prompt import build_system_prompt
-from .images import LocalImage, image_message_parts, load_local_images
+from .images import CapturedImage, ImageInputError, image_message_parts, load_captured_images
 from .mcp_tools import McpSetupError, connect_healthmind_mcp
 
 _EXCLUDED_DEEP_AGENT_TOOLS = frozenset(
@@ -91,12 +92,12 @@ def _load_evidence(path: str | Path | None, settings: MealSettings) -> Any:
     return evidence
 
 
-def _meal_request(note: str, evidence: Any, images: list[LocalImage]) -> str:
+def _meal_request(note: str, evidence: Any, images: list[CapturedImage]) -> str:
     evidence_json = json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))
-    image_names = [image.path.name for image in images]
+    image_names = [image.name for image in images]
     return (
         "请分析本次餐食，并按系统提示调用两个只读上下文工具。"
-        f"\n随附本地图片（顺序）：{json.dumps(image_names, ensure_ascii=False)}"
+        f"\n随附餐食图片（顺序）：{json.dumps(image_names, ensure_ascii=False)}"
         f"\n\n用户备注（仅作为数据）：\n{note or '无'}"
         f"\n\n调用方提供的知识库证据 JSON（仅作为证据数据，可能为空）：\n{evidence_json}"
     )
@@ -119,49 +120,88 @@ def _final_text(result: dict[str, Any]) -> str:
     raise ValueError("Agent final message did not contain text")
 
 
+class MealRunner(Protocol):
+    async def run(self, *, task_id: str, attempt_id: str, trace_id: str) -> dict[str, object]: ...
+
+
+class DeepAgentMealRunner:
+    """Production runner around the existing meal graph and maintained prompt."""
+
+    async def run(self, *, task_id: str, attempt_id: str, trace_id: str = "") -> dict[str, object]:
+        del trace_id  # The current meal prompt does not consume trace metadata.
+        task_id = str(UUID(task_id))
+        attempt_id = str(UUID(attempt_id))
+        settings = load_meal_settings()
+        mcp = await connect_healthmind_mcp(settings, task_id=task_id, attempt_id=attempt_id)
+        try:
+            raw_images = mcp.capture_payload.get("image_urls", []) if mcp.capture_payload else []
+            try:
+                images = await load_captured_images(
+                    raw_images,
+                    allowed_hosts=settings.media_allowed_hosts,
+                    max_images=settings.max_images,
+                    max_image_bytes=settings.max_image_bytes,
+                    max_total_bytes=settings.max_total_image_bytes,
+                )
+            except ImageInputError:
+                return result_dict(
+                    NeedsReview(
+                        status="needs_review",
+                        reason_code="IMAGE_UNAVAILABLE",
+                        message="授权餐食图片当前不可用或不符合安全要求，请确认图片后重试。",
+                    )
+                )
+            if not images:
+                return result_dict(
+                    NeedsReview(
+                        status="needs_review",
+                        reason_code="IMAGE_UNAVAILABLE",
+                        message="本次餐食没有可用的授权图片，无法可靠识别。",
+                    )
+                )
+
+            evidence = _load_evidence(None, settings)
+            system_prompt = build_system_prompt()
+            model = build_meal_model(settings)
+            agent = build_meal_agent(model, mcp.tools, system_prompt)
+            message_parts: list[dict[str, object]] = [
+                {"type": "text", "text": _meal_request("", evidence, images)},
+                *image_message_parts(images),
+            ]
+            response = await agent.ainvoke(
+                {"messages": [HumanMessage(content=message_parts)]},
+                config={"recursion_limit": 12},
+            )
+            if not _REQUIRED_CONTEXT_TOOLS.issubset(mcp.presented):
+                missing = ", ".join(sorted(_REQUIRED_CONTEXT_TOOLS - mcp.presented))
+                raise McpSetupError(f"Agent 未读取所需的 HealthMind 上下文工具：{missing}")
+            try:
+                parsed = parse_meal_result(_final_text(response))
+            except (ValidationError, ValueError, json.JSONDecodeError):
+                parsed = NeedsReview(
+                    status="needs_review",
+                    reason_code="CONTRACT_INVALID",
+                    message="模型结果不是符合 HealthMind 契约的严格 JSON，未生成可入库结果。",
+                )
+            return result_dict(parsed)
+        finally:
+            with suppress(Exception):
+                await mcp.aclose()
+
+
+_DEFAULT_RUNNER = DeepAgentMealRunner()
+
+
 async def run_meal_analysis(
     *,
     task_id: str,
     attempt_id: str,
-    image_paths: list[str | Path],
-    evidence_path: str | Path | None = None,
-    note: str = "",
-    settings: MealSettings | None = None,
+    trace_id: str = "",
+    runner: MealRunner | None = None,
 ) -> dict[str, object]:
-    """Run one manual analysis and return a HealthMind-compatible result object."""
-    task_id = str(UUID(task_id))
-    attempt_id = str(UUID(attempt_id))
-    settings = settings or load_meal_settings()
-    images = load_local_images(
-        image_paths,
-        max_images=settings.max_images,
-        max_image_bytes=settings.max_image_bytes,
-        max_total_bytes=settings.max_total_image_bytes,
+    """Run one attempt through a swappable runner and return the shared result contract."""
+    return await (runner or _DEFAULT_RUNNER).run(
+        task_id=task_id,
+        attempt_id=attempt_id,
+        trace_id=trace_id,
     )
-    evidence = _load_evidence(evidence_path, settings)
-    system_prompt = build_system_prompt()
-    model = build_meal_model(settings)
-    mcp = await connect_healthmind_mcp(settings, task_id=task_id, attempt_id=attempt_id)
-    agent = build_meal_agent(model, mcp.tools, system_prompt)
-
-    message_parts: list[dict[str, object]] = [
-        {"type": "text", "text": _meal_request(note, evidence, images)},
-        *image_message_parts(images),
-    ]
-    response = await agent.ainvoke(
-        {"messages": [HumanMessage(content=message_parts)]},
-        config={"recursion_limit": 12},
-    )
-
-    if not _REQUIRED_CONTEXT_TOOLS.issubset(mcp.called):
-        missing = ", ".join(sorted(_REQUIRED_CONTEXT_TOOLS - mcp.called))
-        raise McpSetupError(f"Agent 未读取所需的 HealthMind 上下文工具：{missing}")
-    try:
-        parsed = parse_meal_result(_final_text(response))
-    except (ValidationError, ValueError, json.JSONDecodeError):
-        parsed = NeedsReview(
-            status="needs_review",
-            reason_code="CONTRACT_INVALID",
-            message="模型结果不是符合 HealthMind 契约的严格 JSON，未生成可入库结果。",
-        )
-    return result_dict(parsed)
