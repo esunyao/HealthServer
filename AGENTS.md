@@ -52,13 +52,15 @@
 | [`gateway/`](./gateway/AGENTS.md) | `gateway` | 8091 | `SERVER_PORT` | Spring Cloud Gateway WebFlux + Authentik OIDC | API 网关：路由、限流、日志、认证预处理 |
 | [`Orion/`](./Orion/AGENTS.md) | `orion` | 8090 | `SERVER_PORT` | WebMVC + MyBatis-Plus + PostgreSQL + S3 兼容存储 | 用户身份、画像、健康记录、头像文件 |
 | [`NutriMemo/`](./NutriMemo/AGENTS.md) | `nutrimemo` | 8099 | `SERVER_PORT` | WebMVC + PostgreSQL + Kafka | 拍照膳食采集、餐次与营养汇总 |
-| [`HealthMind/`](./HealthMind/AGENTS.md) | `healthmind` | 8100 | `HEALTHMIND_PORT` | Spring AI MCP（STREAMABLE）+ Dify + PostgreSQL + Kafka | AI 编排：任务状态、契约校验、事件投递、MCP 授权 |
+| [`HealthMind/`](./HealthMind/AGENTS.md) | `healthmind` | 8100 | `HEALTHMIND_PORT` | Spring AI MCP（STREAMABLE）+ 自托管 Agent HTTP + PostgreSQL + Kafka | AI 编排：任务状态、契约校验、事件投递、MCP 授权 |
 | [`integration-contracts/`](./integration-contracts/AGENTS.md) | `integration-contracts` | — | — | JSON Schema + AsyncAPI + Kotlin 数据类 | 跨服务事件契约的单一来源 |
 | [`HealthMindControl/`](./HealthMindControl/AGENTS.md) | 非 Gradle 模块 | 8765 | `HMC_PORT` | FastAPI + Jinja2 + 原生 ES modules（Python `>=3.12,<3.13`） | 本地运维控制台，仅监听 `127.0.0.1` |
-| [`AgentDeveloper/`](./AgentDeveloper/AGENTS.md) | 非 Gradle 模块 | — | — | Dify 膳食分析技能套件（`SKILL.md` + `evals/`） | AI 提示词技能资产：餐食证据分析、膳食纤维、结果契约 |
-| [`AgentDevelop/`](./AgentDevelop/AGENTS.md) | 非 Gradle 模块 | — | — | LangGraph + deepagents（Python 3.11，uv） | LangGraph 学习样板（两段示例）；**未接入链路，未替代 Dify** |
+| [`AgentDeveloper/`](./AgentDeveloper/AGENTS.md) | 非 Gradle 模块 | — | — | 原 Dify 膳食分析技能资产（`SKILL.md` + `evals/`） | 营养提示词与评测资产，NutriAthenaAgent 继续复用 |
+| [`NutriAthenaAgent/`](./NutriAthenaAgent/AGENTS.md) | 非 Gradle 模块 | 8101 | `NUTRIATHENA_PORT` | FastAPI + PostgreSQL + LangGraph/DeepAgents（Python 3.11，uv） | HealthMind-compatible 持久化 Agent run 与餐食分析运行端 |
 
 > Gradle 项目名为小写；目录名 `Orion` 对应 `:orion`。模块名即链接：点击进入该模块的 `AGENTS.md`（模块导航），再向下到 `doc/`、契约与源码。
+
+> 当前 HMC 模型版本管理页面仍面向旧模型，尚不支持本轮接入的 Agent release（新运行端）；数据构造 SQL 也未适配。本轮不修改 HMC，也不通过 HMC 登记或晋升 Agent release。
 
 ### 路由（Gateway → 后端）
 
@@ -95,9 +97,9 @@
 ./gradlew clean
 ```
 
-`HealthMindControl` 不是 Gradle 模块；其 Python 版本、依赖和测试入口见 [`HealthMindControl/README.md`](./HealthMindControl/README.md)，模块导航见 [`HealthMindControl/AGENTS.md`](./HealthMindControl/AGENTS.md)。`AgentDeveloper` 同样不是 Gradle 模块，是 Dify 技能资产目录，说明见 [`AgentDeveloper/AGENTS.md`](./AgentDeveloper/AGENTS.md)。
+`HealthMindControl` 不是 Gradle 模块；其 Python 版本、依赖和测试入口见 [`HealthMindControl/README.md`](./HealthMindControl/README.md)，模块导航见 [`HealthMindControl/AGENTS.md`](./HealthMindControl/AGENTS.md)。`AgentDeveloper` 同样不是 Gradle 模块，保留原 Dify 提示词/评测资产并由 NutriAthenaAgent 复用，说明见 [`AgentDeveloper/AGENTS.md`](./AgentDeveloper/AGENTS.md)。
 
-`AgentDevelop/`（注意与上一行 `AgentDeveloper/` 只差两个字母，二者无关）也是非 Gradle 模块，是 LangGraph 学习样板目录，运行方式见 [`AgentDevelop/README.md`](./AgentDevelop/README.md)、导航见 [`AgentDevelop/AGENTS.md`](./AgentDevelop/AGENTS.md)；它**尚未**接入任何链路，不承担运行时职责。
+原 `AgentDevelop/` 学习样板目录已从仓库根目录移除；两个 LangGraph/LangChain 教学示例现保留在 [`NutriAthenaAgent/README.md`](./NutriAthenaAgent/README.md)。NutriAthenaAgent 还承担 HealthMind 的持久化 Agent run 运行职责。
 
 ## 项目背景与不可变边界
 
