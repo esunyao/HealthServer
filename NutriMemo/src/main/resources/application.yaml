@@ -32,6 +32,8 @@ spring:
       enable-auto-commit: false
       auto-offset-reset: earliest
     listener:
+      # record：listener 正常返回后由容器提交当前消息位点；本 listener 不显式 ack。
+      # 若需在 listener 中显式控制确认或延迟重试，再考虑 manual。
       ack-mode: record
     properties:
       security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}

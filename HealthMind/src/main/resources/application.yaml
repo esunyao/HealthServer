@@ -60,7 +60,8 @@ spring:
       # 没有已提交位点时从最早消息开始消费。
       auto-offset-reset: earliest
     listener:
-      # 每条消息处理完成后分别确认消费结果。
+      # manual：listener 显式确认；ack 会排队，并在上一轮 poll 返回的消息都处理后提交，也可用 nack(Duration) 延迟重试。
+      # record：listener 正常返回后由容器逐条提交位点；本 listener 需要显式控制 ack/nack，因此使用 manual。
       ack-mode: manual
     properties:
       # Kafka 传输安全协议，如 PLAINTEXT、SASL_PLAINTEXT 或 SASL_SSL。
