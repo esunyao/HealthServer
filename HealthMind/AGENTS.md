@@ -20,7 +20,7 @@
 | 技术栈 | WebMVC + Spring AI MCP Server（`STREAMABLE`，端点 `/mcp`，spring-ai-bom 2.0.0）+ PostgreSQL（`healthmind` schema）+ Kafka + 自托管 LangGraph HTTP 后台 run |
 | 配置来源 | [`application.yaml`](./src/main/resources/application.yaml)；Nacos `HealthMind_Application.yaml`；业务配置集中在 `healthmind.*`（[`HealthMindProperties.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/config/HealthMindProperties.kt)） |
 | 迁移 | [`db/migration/`](./src/main/resources/db/migration/)：V1 schema（12 张表）、V2 稳定定义种子、V3 审计 action `tools_bound`、V4 清理旧运行数据并替换 Agent 字段（破坏性）、V5 持久化提交对账状态、V6 增加任务/attempt provenance、lease fencing 与工具 schema 快照 |
-| release 提升 | [`db/manual/promote_workflow_release.sql`](./src/main/resources/db/manual/promote_workflow_release.sql)（psql 变量驱动；咨询锁 + candidate→production、旧 production→retired + 审计）——**手动脚本，不随 Flyway 自动执行** |
+| release 登记与提升 | [`db/manual/register_agent_release.sql`](./src/main/resources/db/manual/register_agent_release.sql)（psql 变量驱动；登记 candidate、快照活动工具 schema 并写审计）→ [`db/manual/promote_workflow_release.sql`](./src/main/resources/db/manual/promote_workflow_release.sql)（咨询锁 + candidate→production、旧 production→retired + 审计）——**手动脚本，不随 Flyway 自动执行** |
 | 业务 API | 无 REST 业务 API、无 `openapi.yaml`；业务入口是 MCP `/mcp` |
 | 保留期 | 结果与集成记录默认 30 天，任务与工具审计默认 180 天（`healthmind.*.retention`） |
 
@@ -52,7 +52,7 @@
 | 改 MCP 工具/授权 | [`interfaces/mcp/HealthMindMcpTools.kt`](./src/main/kotlin/cn/esuny/healthmind/interfaces/mcp/HealthMindMcpTools.kt) → [`infrastructure/database/ToolInvocationRepository.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/database/ToolInvocationRepository.kt) → [`infrastructure/config/SecurityConfig.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/config/SecurityConfig.kt) |
 | 改结果契约/校验 | [`infrastructure/json/JsonSchemaService.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/json/JsonSchemaService.kt) + [../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md) + [`doc/agent-runtime.md`](./doc/agent-runtime.md) |
 | 改事件进出 | [`interfaces/messaging/NutritionCaptureReadyListener.kt`](./src/main/kotlin/cn/esuny/healthmind/interfaces/messaging/NutritionCaptureReadyListener.kt)、[`infrastructure/messaging/HealthMindOutboxPublisher.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/messaging/HealthMindOutboxPublisher.kt) |
-| 发布新工作流版本 | [`db/manual/promote_workflow_release.sql`](./src/main/resources/db/manual/promote_workflow_release.sql)（手动脚本，注意咨询锁与审计） |
+| 发布新工作流版本 | [`db/manual/register_agent_release.sql`](./src/main/resources/db/manual/register_agent_release.sql) → [`db/manual/promote_workflow_release.sql`](./src/main/resources/db/manual/promote_workflow_release.sql)（手动 psql 脚本；登记复制活动工具 schema 快照，提升使用咨询锁并写审计） |
 | 排查链路卡住 | [../HealthMindControl/doc/analysis-chain.md](../HealthMindControl/doc/analysis-chain.md) 的「故障定位顺序」+ [`RecoveryAndRetentionJobs.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/database/RecoveryAndRetentionJobs.kt) |
 
 ## 关键事实与易错点

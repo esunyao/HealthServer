@@ -34,7 +34,7 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 
 - 消费 `nutrition.capture.ready.v1`，并发布 `nutrition.analysis.completed.v1` 或 `nutrition.analysis.failed.v1`。
 - 接收事件时固定当时的 production Workflow Release；运行中和重试任务不切换到新版本。
-- Release 登记与提升脚本分别位于 `src/main/resources/db/manual/register_agent_release.sql` 和 `promote_workflow_release.sql`。部署 key 对应不可变的运行端制品，不应指向新构建。V6 固化 release、task、attempt、result 的复合 provenance；attempt lease 与 outbox claim 都以递增版本 fencing。
+- Release 登记与提升脚本分别位于 `src/main/resources/db/manual/register_agent_release.sql` 和 `promote_workflow_release.sql`。登记时会把活动工具定义的请求/响应 schema 版本、JSON 与摘要复制到 release 工具绑定，供 V6 及运行时固定使用。部署 key 对应不可变的运行端制品，不应指向新构建。V6 固化 release、task、attempt、result 的复合 provenance；attempt lease 与 outbox claim 都以递增版本 fencing。
 - 结构化结果和集成记录默认保留 30 天，任务与工具审计默认保留 180 天。
 
 ## 代码位置

@@ -19,8 +19,12 @@ FROM healthmind.ai_task_types
 WHERE task_type_code = 'nutrition.meal_analysis' AND active;
 
 INSERT INTO healthmind.workflow_release_tools
-    (release_id, tool_id, allowed_scope, required, max_calls, timeout_ms, created_by)
-SELECT :'release_id'::uuid, tool_id, auth_scope, TRUE, 10, 10000, :'actor_id'::uuid
+    (release_id, tool_id, allowed_scope, required, max_calls, timeout_ms,
+     request_schema_version, request_schema, request_schema_sha256,
+     response_schema_version, response_schema, response_schema_sha256, created_by)
+SELECT :'release_id'::uuid, tool_id, auth_scope, TRUE, 10, 10000,
+       request_schema_version, request_schema, request_schema_sha256,
+       response_schema_version, response_schema, response_schema_sha256, :'actor_id'::uuid
 FROM healthmind.ai_tool_definitions
 WHERE tool_code IN ('nutrimemo.capture_context.get', 'orion.nutrition_context.get') AND active;
 
