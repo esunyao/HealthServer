@@ -307,7 +307,7 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
         worker = DurableWorker(repository, settings, artifact_sha256=_ACTUAL_DIGEST, runner=FakeMealRunner())
         assert asyncio.run(worker.run_once())
         mismatched_runs = (old_release_run, old_deployment_run, old_assistant_run, old_artifact_run)
-        assert all(repository.get_run(run["run_id"])["status"] == "pending" for run, _ in mismatched_runs)
+        assert all(repository.get_run(run["run_id"])["status"] == "pending" for run in mismatched_runs)
         succeeded = repository.get_run(run["run_id"])
         assert succeeded["status"] == "success"
         assert succeeded["result_payload"]["items"][0]["name"] == "米饭"
@@ -322,7 +322,7 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
             assistant_id="assistant-test",
             artifact_sha256=_ACTUAL_DIGEST,
         )
-        assert old_worker_claim and old_worker_claim["run_id"] == old_release_run[0]["run_id"]
+        assert old_worker_claim and old_worker_claim["run_id"] == old_release_run["run_id"]
         assert repository.finish_terminal(
             old_worker_claim["run_id"],
             "old-release-worker",
@@ -331,7 +331,7 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
             error_code="TEST_COMPLETE",
             error_message="Test run completed.",
         )
-        assert all(repository.get_run(run["run_id"])["status"] == "pending" for run, _ in mismatched_runs[1:])
+        assert all(repository.get_run(run["run_id"])["status"] == "pending" for run in mismatched_runs[1:])
 
         with repository.pool.connection() as connection:
             connection.execute(
