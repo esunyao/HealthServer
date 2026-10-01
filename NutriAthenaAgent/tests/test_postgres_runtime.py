@@ -23,6 +23,8 @@ pytestmark = pytest.mark.integration
 _TASK = UUID("11111111-1111-4111-8111-111111111111")
 _RELEASE = UUID("33333333-3333-4333-8333-333333333333")
 _ACTUAL_DIGEST = "a" * 64
+_OLD_RELEASE = UUID("44444444-4444-4444-8444-444444444444")
+_OLD_DIGEST = "b" * 64
 
 
 @pytest.fixture(scope="module")
@@ -119,18 +121,67 @@ def postgres_database():
         subprocess.run([docker, "stop", container_id], capture_output=True, text=True, timeout=30)
 
 
-def _payload(attempt_id: UUID, trace_id: str = "trace-test") -> dict[str, object]:
+def _payload(
+    attempt_id: UUID,
+    trace_id: str = "trace-test",
+    *,
+    release_id: UUID = _RELEASE,
+    assistant_id: str = "assistant-test",
+    artifact_sha256: str = _ACTUAL_DIGEST,
+) -> dict[str, object]:
     return {
-        "assistant_id": "assistant-test",
+        "assistant_id": assistant_id,
         "input": {"task_id": str(_TASK), "attempt_id": str(attempt_id), "trace_id": trace_id},
         "metadata": {
             "task_id": str(_TASK),
             "attempt_id": str(attempt_id),
-            "release_id": str(_RELEASE),
-            "artifact_sha256": _ACTUAL_DIGEST,
+            "release_id": str(release_id),
+            "artifact_sha256": artifact_sha256,
         },
         "on_completion": "keep",
     }
+
+
+def _claim_current(repository: Repository, owner: str, lease_seconds: int):
+    return repository.claim_pending(
+        owner,
+        lease_seconds,
+        release_id=_RELEASE,
+        deployment_key="deployment-test",
+        assistant_id="assistant-test",
+        artifact_sha256=_ACTUAL_DIGEST,
+    )
+
+
+def _submit_identity_run(
+    repository: Repository,
+    attempt_id: UUID,
+    *,
+    release_id: UUID = _RELEASE,
+    deployment_key: str = "deployment-test",
+    assistant_id: str = "assistant-test",
+    artifact_sha256: str = _ACTUAL_DIGEST,
+):
+    repository.create_thread(attempt_id, _TASK, attempt_id)
+    payload = _payload(
+        attempt_id,
+        release_id=release_id,
+        assistant_id=assistant_id,
+        artifact_sha256=artifact_sha256,
+    )
+    return repository.submit_run(
+        thread_id=attempt_id,
+        task_id=_TASK,
+        attempt_id=attempt_id,
+        release_id=release_id,
+        request_payload=payload,
+        request_sha256=_request_hash(payload),
+        requested_assistant_id=assistant_id,
+        requested_artifact_sha256=artifact_sha256,
+        deployment_key=deployment_key,
+        assistant_id=assistant_id,
+        artifact_sha256=artifact_sha256,
+    )
 
 
 def _request_hash(payload: dict[str, object]) -> str:
@@ -169,7 +220,7 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
                 """SELECT table_name FROM information_schema.tables
                    WHERE table_schema = 'nutriathena_agent' ORDER BY table_name"""
             ).fetchall()
-        assert {row[0] for row in names} == {"schema_migrations", "agent_runs", "agent_threads"}
+        assert {row["table_name"] for row in names} == {"schema_migrations", "agent_runs", "agent_threads"}
 
         changed_dir = tmp_path / "changed-migration"
         changed_dir.mkdir()
@@ -177,6 +228,27 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
         (changed_dir / original.name).write_bytes(original.read_bytes() + b"\n-- changed checksum\n")
         with pytest.raises(MigrationError, match="校验和发生变化"):
             apply_migrations(repository.pool, changed_dir)
+
+        old_release_run, _ = _submit_identity_run(
+            repository,
+            UUID("22222222-2222-4222-8222-222222222221"),
+            release_id=_OLD_RELEASE,
+        )
+        old_deployment_run, _ = _submit_identity_run(
+            repository,
+            UUID("22222222-2222-4222-8222-222222222226"),
+            deployment_key="deployment-old",
+        )
+        old_assistant_run, _ = _submit_identity_run(
+            repository,
+            UUID("22222222-2222-4222-8222-222222222227"),
+            assistant_id="assistant-old",
+        )
+        old_artifact_run, _ = _submit_identity_run(
+            repository,
+            UUID("22222222-2222-4222-8222-222222222228"),
+            artifact_sha256=_OLD_DIGEST,
+        )
 
         attempt_success = UUID("22222222-2222-4222-8222-222222222222")
         repository.create_thread(attempt_success, _TASK, attempt_success)
@@ -232,13 +304,34 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
             release_id=_RELEASE, deployment_key="deployment-test", assistant_id="assistant-test",
             worker_poll_seconds=0.1, lease_seconds=10, run_timeout_seconds=20,
         )
-        worker = DurableWorker(repository, settings, runner=FakeMealRunner())
+        worker = DurableWorker(repository, settings, artifact_sha256=_ACTUAL_DIGEST, runner=FakeMealRunner())
         assert asyncio.run(worker.run_once())
+        mismatched_runs = (old_release_run, old_deployment_run, old_assistant_run, old_artifact_run)
+        assert all(repository.get_run(run["run_id"])["status"] == "pending" for run, _ in mismatched_runs)
         succeeded = repository.get_run(run["run_id"])
         assert succeeded["status"] == "success"
         assert succeeded["result_payload"]["items"][0]["name"] == "米饭"
         assert succeeded["result_expires_at"] >= succeeded["completed_at"]
         assert succeeded["retention_until"] >= succeeded["completed_at"]
+
+        old_worker_claim = repository.claim_pending(
+            "old-release-worker",
+            10,
+            release_id=_OLD_RELEASE,
+            deployment_key="deployment-test",
+            assistant_id="assistant-test",
+            artifact_sha256=_ACTUAL_DIGEST,
+        )
+        assert old_worker_claim and old_worker_claim["run_id"] == old_release_run[0]["run_id"]
+        assert repository.finish_terminal(
+            old_worker_claim["run_id"],
+            "old-release-worker",
+            old_worker_claim["lease_version"],
+            status="error",
+            error_code="TEST_COMPLETE",
+            error_message="Test run completed.",
+        )
+        assert all(repository.get_run(run["run_id"])["status"] == "pending" for run, _ in mismatched_runs[1:])
 
         with repository.pool.connection() as connection:
             connection.execute(
@@ -260,7 +353,7 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
             requested_assistant_id="assistant-test", requested_artifact_sha256=_ACTUAL_DIGEST,
             deployment_key="deployment-test", assistant_id="assistant-test", artifact_sha256=_ACTUAL_DIGEST,
         )
-        claimed = repository.claim_pending("old-worker", 10)
+        claimed = _claim_current(repository, "old-worker", 10)
         assert claimed and claimed["run_id"] == stale_run["run_id"]
         with repository.pool.connection() as connection:
             connection.execute(
@@ -298,7 +391,7 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
             requested_assistant_id="assistant-test", requested_artifact_sha256=_ACTUAL_DIGEST,
             deployment_key="deployment-test", assistant_id="assistant-test", artifact_sha256=_ACTUAL_DIGEST,
         )
-        running_claim = repository.claim_pending("cancelled-worker", 10)
+        running_claim = _claim_current(repository, "cancelled-worker", 10)
         assert running_claim and running_claim["run_id"] == running_cancel_run["run_id"]
         requested = repository.request_cancel(running_cancel_run["run_id"])
         assert requested["status"] == "running" and requested["cancel_requested_at"] is not None
@@ -317,7 +410,7 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
             connection.execute(
                 "UPDATE nutriathena_agent.agent_threads SET created_at = now() - interval '181 days'"
             )
-        assert repository.purge_expired_rows() == (4, 4)
+        assert repository.purge_expired_rows() == (8, 8)
 
     finally:
         repository.close()

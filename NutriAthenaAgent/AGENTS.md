@@ -40,7 +40,7 @@
 ## 重要运行约束
 
 - 一次 HealthMind attempt 固定一个 `thread_id`、一个 `attempt_id` 和至多一个 run；同请求摘要重试返回原 run，不同请求摘要为 409。
-- Postgres 中只有 pending 可 claim。running 由 lease owner/version fencing；进程失联后超时 run 标 interrupted，不重放模型调用。
+- Postgres 中只有身份匹配当前 release、deployment key、assistant ID 和实际制品摘要的 pending run 可被当前 worker claim；其他版本仍保持 pending。runner 调用前再次核对身份，异常错领以 lease owner/version fencing 终止；进程失联后超时 run 标 interrupted，不重放模型调用。
 - `result_expires_at` 不早于完成后 24 小时；幂等 run/thread 元数据保留至少 180 天。新迁移必须编号递增，已应用 SQL 不得改写。
 - HealthMind MCP 的 `tool_call_id` 放在 MCP `_meta`，不是业务参数；UUIDv5 名称必须使用完整工具 code `nutrimemo.capture_context.get` / `orion.nutrition_context.get`。capture 为下载授权图片在模型前预取一次，wrapper 返回脱敏缓存；nutrition 保留原模型驱动的调用时序；每个工具每 attempt 最多远端读取一次。
 - signed image URL 仅供 worker 下载；要求显式 host allowlist，不允许重定向。URL、token、原始 capture ID 不进入模型上下文或常规日志。

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from uuid import uuid4
+from uuid import UUID, uuid4
+
+import pytest
 
 from nutriathena_agent.runtime_config import RuntimeSettings
 from nutriathena_agent.worker import DurableWorker
+
+_RELEASE_ID = UUID("33333333-3333-4333-8333-333333333333")
+_ARTIFACT_SHA256 = "a" * 64
 
 
 def _settings(**overrides) -> RuntimeSettings:
@@ -12,7 +17,7 @@ def _settings(**overrides) -> RuntimeSettings:
         host="127.0.0.1", port=8101, database_url="unused",
         oauth_issuer="https://issuer.test", oauth_jwks_url="https://issuer.test/jwks",
         oauth_audience="aud", oauth_client_id="client", oauth_scope="scope",
-        release_id=uuid4(), deployment_key="deployment-test", assistant_id="assistant-test",
+        release_id=_RELEASE_ID, deployment_key="deployment-test", assistant_id="assistant-test",
         worker_poll_seconds=0.1, lease_seconds=3, run_timeout_seconds=5,
     )
     values.update(overrides)
@@ -26,6 +31,10 @@ def _pending_row() -> dict[str, object]:
         "attempt_id": uuid4(),
         "lease_version": 1,
         "request_payload": {"input": {"trace_id": "trace-test"}},
+        "release_id": _RELEASE_ID,
+        "agent_deployment_key": "deployment-test",
+        "agent_assistant_id": "assistant-test",
+        "agent_artifact_sha256": _ARTIFACT_SHA256,
     }
 
 
@@ -36,6 +45,7 @@ class FakeRepository:
         self.finished_success = []
         self.finished_terminal = []
         self.claimed = False
+        self.claim_identity = None
 
     def interrupt_expired_leases(self):
         return 0
@@ -46,7 +56,17 @@ class FakeRepository:
     def purge_expired_rows(self):
         return 0, 0
 
-    def claim_pending(self, owner, lease_seconds):
+    def claim_pending(
+        self,
+        owner,
+        lease_seconds,
+        *,
+        release_id,
+        deployment_key,
+        assistant_id,
+        artifact_sha256,
+    ):
+        self.claim_identity = (release_id, deployment_key, assistant_id, artifact_sha256)
         if self.claimed:
             return None
         self.claimed = True
@@ -103,8 +123,15 @@ def test_worker_validates_contract_and_commits_only_through_current_lease():
     row = _pending_row()
     repository = FakeRepository(row)
     runner = SuccessfulRunner()
-    worker = DurableWorker(repository, _settings(lease_seconds=10), runner=runner)
+    settings = _settings(lease_seconds=10)
+    worker = DurableWorker(repository, settings, artifact_sha256=_ARTIFACT_SHA256, runner=runner)
     assert asyncio.run(worker.run_once())
+    assert repository.claim_identity == (
+        settings.release_id,
+        settings.deployment_key,
+        settings.assistant_id,
+        _ARTIFACT_SHA256,
+    )
     assert len(repository.finished_success) == 1
     result = repository.finished_success[0][-2]
     assert result["items"][0]["name"] == "苹果"
@@ -116,7 +143,7 @@ def test_worker_stops_model_call_if_lease_is_lost():
         row = _pending_row()
         repository = FakeRepository(row, renew_result=(False, False))
         runner = BlockingRunner()
-        worker = DurableWorker(repository, _settings(lease_seconds=3), runner=runner)
+        worker = DurableWorker(repository, _settings(lease_seconds=3), artifact_sha256=_ARTIFACT_SHA256, runner=runner)
         run_once = asyncio.create_task(worker.run_once())
         await asyncio.wait_for(runner.started.wait(), timeout=1)
         await asyncio.wait_for(run_once, timeout=2)
@@ -136,7 +163,7 @@ def test_worker_cancels_model_call_without_claiming_timeout_when_heartbeat_fails
         row = _pending_row()
         repository = UnavailableRepository(row)
         runner = BlockingRunner()
-        worker = DurableWorker(repository, _settings(lease_seconds=3), runner=runner)
+        worker = DurableWorker(repository, _settings(lease_seconds=3), artifact_sha256=_ARTIFACT_SHA256, runner=runner)
         run_once = asyncio.create_task(worker.run_once())
         await asyncio.wait_for(runner.started.wait(), timeout=1)
         await asyncio.wait_for(run_once, timeout=2)
@@ -152,7 +179,7 @@ def test_worker_honors_cancel_request_and_timeout_without_leaking_exception_text
         row = _pending_row()
         repository = FakeRepository(row, renew_result=(True, True))
         runner = BlockingRunner()
-        worker = DurableWorker(repository, _settings(lease_seconds=3), runner=runner)
+        worker = DurableWorker(repository, _settings(lease_seconds=3), artifact_sha256=_ARTIFACT_SHA256, runner=runner)
         await worker.run_once()
         assert runner.was_cancelled
         assert repository.finished_terminal[0][-1]["status"] == "interrupted"
@@ -164,10 +191,43 @@ def test_worker_honors_cancel_request_and_timeout_without_leaking_exception_text
         row = _pending_row()
         repository = FakeRepository(row, renew_result=(True, False))
         runner = BlockingRunner()
-        worker = DurableWorker(repository, _settings(run_timeout_seconds=0.05, lease_seconds=10), runner=runner)
+        worker = DurableWorker(
+            repository,
+            _settings(run_timeout_seconds=0.05, lease_seconds=10),
+            artifact_sha256=_ARTIFACT_SHA256,
+            runner=runner,
+        )
         await worker._execute({**row, "lease_owner": worker.owner})
         assert runner.was_cancelled
         assert repository.finished_terminal[0][-1]["status"] == "error"
         assert repository.finished_terminal[0][-1]["error_code"] == "AGENT_RUN_TIMEOUT"
 
     asyncio.run(timeout_scenario())
+
+
+@pytest.mark.parametrize(
+    ("identity_field", "wrong_value"),
+    [
+        ("release_id", UUID("44444444-4444-4444-8444-444444444444")),
+        ("agent_deployment_key", "deployment-old"),
+        ("agent_assistant_id", "assistant-old"),
+        ("agent_artifact_sha256", "b" * 64),
+    ],
+)
+def test_worker_terminates_identity_mismatch_before_runner(identity_field, wrong_value):
+    row = _pending_row()
+    row[identity_field] = wrong_value
+    repository = FakeRepository(row)
+    runner = SuccessfulRunner()
+    worker = DurableWorker(repository, _settings(), artifact_sha256=_ARTIFACT_SHA256, runner=runner)
+
+    asyncio.run(worker._execute(row))
+
+    assert not runner.started.is_set()
+    assert repository.finished_success == []
+    assert repository.finished_terminal[0][-1] == {
+        "status": "error",
+        "error_code": "RUN_IDENTITY_MISMATCH",
+        "error_message": "Run identity does not match this worker.",
+    }
+    assert row[identity_field] == wrong_value

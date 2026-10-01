@@ -169,6 +169,27 @@ def test_healthmind_http_contract_persists_and_reuses_one_run():
         assert len(repository.runs_by_id) == 1
 
 
+def test_api_passes_its_computed_artifact_digest_to_worker(monkeypatch):
+    observed = {}
+
+    class WorkerStub:
+        def __init__(self, repository, settings, *, artifact_sha256, runner):
+            observed["artifact_sha256"] = artifact_sha256
+
+    monkeypatch.setattr("nutriathena_agent.api.compute_artifact_sha256", lambda: ARTIFACT_SHA)
+    monkeypatch.setattr("nutriathena_agent.api.DurableWorker", WorkerStub)
+
+    app = create_app(
+        settings=_settings(),
+        repository=FakeRepository(),
+        token_verifier=FakeTokenVerifier(),
+        start_worker=True,
+    )
+
+    assert app.state.artifact_sha256 == ARTIFACT_SHA
+    assert observed["artifact_sha256"] == ARTIFACT_SHA
+
+
 def test_api_rejects_missing_or_invalid_service_token_and_release_mismatch():
     repository = FakeRepository()
     with _client(repository) as client:

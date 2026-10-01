@@ -233,7 +233,16 @@ class Repository:
                 )
                 return cursor.rowcount
 
-    def claim_pending(self, owner: str, lease_seconds: int) -> dict[str, Any] | None:
+    def claim_pending(
+        self,
+        owner: str,
+        lease_seconds: int,
+        *,
+        release_id: UUID,
+        deployment_key: str,
+        assistant_id: str,
+        artifact_sha256: str,
+    ) -> dict[str, Any] | None:
         with self.pool.connection() as connection:
             with connection.transaction():
                 return self._one(
@@ -242,6 +251,10 @@ class Repository:
                     WITH candidate AS (
                         SELECT run_id FROM {SCHEMA}.agent_runs
                         WHERE status = 'pending' AND cancel_requested_at IS NULL
+                            AND release_id = %s
+                            AND agent_deployment_key = %s
+                            AND agent_assistant_id = %s
+                            AND agent_artifact_sha256 = %s
                         ORDER BY created_at, run_id
                         FOR UPDATE SKIP LOCKED
                         LIMIT 1
@@ -255,7 +268,7 @@ class Repository:
                     WHERE run.run_id = candidate.run_id
                     RETURNING run.*
                     """,
-                    (owner, lease_seconds),
+                    (release_id, deployment_key, assistant_id, artifact_sha256, owner, lease_seconds),
                 )
 
     def renew_lease(self, run_id: UUID, owner: str, version: int, lease_seconds: int) -> tuple[bool, bool]:

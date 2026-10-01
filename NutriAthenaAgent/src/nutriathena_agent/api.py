@@ -68,7 +68,11 @@ def create_app(
     )
     token_verifier = token_verifier or TokenVerifier(settings)
     artifact_sha = artifact_sha256 or compute_artifact_sha256()
-    worker = DurableWorker(repository, settings, runner=runner) if start_worker else None
+    worker = (
+        DurableWorker(repository, settings, artifact_sha256=artifact_sha, runner=runner)
+        if start_worker
+        else None
+    )
     worker_task: asyncio.Task[None] | None = None
 
     @asynccontextmanager

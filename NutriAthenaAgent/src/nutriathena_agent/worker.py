@@ -29,10 +29,12 @@ class DurableWorker:
         repository: Repository,
         settings: RuntimeSettings,
         *,
+        artifact_sha256: str,
         runner: MealRunner | None = None,
     ) -> None:
         self.repository = repository
         self.settings = settings
+        self.artifact_sha256 = artifact_sha256
         self.runner = runner
         self.owner = f"{socket.gethostname()}:{uuid4()}"
         self._stopping = asyncio.Event()
@@ -65,6 +67,10 @@ class DurableWorker:
             self.repository.claim_pending,
             self.owner,
             self.settings.lease_seconds,
+            release_id=self.settings.release_id,
+            deployment_key=self.settings.deployment_key,
+            assistant_id=self.settings.assistant_id,
+            artifact_sha256=self.artifact_sha256,
         )
         if row is None:
             return False
@@ -74,6 +80,17 @@ class DurableWorker:
     async def _execute(self, row: dict[str, Any]) -> None:
         run_id = row["run_id"]
         lease_version = row["lease_version"]
+        if not self._matches_worker_identity(row):
+            logger.error("claimed run identity does not match this worker")
+            await self._finish_error(
+                run_id,
+                lease_version,
+                "RUN_IDENTITY_MISMATCH",
+                "Run identity does not match this worker.",
+                "error",
+            )
+            return
+
         attempt_id = str(row["attempt_id"])
         task_id = str(row["task_id"])
         payload = row["request_payload"]
@@ -181,6 +198,14 @@ class DurableWorker:
                 heartbeat_task.cancel()
             with suppress(asyncio.CancelledError):
                 await heartbeat_task
+
+    def _matches_worker_identity(self, row: dict[str, Any]) -> bool:
+        return (
+            str(row["release_id"]) == str(self.settings.release_id)
+            and row["agent_deployment_key"] == self.settings.deployment_key
+            and row["agent_assistant_id"] == self.settings.assistant_id
+            and str(row["agent_artifact_sha256"]).strip() == self.artifact_sha256
+        )
 
     @staticmethod
     async def _cancel_analysis(task: asyncio.Task[Any]) -> None:
