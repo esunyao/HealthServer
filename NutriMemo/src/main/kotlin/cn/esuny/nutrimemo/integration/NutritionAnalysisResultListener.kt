@@ -6,7 +6,11 @@ import org.springframework.stereotype.Component
 @Component
 class NutritionAnalysisResultListener(private val service: NutritionAnalysisResultService) {
     @KafkaListener(
-        topics = ["\${nutri.integration.analysis-completed-destination}", "\${nutri.integration.analysis-failed-destination}"],
+        topics = [
+            "\${nutri.integration.analysis-completed-destination}",
+            "\${nutri.integration.analysis-failed-destination}",
+            "\${nutri.integration.analysis-review-required-destination}",
+        ],
         groupId = "\${nutri.integration.consumer-group}",
     )
     fun receive(raw: String) = service.process(raw)
