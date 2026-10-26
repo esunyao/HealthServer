@@ -31,4 +31,23 @@ class IntegrationEventsTest {
         assertTrue(json.contains("\"schema_version\":\"1.0\""))
         assertFalse(json.contains("captureSessionId"))
     }
+
+    @Test
+    fun `review required payload is non retryable and snake case`() {
+        val payload = NutritionAnalysisReviewRequiredPayload(
+            taskId = UUID.fromString("b03e399d-b160-48ed-b9fa-9de1a22cbb19"),
+            captureSessionId = UUID.fromString("394898bc-dca6-42f9-9423-4482db2e6329"),
+            mealId = 42,
+            reasonCode = "IMAGE_UNAVAILABLE",
+            message = "No confirmed image can be analysed",
+        )
+
+        val json = mapper.writeValueAsString(payload)
+
+        assertTrue(json.contains("\"task_id\":\"b03e399d-b160-48ed-b9fa-9de1a22cbb19\""))
+        assertTrue(json.contains("\"capture_session_id\":\"394898bc-dca6-42f9-9423-4482db2e6329\""))
+        assertTrue(json.contains("\"reason_code\":\"IMAGE_UNAVAILABLE\""))
+        assertTrue(json.contains("\"retryable\":false"))
+        assertFalse(json.contains("captureSessionId"))
+    }
 }

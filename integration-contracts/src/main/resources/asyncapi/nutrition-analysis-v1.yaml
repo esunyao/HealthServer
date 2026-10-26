@@ -19,6 +19,11 @@ channels:
     messages:
       failed:
         $ref: '#/components/messages/NutritionAnalysisFailed'
+  nutritionAnalysisReviewRequired:
+    address: "{analysisReviewRequiredDestination}"
+    messages:
+      reviewRequired:
+        $ref: '#/components/messages/NutritionAnalysisReviewRequired'
 operations:
   receiveCaptureReady:
     action: receive
@@ -32,6 +37,10 @@ operations:
     action: send
     channel:
       $ref: '#/channels/nutritionAnalysisFailed'
+  sendAnalysisReviewRequired:
+    action: send
+    channel:
+      $ref: '#/channels/nutritionAnalysisReviewRequired'
 components:
   messages:
     NutritionCaptureReady:
@@ -46,3 +55,7 @@ components:
       name: nutrition.analysis.failed.v1
       payload:
         $ref: '../schema/nutrition-analysis-failed-v1.schema.json'
+    NutritionAnalysisReviewRequired:
+      name: nutrition.analysis.review_required.v1
+      payload:
+        $ref: '../schema/nutrition-analysis-review-required-v1.schema.json'

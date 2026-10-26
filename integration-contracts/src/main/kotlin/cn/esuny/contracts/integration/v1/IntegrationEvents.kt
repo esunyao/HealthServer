@@ -9,6 +9,7 @@ object NutritionEventTypes {
     const val CAPTURE_READY = "nutrition.capture.ready.v1"
     const val ANALYSIS_COMPLETED = "nutrition.analysis.completed.v1"
     const val ANALYSIS_FAILED = "nutrition.analysis.failed.v1"
+    const val ANALYSIS_REVIEW_REQUIRED = "nutrition.analysis.review_required.v1"
     const val SCHEMA_VERSION = "1.0"
 }
 
@@ -59,4 +60,13 @@ data class NutritionAnalysisFailedPayload(
     @JsonProperty("failure_category") val failureCategory: String,
     val retryable: Boolean,
     @JsonProperty("error_summary") val errorSummary: String,
+)
+
+data class NutritionAnalysisReviewRequiredPayload(
+    @JsonProperty("task_id") val taskId: UUID,
+    @JsonProperty("capture_session_id") val captureSessionId: UUID,
+    @JsonProperty("meal_id") val mealId: Long,
+    @JsonProperty("reason_code") val reasonCode: String,
+    val message: String,
+    val retryable: Boolean = false,
 )
