@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://healthmind.local/schema/agent-protocol/v1/run-response.schema.json",
+  "title": "Agent run response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "thread_id",
+    "task_id",
+    "attempt_id",
+    "assistant_id",
+    "status",
+    "metadata",
+    "created_at",
+    "started_at",
+    "completed_at",
+    "error_code",
+    "error_message"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "thread_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "attempt_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "assistant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "status": {
+      "enum": ["pending", "running", "success", "error", "interrupted"]
+    },
+    "metadata": {
+      "$ref": "#/$defs/runIdentityMetadata"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "started_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "error_code": {
+      "type": ["string", "null"]
+    },
+    "error_message": {
+      "type": ["string", "null"]
+    }
+  },
+  "$defs": {
+    "runIdentityMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "attempt_id", "release_id", "artifact_sha256"],
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "attempt_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "release_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

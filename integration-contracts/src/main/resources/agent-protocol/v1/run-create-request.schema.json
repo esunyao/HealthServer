@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://healthmind.local/schema/agent-protocol/v1/run-create-request.schema.json",
+  "title": "Agent run create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["assistant_id", "input", "metadata", "on_completion"],
+  "properties": {
+    "assistant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "input": {
+      "$ref": "#/$defs/runInput"
+    },
+    "metadata": {
+      "$ref": "#/$defs/runMetadata"
+    },
+    "on_completion": {
+      "const": "keep"
+    }
+  },
+  "$defs": {
+    "runInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "attempt_id", "trace_id"],
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "attempt_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "runMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "attempt_id", "release_id", "artifact_sha256"],
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "attempt_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "release_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}
