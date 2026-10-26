@@ -7,7 +7,7 @@ HealthServer 的拍照膳食记录服务（默认端口 `8099`）。客户端创
 | 组件 | 说明 |
 |---|---|
 | Web | Spring WebMVC（Servlet） |
-| 数据库 | PostgreSQL，`nutri` schema；Flyway 迁移位于 `src/main/resources/db/migration` |
+| 数据库 | PostgreSQL，`nutri` schema；Flyway V3 增加 `needs_review` 与 `meal_analysis_reports` |
 | 消息 | Kafka，outbox 发布与结果事件消费 |
 | 对象存储 | S3 兼容协议，客户端通过 presigned URL 直传 |
 | 契约 | `NutriMemo/openapi.yaml` v2.0.0 |
@@ -21,7 +21,7 @@ HealthServer 的拍照膳食记录服务（默认端口 `8099`）。客户端创
 ```text
 创建采集会话 → 申请上传地址 → 上传并确认图片 → 提交餐食
   → 事务写入餐食与 capture-ready outbox → 发布 Kafka
-  → HealthMind 执行分析 → 发布 completed / failed 结果
+  → HealthMind 执行分析 → 发布 completed / failed / review-required 结果
   → NutriMemo 消费结果并写回餐食营养数据
 ```
 
@@ -50,6 +50,19 @@ outbox 负责可靠发布；Kafka 是服务间事件通道。分析结果消费�
 ```
 
 `bootRun` 需要 PostgreSQL、Kafka、Nacos、Authentik 和 S3 兼容对象存储的环境配置。
+
+`GET /v1/nutri/meals/{mealId}` 是结构化营养报告入口。响应包含菜品、份量、营养素、
+`analysisStatus` 和 `analysisReport`；报告保存总体置信度、结果版本、复核/失败原因及分析时间，
+不生成健康建议或来源引用。
+
+completed、failed、review-required 是三种不同结果。`needs_review` 与 `failed` 都允许显式
+retry；人工修正数据优先于 AI 数据。无法解析的结果信封进入
+`nutrition-analysis-result-dlt`，可解析的非法结果必须落 failed 报告，不能永久停留 analysing。
+不可恢复事件立即进入 DLT；数据库等普通异常先按 Spring Kafka 错误处理器有限重试。
+
+capture-context 的 `notes` 只为新工具 Schema 返回。HealthMind 固定 release 发送
+`include_meal_notes=true` 时才包含非空备注；旧 v1.0 release 保持原响应形状，避免破坏已冻结的
+`additionalProperties:false` 契约。
 
 ## 进一步阅读
 

@@ -22,7 +22,7 @@ uv run nutriathena-agent serve
 
 The HTTP service listens on `NUTRIATHENA_HOST:NUTRIATHENA_PORT` (default `0.0.0.0:8101`). `GET /healthz` checks database connectivity. Authenticated routes require an OAuth bearer token with the configured issuer, audience, allowed caller ID, and `healthmind.agent.run` scope.
 
-The HealthMind run protocol is documented in [`doc/README.md`](./doc/README.md). The service creates an attempt-bound thread, accepts one idempotent run per attempt, returns pending/running/terminal status, supports best-effort cancellation, and retains successful output for at least 24 hours. PostgreSQL uses the isolated `nutriathena_agent` schema; this service has no cross-schema foreign keys and does not write HealthMind business records.
+The HealthMind run protocol is documented in [`doc/README.md`](./doc/README.md). The service creates an attempt-bound thread, returns the fixed task/attempt identity metadata expected by HealthMind, accepts one idempotent run per attempt, returns pending/running/terminal status, supports best-effort cancellation, and retains successful output for at least 24 hours. PostgreSQL uses the isolated `nutriathena_agent` schema; this service has no cross-schema foreign keys and does not write HealthMind business records.
 
 ## Safe real smoke
 
@@ -54,6 +54,8 @@ The `meal` command directly invokes one authorized attempt through the MCP and m
 
 - The maintained meal prompt and dietary skills under sibling `AgentDeveloper/skills` remain the authority; this service only adapts the existing graph to a replaceable runner.
 - The capture MCP read is prefetched once per attempt to obtain authorized image URLs before the vision call; its model-facing tool returns the sanitized cached context. The nutrition MCP read keeps the existing model-driven tool-call timing. Stable audit IDs are UUIDv5 values derived from the attempt UUID and each complete MCP tool code, passed in MCP `_meta.tool_call_id`; each remote read occurs at most once.
+- Capture context includes nullable meal `notes`. Notes are passed to the vision graph as data and cannot override system instructions.
 - Only signed image URLs returned for the authorized capture are downloaded. Download hosts must be explicitly allowlisted with `NUTRIATHENA_MEDIA_ALLOWED_HOSTS`; redirects, unsupported MIME/signatures, too many images, and over-limit bodies are rejected. URLs and bytes are not written to model-facing context or service output.
 - Missing or unavailable capture images produce the existing `needs_review` result contract. The service does not claim a successful model analysis in that case.
+- Production currently has no food-composition retrieval provider. The prompt explicitly reports evidence as not provided, permits conservative common-knowledge estimation with lower confidence, and forbids fabricated citations or retrieval claims.
 - The model has no shell, filesystem, write, delete, or subagent tools. HealthMind remains responsible for business-side authorization and result persistence.

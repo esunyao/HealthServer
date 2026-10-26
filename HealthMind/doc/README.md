@@ -21,7 +21,7 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 
 | 工具 | 用途 |
 |---|---|
-| `nutrimemo.capture_context.get` | 读取已确认图片与餐次元数据 |
+| `nutrimemo.capture_context.get` | 读取已确认图片、餐次元数据与可空用户备注；备注能力按固定 release Schema 版本返回 |
 | `orion.nutrition_context.get` | 读取经授权的最小营养健康上下文 |
 
 工具调用以任务和 attempt 作为上下文；调用方不能自由指定用户、采集会话或餐次。工具仅返回当前任务授权范围内的数据。MCP `_meta.tool_call_id` 是稳定 UUID 幂等键：同键不同请求会拒绝，同键请求仍在处理时返回可重试的 in-progress，同键终态重试可重新读取只读上下文且不再占用调用额度。release 会快照工具的请求/响应 schema，运行时不读取后续修改的全局 schema。
@@ -32,10 +32,12 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 
 ## 事件与工作流
 
-- 消费 `nutrition.capture.ready.v1`，并发布 `nutrition.analysis.completed.v1` 或 `nutrition.analysis.failed.v1`。
+- 消费 `nutrition.capture.ready.v1`，并发布 `nutrition.analysis.completed.v1`、`nutrition.analysis.failed.v1` 或 `nutrition.analysis.review_required.v1`。
 - 接收事件时固定当时的 production Workflow Release；运行中和重试任务不切换到新版本。
 - Release 登记与提升脚本分别位于 `src/main/resources/db/manual/register_agent_release.sql` 和 `promote_workflow_release.sql`。登记时会把活动工具定义的请求/响应 schema 版本、JSON 与摘要复制到 release 工具绑定，供 V6 及运行时固定使用。部署 key 对应不可变的运行端制品，不应指向新构建。V6 固化 release、task、attempt、result 的复合 provenance；attempt lease 与 outbox claim 都以递增版本 fencing。
 - 结构化结果和集成记录默认保留 30 天，任务与工具审计默认保留 180 天。
+- `needs_review` 是独立业务终态；技术异常、输入/输出契约错误和传输耗尽才使用 failed。可解析但违反 input schema 的 capture-ready 会生成最小失败 task/outbox，无法解析的信封进入 DLT。
+- 不可恢复 capture-ready 契约错误立即进入 DLT；数据库等普通异常先按 Spring Kafka 错误处理器有限重试。
 
 ## 代码位置
 
@@ -55,7 +57,7 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 
 `bootRun` 需要 PostgreSQL、Kafka、Nacos、Authentik，以及登记在 release 中的自托管 Agent 部署。没有生产 release 时不会接收新 AI 任务。
 
-V4 迁移是一次性破坏性切换：清空 HealthMind 的旧运行记录（含 inbox/outbox、release、任务、attempt、工具调用），删除旧提供方字段；V5 增加 Agent 提交对账状态。它们保留任务类型和工具定义。V6 仅追加约束、租约、审计重放计数与 release 工具 schema 快照，不清空数据；升级前须停止 HealthMind 并备份 `healthmind` schema。迁移发现多个活动 attempt、成功记录缺少 run provenance 或 production 工具定义晚于 release 时会中止并报告标识，须先人工核对，不会自动挑选、升级 schema 或删除记录。迁移不更改 NutriMemo、Kafka 消费位点或其他模块；旧事件不会自动重新消费。当前 HMC 的旧版本管理界面尚未适配 Agent release，本轮不修改 HMC。详见 [Agent 运行端契约](./agent-runtime.md)。
+V4 迁移是一次性破坏性切换：清空 HealthMind 的旧运行记录（含 inbox/outbox、release、任务、attempt、工具调用），删除旧提供方字段；V5 增加 Agent 提交对账状态。它们保留任务类型和工具定义。V6 仅追加约束、租约、审计重放计数与 release 工具 schema 快照，不清空数据；V7 为 capture context 的 MCP response schema 增加可空 meal notes。升级前须停止 HealthMind 并备份 `healthmind` schema。迁移发现多个活动 attempt、成功记录缺少 run provenance 或 production 工具定义晚于 release 时会中止并报告标识，须先人工核对，不会自动挑选、升级 schema 或删除记录。迁移不更改 NutriMemo、Kafka 消费位点或其他模块；旧事件不会自动重新消费。当前 HMC 的旧版本管理界面尚未适配 Agent release，本轮不修改 HMC。详见 [Agent 运行端契约](./agent-runtime.md)。
 
 ## 进一步阅读
 

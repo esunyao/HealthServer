@@ -9,8 +9,8 @@ All routes other than `GET /healthz` require `Authorization: Bearer <token>`. Th
 | Method and path | Purpose | Result |
 |---|---|---|
 | `GET /healthz` | Database liveness | `{"status":"ok"}` or HTTP 503 |
-| `POST /threads` | Persist/reuse attempt-bound thread; request metadata has `task_id` and optional `attempt_id` | `{"thread_id":"<attempt UUID>"}` |
-| `GET /threads/{thread_id}` | Read fixed thread identity | Thread/task/attempt UUIDs |
+| `POST /threads` | Persist/reuse attempt-bound thread; request metadata has `task_id` and optional `attempt_id` | `{"thread_id":"<attempt UUID>","metadata":{"task_id":"<UUID>","attempt_id":"<UUID>"}}` |
+| `GET /threads/{thread_id}` | Read fixed thread identity | Same `thread_id` and `metadata` shape as create |
 | `POST /threads/{thread_id}/runs` | Persist one run; requires `Idempotency-Key: <attempt UUID>` | Run ID, assistant, release/artifact identity and status |
 | `GET /threads/{thread_id}/runs` | Reconcile a possibly ambiguous submission | Top-level JSON array; one run at most per attempt |
 | `GET /runs/{run_id}` | Read current run status | `pending`, `running`, `success`, `error` or `interrupted` |
@@ -18,6 +18,11 @@ All routes other than `GET /healthz` require `Authorization: Bearer <token>`. Th
 | `POST /runs/{run_id}/cancel` | Request best-effort cancellation | Current run state; pending becomes interrupted immediately |
 
 The run request follows the HealthMind protocol: `assistant_id`; input `{task_id, attempt_id, trace_id}`; metadata `{task_id, attempt_id, release_id, artifact_sha256}`; and `on_completion: "keep"`. `release_id` is a UUID. `Idempotency-Key` must equal `attempt_id`. The server checks the configured release UUID, assistant ID and its locally computed artifact digest before it persists a run. The response identity comes from stored runtime configuration and the digest of files loaded by this deployment, never by echoing the client's metadata.
+
+The Thread request/response schemas and examples are shared with HealthMind under
+`integration-contracts/src/main/resources/agent-protocol/v1/`. The create and read responses
+must both include `metadata.task_id` and `metadata.attempt_id`; this is part of the run-start
+identity check.
 
 The canonical request JSON SHA-256 is the idempotency comparison value. Repeating an attempt with the same canonical request returns the original `run_id` and state. Reusing the attempt ID with a different request returns HTTP 409 `IDEMPOTENCY_CONFLICT`; the worker is not started twice.
 
@@ -38,7 +43,11 @@ Successful outputs are retained for at least 24 hours. An expiry task clears onl
 
 The production runner uses the MCP Python SDK so each call can include the reserved `_meta.tool_call_id`. The ID is `uuid5(UUID(attempt_id), full_tool_code)` with the stable full tool codes `nutrimemo.capture_context.get` and `orion.nutrition_context.get`. The HealthMind MCP arguments remain only `taskId` and `attemptId`; a repeated read uses the same audit/idempotency ID and does not consume an additional call budget.
 
-The capture read is performed once before the model starts so the runner can download authorized images for the existing vision graph. Its model-facing tool returns the same sanitized cached context. The nutrition-context tool retains its existing model-driven invocation timing. Signed image URLs are removed from model-facing context and are not persisted. The runner downloads only captured URLs whose hosts are explicitly named in `NUTRIATHENA_MEDIA_ALLOWED_HOSTS`; it rejects redirects, non-HTTPS remote hosts, unsupported image signatures/MIME, excessive image counts and oversized bodies. Image bytes stay in memory and are passed to the model as data URLs. If the capture has no usable image, the runner returns `needs_review/IMAGE_UNAVAILABLE` without claiming a model analysis.
+The capture read is performed once before the model starts so the runner can download authorized images for the existing vision graph. Its model-facing tool returns the same sanitized cached context, including nullable meal `notes`. Notes are passed as untrusted data and never interpreted as instructions. The nutrition-context tool retains its existing model-driven invocation timing. Signed image URLs are removed from model-facing context and are not persisted. The runner downloads only captured URLs whose hosts are explicitly named in `NUTRIATHENA_MEDIA_ALLOWED_HOSTS`; it rejects redirects, non-HTTPS remote hosts, unsupported image signatures/MIME, excessive image counts and oversized bodies. Image bytes stay in memory and are passed to the model as data URLs. If the capture has no usable image, the runner returns `needs_review/IMAGE_UNAVAILABLE` without claiming a model analysis.
+
+This deployment currently has no food-composition retrieval provider. The production runner
+must declare the evidence set empty, allow conservative common-knowledge estimates with reduced
+confidence, and never claim database retrieval or fabricate citations.
 
 ## Verification and true smoke
 
