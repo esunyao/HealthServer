@@ -21,6 +21,8 @@ data class HealthMindProperties(
         @field:NotBlank val captureReadyDestination: String = "nutrition-capture-ready",
         @field:NotBlank val analysisCompletedDestination: String = "nutrition-analysis-completed",
         @field:NotBlank val analysisFailedDestination: String = "nutrition-analysis-failed",
+        @field:NotBlank val analysisReviewRequiredDestination: String = "nutrition-analysis-review-required",
+        @field:NotBlank val captureReadyDltDestination: String = "nutrition-capture-ready-dlt",
         @field:NotBlank val consumerGroup: String = "healthmind-nutrition-v1",
         val publishTimeout: Duration = Duration.ofSeconds(15),
     )

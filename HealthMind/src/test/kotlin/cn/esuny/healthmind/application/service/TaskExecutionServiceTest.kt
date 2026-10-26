@@ -1,7 +1,9 @@
 package cn.esuny.healthmind.application.service
 
+import cn.esuny.contracts.integration.v1.NutritionEventTypes
 import cn.esuny.healthmind.application.port.out.AgentRunPort
 import cn.esuny.healthmind.application.port.out.AgentRunState
+import cn.esuny.healthmind.application.port.out.TaskOutboxMessage
 import cn.esuny.healthmind.domain.task.AgentRunResult
 import cn.esuny.healthmind.domain.task.AgentSubmissionState
 import cn.esuny.healthmind.domain.task.FailureCategory
@@ -14,10 +16,12 @@ import cn.esuny.healthmind.infrastructure.json.JsonSchemaService
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.junit.jupiter.api.Test
 import tools.jackson.databind.ObjectMapper
 import java.util.UUID
+import kotlin.test.assertEquals
 
 class TaskExecutionServiceTest {
     private val repository = mockk<TaskCommandRepository>(relaxed = true)
@@ -99,8 +103,30 @@ class TaskExecutionServiceTest {
 
         service.advanceNext()
 
-        verify(exactly = 1) { repository.complete(command, result, any(), any()) }
+        val outbox = slot<TaskOutboxMessage>()
+        verify(exactly = 1) { repository.complete(command, result, any(), capture(outbox)) }
+        assertEquals(NutritionEventTypes.ANALYSIS_COMPLETED, outbox.captured.eventType)
         verify(exactly = 0) { repository.fail(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `failed agent run emits a technical failure event`() {
+        val command = command().copy(agentRunId = UUID.randomUUID())
+        every { repository.claimDue() } returns command
+        every { agent.inspect(command) } returns AgentRunState.Failed(
+            code = "AGENT_RUN_FAILED",
+            category = FailureCategory.PERMANENT,
+            summary = "model failed",
+        )
+
+        service.advanceNext()
+
+        val outbox = slot<TaskOutboxMessage>()
+        verify(exactly = 1) {
+            repository.fail(command, any(), FailureCategory.PERMANENT, "AGENT_RUN_FAILED", capture(outbox))
+        }
+        assertEquals(NutritionEventTypes.ANALYSIS_FAILED, outbox.captured.eventType)
+        verify(exactly = 0) { repository.complete(any(), any(), any(), any()) }
     }
 
     @Test
@@ -127,8 +153,34 @@ class TaskExecutionServiceTest {
 
         service.advanceNext()
 
-        verify(exactly = 1) { repository.fail(command, any(), FailureCategory.PERMANENT, "AGENT_NEEDS_REVIEW", any()) }
+        val outbox = slot<cn.esuny.healthmind.application.port.out.TaskOutboxMessage>()
+        verify(exactly = 1) {
+            repository.fail(command, any(), FailureCategory.PERMANENT, "AGENT_NEEDS_REVIEW", capture(outbox))
+        }
+        assertEquals("nutrition.analysis.review_required.v1", outbox.captured.eventType)
+        assertEquals("IMAGE_UNAVAILABLE", outbox.captured.payload.path("payload").path("reason_code").asString())
+        assertEquals(false, outbox.captured.payload.path("payload").path("retryable").booleanValue())
         verify(exactly = 0) { repository.complete(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `invalid review reason code is normalized before publishing`() {
+        val runId = UUID.randomUUID()
+        val command = command().copy(agentRunId = runId)
+        val result = AgentRunResult(
+            runId,
+            """{"status":"needs_review","reason_code":"not a wire code","message":"needs a human"}""",
+        )
+        every { repository.claimDue() } returns command
+        every { agent.inspect(command) } returns AgentRunState.Succeeded(result)
+
+        service.advanceNext()
+
+        val outbox = slot<TaskOutboxMessage>()
+        verify(exactly = 1) {
+            repository.fail(command, any(), FailureCategory.PERMANENT, "AGENT_NEEDS_REVIEW", capture(outbox))
+        }
+        assertEquals("REVIEW_REQUIRED", outbox.captured.payload.path("payload").path("reason_code").asString())
     }
 
     @Test

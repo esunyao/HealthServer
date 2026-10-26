@@ -69,8 +69,19 @@ class TaskExecutionService(
                 val output = try {
                     val node = canonicalJson.parse(state.result.outputJson)
                     if (node.path("status").asString() == "needs_review") {
-                        val reason = node.path("reason_code").asString().take(64)
-                        throw TaskExecutionException("AGENT_NEEDS_REVIEW", FailureCategory.PERMANENT, "Agent requested review: $reason")
+                        val reason = reviewReasonCode(node.path("reason_code").asString())
+                        val message = node.path("message").asString().takeIf { it.isNotBlank() }?.take(500) ?: "Agent requested review"
+                        val failure = TaskExecutionException("AGENT_NEEDS_REVIEW", FailureCategory.PERMANENT, message)
+                        repository.fail(
+                            command,
+                            failure,
+                            FailureCategory.PERMANENT,
+                            failure.code,
+                            taskOutcomes.reviewRequiredEvent(command, reason, message),
+                        )
+                        meters.counter("healthmind.tasks", "outcome", "review_required").increment()
+                        log.warn("HealthMind task {} attempt {} requires review with code {}", command.taskId, command.attemptNo, reason)
+                        return
                     }
                     schemaService.validate(command.outputSchema, node)
                     node
@@ -106,5 +117,14 @@ class TaskExecutionService(
         )
         meters.counter("healthmind.tasks", "outcome", "failed", "category", exception.category.wireValue).increment()
         log.warn("HealthMind task {} attempt {} failed with code {}", command.taskId, command.attemptNo, exception.code)
+    }
+
+    private fun reviewReasonCode(value: String): String = value.trim()
+        .uppercase()
+        .takeIf { it.matches(REVIEW_REASON_CODE) }
+        ?: "REVIEW_REQUIRED"
+
+    private companion object {
+        val REVIEW_REASON_CODE = Regex("^[A-Z0-9_]{1,64}$")
     }
 }

@@ -10,6 +10,8 @@ interface TaskOutcomePort {
     fun completedEvent(command: TaskExecution, result: JsonNode): TaskOutboxMessage
 
     fun failedEvent(command: TaskExecution, category: FailureCategory, code: String, message: String): TaskOutboxMessage
+
+    fun reviewRequiredEvent(command: TaskExecution, reasonCode: String, message: String): TaskOutboxMessage
 }
 
 data class TaskOutboxMessage(

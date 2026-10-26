@@ -124,6 +124,10 @@ healthmind:
     analysis-completed-destination: ${HEALTHMIND_ANALYSIS_COMPLETED_DESTINATION:nutrition-analysis-completed}
     # 营养分析失败事件的主题。
     analysis-failed-destination: ${HEALTHMIND_ANALYSIS_FAILED_DESTINATION:nutrition-analysis-failed}
+    # 需要人工复核的营养分析结果事件主题。
+    analysis-review-required-destination: ${HEALTHMIND_ANALYSIS_REVIEW_REQUIRED_DESTINATION:nutrition-analysis-review-required}
+    # 无法解析的 capture-ready 信封进入的死信主题。
+    capture-ready-dlt-destination: ${HEALTHMIND_CAPTURE_READY_DLT_DESTINATION:nutrition-capture-ready-dlt}
     # HealthMind 消费业务事件使用的消费者组。
     consumer-group: ${HEALTHMIND_KAFKA_CONSUMER_GROUP:healthmind-nutrition-v1}
     # Kafka 消息发布超时时间。

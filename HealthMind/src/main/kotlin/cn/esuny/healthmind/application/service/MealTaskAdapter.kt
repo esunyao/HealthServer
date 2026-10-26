@@ -2,6 +2,7 @@ package cn.esuny.healthmind.application.service
 
 import cn.esuny.contracts.integration.v1.NutritionCaptureReadyPayload
 import cn.esuny.contracts.integration.v1.NutritionEventTypes
+import cn.esuny.contracts.integration.v1.NutritionAnalysisReviewRequiredPayload
 import cn.esuny.healthmind.application.port.out.TaskOutcomePort
 import cn.esuny.healthmind.application.port.out.TaskOutboxMessage
 import cn.esuny.healthmind.domain.task.TaskExecution
@@ -81,6 +82,31 @@ class MealTaskAdapter(
             destinationKey = properties.kafka.analysisFailedDestination,
             partitionKey = meal.captureSessionId.toString(),
             payload = integrationEnvelope(command, eventId, NutritionEventTypes.ANALYSIS_FAILED, payload),
+        )
+    }
+
+    override fun reviewRequiredEvent(command: TaskExecution, reasonCode: String, message: String): TaskOutboxMessage {
+        require(command.taskTypeCode == MEAL_ANALYSIS_TASK_TYPE) { "Meal adapter cannot handle ${command.taskTypeCode}" }
+        require(reasonCode.matches(Regex("^[A-Z0-9_]{1,64}$"))) { "Review reason code must be a wire-safe token" }
+        require(message.isNotBlank()) { "Review message must not be blank" }
+        val meal = context(command.contextManifest)
+        val eventId = UUID.randomUUID()
+        val payload = objectMapper.valueToTree<JsonNode>(
+            NutritionAnalysisReviewRequiredPayload(
+                taskId = command.taskId,
+                captureSessionId = meal.captureSessionId,
+                mealId = meal.mealId,
+                reasonCode = reasonCode.take(64),
+                message = message.take(500),
+            ),
+        )
+        return TaskOutboxMessage(
+            eventId = eventId,
+            eventType = NutritionEventTypes.ANALYSIS_REVIEW_REQUIRED,
+            schemaVersion = NutritionEventTypes.SCHEMA_VERSION,
+            destinationKey = properties.kafka.analysisReviewRequiredDestination,
+            partitionKey = meal.captureSessionId.toString(),
+            payload = integrationEnvelope(command, eventId, NutritionEventTypes.ANALYSIS_REVIEW_REQUIRED, payload),
         )
     }
 
