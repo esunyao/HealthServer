@@ -54,11 +54,14 @@
 ## 关键事实与易错点
 
 - **用户侧没有 Spring Security**：`identity/CurrentUserArgumentResolver` 直接信任 Gateway 注入的 `X-Gateway-Source: HealthServer-Gateway` 与 `X-Auth-Subject`。绕过 Gateway 直连本服务即等于绕过认证——安全前提是网络边界，改动此处要极度谨慎。
-- **会话状态机**（V1 迁移）：`created → uploading → ready_for_analysis → analysing → completed / failed / expired / cancelled`；`meal_records.analysis_status`：`queued → analysing → completed/failed`。
+- **会话状态机**（V1 + V3 迁移）：`created → uploading → ready_for_analysis → analysing → completed / failed / needs_review / expired / cancelled`；`meal_records.analysis_status`：`queued → analysing → completed / failed / needs_review`。
 - **提交事务**：submit 要求至少 1 张 `confirmed` 图片；同一事务写 `meal_records(queued)` + `meal_capture_sessions(ready_for_analysis)` + `integration_outbox(pending)`，并重算日汇总。
 - **图片直传**：槽位 1–10（可复用 deleted 槽），对象键 `nutri/{userId}/capture/{sessionId}/{uuid}.{ext}`；presign 5 分钟、最大 10 MiB、jpeg/png/webp；confirm 用 `headObject` 校验类型与大小。
 - **Outbox 发布器**：1s 轮询 `FOR UPDATE SKIP LOCKED`，发布成功后联动把会话置 `analysing`；发布失败置 `failed` 并设置重试时间。`published` 只代表 Broker 收到，不代表 HealthMind 已消费。
 - **结果回写有保护策略**（`AiWritebackPolicy`）：餐食已删除→忽略；存在人工修正→保留人工值；否则应用 AI 结果。改动回写逻辑先读这个策略类。
+- **结构化报告**：`meal_analysis_reports` 保存最近终态的 overall confidence、result version、reason 与 event time；旧 `event_occurred_at` 不得覆盖新报告。公开 `MealView.analysisReport` 由此生成。
+- **Notes 兼容**：capture context request 的 `include_meal_notes` 只在固定 release 工具 Schema 为 v1.1 时由 HealthMind 设为 true；旧 v1.0 必须得到不含 notes 的原响应形状。
+- **结果 DLT**：无法解析或无法定位的分析结果先写 `analysis_result_dead_letters` 审计再进入 `nutrition-analysis-result-dlt`；普通数据库/网络异常先有限重试。
 - **消费幂等**：先按 `event_id` 走 inbox（冲突即跳过），再校验 `producer == "HealthMind"` 与 `subject_id` 归属；失败事件不会覆盖用户数据。
 - MyBatis-Plus 出现在 `build.gradle` 但持久层主体是 JdbcTemplate——不要据此推断 ORM 用法。
 
@@ -66,16 +69,18 @@
 
 - 对外：`/v1/nutri/capture-policy`、`/v1/nutri/capture-sessions/**`（创建/草稿/查询/取消/presign/confirm/删除图片/submit/retry）、`/v1/nutri/meals/**`、`/v1/nutri/summaries/**`；契约以 [`openapi.yaml`](./openapi.yaml) 为准（有 `OpenApiContractTest` 守护）。
 - 内部：`/internal/v1/analysis-context/capture`（POST，M2M，scope `nutrimemo.ai-context.read`，校验 `azp == healthmind-nutrimemo`），不经 Gateway。
-- 事件：生产 `nutrition.capture.ready.v1`（物理 topic `nutrition-capture-ready`，Kafka key = captureSessionId）；消费 `nutrition.analysis.completed.v1` / `nutrition.analysis.failed.v1`（物理 topic `nutrition-analysis-completed` / `nutrition-analysis-failed`）。物理 topic 名默认值见 [`integration/NutriIntegrationProperties.kt`](./src/main/kotlin/cn/esuny/nutrimemo/integration/NutriIntegrationProperties.kt)，可被环境变量覆盖。契约单一来源在 `integration-contracts` 模块。
+- 事件：生产 `nutrition.capture.ready.v1`（物理 topic `nutrition-capture-ready`，Kafka key = captureSessionId）；消费 `nutrition.analysis.completed.v1` / `nutrition.analysis.failed.v1` / `nutrition.analysis.review_required.v1`。物理 topic 默认值见 [`integration/NutriIntegrationProperties.kt`](./src/main/kotlin/cn/esuny/nutrimemo/integration/NutriIntegrationProperties.kt)，可被环境变量覆盖。契约单一来源在 `integration-contracts` 模块。
 
 ## 测试与验证
+
+测试目录导航：[`src/test/AGENTS.md`](./src/test/AGENTS.md)。
 
 ```bash
 ./gradlew :nutrimemo:test
 ./gradlew :nutrimemo:bootRun   # 需要 PostgreSQL、Kafka、Nacos、Authentik 与 S3 兼容对象存储
 ```
 
-- 测试在 [`src/test/kotlin/cn/esuny/nutrimemo/`](./src/test/kotlin/cn/esuny/nutrimemo/)：契约（`OpenApiContractTest`）、迁移脚本、校验、身份解析、写回策略、结果服务、Kafka 契约、检索过滤。
+- 测试在 [`src/test/kotlin/cn/esuny/nutrimemo/`](./src/test/kotlin/cn/esuny/nutrimemo/)：契约（`OpenApiContractTest`）、迁移脚本、校验、身份解析、写回策略、completed/failed/review-required 结果服务、报告幂等与事件顺序、Kafka 契约、检索过滤。
 - 改动提交事务、发布器、回写策略或 API 时补聚焦测试。
 
 ## 相关文档

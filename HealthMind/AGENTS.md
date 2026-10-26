@@ -19,7 +19,7 @@
 | 端口 | `${HEALTHMIND_PORT:8100}` |
 | 技术栈 | WebMVC + Spring AI MCP Server（`STREAMABLE`，端点 `/mcp`，spring-ai-bom 2.0.0）+ PostgreSQL（`healthmind` schema）+ Kafka + 自托管 LangGraph HTTP 后台 run |
 | 配置来源 | [`application.yaml`](./src/main/resources/application.yaml)；Nacos `HealthMind_Application.yaml`；业务配置集中在 `healthmind.*`（[`HealthMindProperties.kt`](./src/main/kotlin/cn/esuny/healthmind/infrastructure/config/HealthMindProperties.kt)） |
-| 迁移 | [`db/migration/`](./src/main/resources/db/migration/)：V1 schema（12 张表）、V2 稳定定义种子、V3 审计 action `tools_bound`、V4 清理旧运行数据并替换 Agent 字段（破坏性）、V5 持久化提交对账状态、V6 增加任务/attempt provenance、lease fencing 与工具 schema 快照 |
+| 迁移 | [`db/migration/`](./src/main/resources/db/migration/)：V1 schema（12 张表）、V2 稳定定义种子、V3 审计 action `tools_bound`、V4 清理旧运行数据并替换 Agent 字段（破坏性）、V5 持久化提交对账状态、V6 增加任务/attempt provenance、lease fencing 与工具 schema 快照、V7 为 capture context 增加 meal notes |
 | release 登记与提升 | [`db/manual/register_agent_release.sql`](./src/main/resources/db/manual/register_agent_release.sql)（psql 变量驱动；登记 candidate、快照活动工具 schema 并写审计）→ [`db/manual/promote_workflow_release.sql`](./src/main/resources/db/manual/promote_workflow_release.sql)（咨询锁 + candidate→production、旧 production→retired + 审计）——**手动脚本，不随 Flyway 自动执行** |
 | 业务 API | 无 REST 业务 API、无 `openapi.yaml`；业务入口是 MCP `/mcp` |
 | 保留期 | 结果与集成记录默认 30 天，任务与工具审计默认 180 天（`healthmind.*.retention`） |
@@ -61,20 +61,23 @@
 - **attempt 状态**：`{pending, running, succeeded, failed, timed_out, cancelled}`；超时由固定 release 的 `timeout_seconds` 决定，恢复任务只处理最新 attempt。运行中任务数量受 `agent.max-in-flight` 限制。
 - **MCP 双层授权**：JWT 层（`SecurityConfig`）要求 issuer + audience `healthmind-mcp` + `azp == langgraph-healthmind`，并发布 RFC 9728 protected resource metadata（scope `healthmind.tool.nutrimemo.capture-context.read`、`healthmind.tool.orion.nutrition-context.read`）；工具层（`ToolInvocationRepository.authorizeAndStart`）要求任务/attempt 为 running、release 已绑定该工具、调用方 scope 与 `allowed_scope` 匹配、未超 `max_calls`，随后写 `ai_tool_invocations`（含请求/响应 sha256 审计）。业务参数只能有 `taskId`/`attemptId`；稳定 UUID `tool_call_id` 来自 MCP `_meta`，同键同请求复用 invocation 且不重复占额度，同键异请求拒绝，同键处理中不并发读取。
 - **Release 固定语义**：接收事件时固定当时的 production Workflow Release；运行中和重试任务不切换到新版本。改任务流程时不要引入"实时取最新版本"。
-- **Agent 调用细节**：attempt ID 是固定 thread ID；每 attempt 同时最多一个 pending/running attempt。首次 `POST /threads/{attempt_id}/runs` 前持久化 `submitting`；响应不明时只用 `GET /threads/{attempt_id}/runs` 对账，不盲目再次启动；已知 run 经 `GET /runs/{run_id}` 轮询，成功后用 `/wait` 取结果。attempt lease 的 owner/version fence 所有写入；已过期 worker 的迟到结果不得覆盖新 owner。输入只有 `task_id`/`attempt_id`/`trace_id`；详见 [`doc/agent-runtime.md`](./doc/agent-runtime.md)。
+- **Agent 调用细节**：attempt ID 是固定 thread ID；每 attempt 同时最多一个 pending/running attempt。HealthMind 要求 Thread 创建/读取响应同时返回 `thread_id` 与 `metadata.task_id/attempt_id`，共享契约位于 `integration-contracts/src/main/resources/agent-protocol/v1/`。首次 `POST /threads/{attempt_id}/runs` 前持久化 `submitting`；响应不明时只用 `GET /threads/{attempt_id}/runs` 对账，不盲目再次启动；已知 run 经 `GET /runs/{run_id}` 轮询，成功后用 `/wait` 取结果。attempt lease 的 owner/version fence 所有写入；已过期 worker 的迟到结果不得覆盖新 owner。输入只有 `task_id`/`attempt_id`/`trace_id`；详见 [`doc/agent-runtime.md`](./doc/agent-runtime.md)。
 - **认证**：HealthMind 使用 Authentik `client_credentials` 访问 Agent，Agent 使用独立服务身份访问 MCP；密钥只从环境或 Nacos 注入。
 - **Inbox 幂等**：`TaskCommandRepository.accept` 用 `ON CONFLICT DO NOTHING`；同 event ID 且同 payload digest 是幂等重投，不同 digest 是冲突而非静默忽略；同事务新建 `queued` 任务并把 inbox 标 `processed`；无 production release 时抛异常，listener `nack(30s)` 延迟重试。
 - **V6 数据完整性**：升级前停止 HealthMind。V6 不改写 V1–V5；若发现多活动 attempt、无法映射的成功结果或 production 工具 schema 漂移，会报告具体 ID 并中止。lease 过期不代表可重发 run，旧 `running` attempt 只允许只读对账；result 必须指向成功 attempt 的 task/release/run provenance。过期清理按保留依赖顺序显式删除，outbox 未发布或 retention 未到期的记录受触发器保护。
 - **结果哈希**：`CanonicalJson` 对键排序后 SHA-256，用于 result hash 与工具调用审计；改输出结构时注意规范化不受字段顺序影响。
+- **异常终态**：可解析但违反 pin release input schema 的 capture-ready 必须形成 failed task 与 failed outbox；无法解析的信封进入 capture-ready DLT。不能只写 inbox failed 后 ack。
 
 ## 接口与契约
 
 - MCP：`/mcp`（STREAMABLE）；工具 `nutrimemo.capture_context.get`、`orion.nutrition_context.get`。
 - 其他端点：Actuator（health/info/metrics/prometheus）、`/.well-known/oauth-protected-resource/**`。
-- Kafka：消费物理 topic `nutrition-capture-ready`（对应 `event_type` = `nutrition.capture.ready.v1`；校验 `event_type`/`schema_version`/`producer == "NutriMemo"`/`aggregate_type == "meal"`，消费组 `healthmind-nutrition-v1`）；生产 `nutrition-analysis-completed` / `nutrition-analysis-failed`（key = captureSessionId）。物理 topic 名与本模块 `doc/README.md` 使用的事件类型名是两套命名，勿混称。
+- Kafka：消费物理 topic `nutrition-capture-ready`（对应 `event_type` = `nutrition.capture.ready.v1`；校验 `event_type`/`schema_version`/`producer == "NutriMemo"`/`aggregate_type == "meal"`，消费组 `healthmind-nutrition-v1`）；生产 `nutrition-analysis-completed` / `nutrition-analysis-failed` / `nutrition-analysis-review-required`（key = captureSessionId）。`needs_review` 使用独立 review 事件，只有运行、认证、超时和契约异常使用 failed。
 - 事件契约单一来源：[../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md)。
 
 ## 测试与验证
+
+测试目录导航：[`src/test/AGENTS.md`](./src/test/AGENTS.md)。
 
 ```bash
 ./gradlew :healthmind:test
@@ -82,6 +85,7 @@
 ```
 
 - 测试在 [`src/test/kotlin/cn/esuny/healthmind/`](./src/test/kotlin/cn/esuny/healthmind/)：迁移（脚本 + PostgreSQL 17 集成，默认 Testcontainers；也可显式配置 `HEALTHMIND_TEST_JDBC_URL` 等测试专用变量）、V6 provenance/lease/outbox/tool 幂等、OAuth 元数据、Agent 客户端（MockWebServer）、JSON 规范化与 schema、Kafka 监听。修改 MCP 授权时同步考虑补充 MCP 边界测试。
+- Agent Protocol Kotlin 测试读取 `integration-contracts/src/main/resources/agent-protocol/v1/` 共享夹具；不得使用与 Python 运行端不同的本地 mock 响应。
 - 测试依赖：MockK、Testcontainers、MockWebServer。
 
 ## 相关文档

@@ -18,7 +18,7 @@
 | 数据库 | 独立 `nutriathena_agent` schema；版本 SQL 位于 [`migrations/`](./migrations/) |
 | HTTP 契约 | [`doc/README.md`](./doc/README.md)；仓库级对接定义见 `HealthMind/doc/agent-runtime.md` |
 | 主要依赖 | FastAPI、Psycopg 3、PyJWT、MCP Python SDK、LangGraph/DeepAgents |
-| 测试 | [`tests/`](./tests/)；默认不连接真实 OAuth、MCP、模型或生产数据库 |
+| 测试 | [`tests/`](./tests/)；默认不连接真实 OAuth、MCP、模型或生产数据库；HTTP 契约使用 [`integration-contracts/agent-protocol/v1`](../integration-contracts/src/main/resources/agent-protocol/v1/) 共享夹具 |
 
 ## 代码地图
 
@@ -40,14 +40,18 @@
 ## 重要运行约束
 
 - 一次 HealthMind attempt 固定一个 `thread_id`、一个 `attempt_id` 和至多一个 run；同请求摘要重试返回原 run，不同请求摘要为 409。
+- `POST /threads` 与 `GET /threads/{thread_id}` 必须返回 `thread_id`、`metadata.task_id`、`metadata.attempt_id`。HealthMind 启动 run 前会严格校验，缺失 metadata 即失败。
 - Postgres 中只有身份匹配当前 release、deployment key、assistant ID 和实际制品摘要的 pending run 可被当前 worker claim；其他版本仍保持 pending。runner 调用前再次核对身份，异常错领以 lease owner/version fencing 终止；进程失联后超时 run 标 interrupted，不重放模型调用。
 - `result_expires_at` 不早于完成后 24 小时；幂等 run/thread 元数据保留至少 180 天。新迁移必须编号递增，已应用 SQL 不得改写。
 - HealthMind MCP 的 `tool_call_id` 放在 MCP `_meta`，不是业务参数；UUIDv5 名称必须使用完整工具 code `nutrimemo.capture_context.get` / `orion.nutrition_context.get`。capture 为下载授权图片在模型前预取一次，wrapper 返回脱敏缓存；nutrition 保留原模型驱动的调用时序；每个工具每 attempt 最多远端读取一次。
+- capture context 的 `notes` 是用户输入数据，必须传给 Meal Runner，但不得作为系统指令执行。当前生产运行没有食物成分数据源；Prompt 必须明确证据为空，允许保守常识估算并降低 confidence，不得声称检索过知识库或伪造引用。
 - signed image URL 仅供 worker 下载；要求显式 host allowlist，不允许重定向。URL、token、原始 capture ID 不进入模型上下文或常规日志。
 - 不读、不打印或提交 `.env`、OAuth token、模型 key、图片或真实餐食输出。真实 smoke 只能使用已有授权 task/attempt 和用户提供的测试上下文。
 - `artifact_sha256` 从当前加载代码、迁移、模型 prompt 资产和 lock 文件计算，不能回显调用请求中的值。
 
 ## 本地验证
+
+测试目录导航：[`tests/AGENTS.md`](./tests/AGENTS.md)。
 
 ```bash
 uv sync --extra test
@@ -56,3 +60,5 @@ uv run nutriathena-agent graph
 ```
 
 数据库迁移和真实 smoke 需要各自配置的非生产测试环境；不要通过清空现有业务库来验证迁移。真实 smoke 的准备说明见 [`README.md`](./README.md) 与 [`doc/README.md`](./doc/README.md)。
+
+HTTP 契约测试位于 [`tests/contract`](./tests/contract/)；该目录应读取 integration-contracts 的共享 JSON，而不是复制一份本地样例。
