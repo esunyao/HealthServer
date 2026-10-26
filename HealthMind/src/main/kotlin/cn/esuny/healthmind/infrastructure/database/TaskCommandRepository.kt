@@ -10,6 +10,7 @@ import cn.esuny.healthmind.infrastructure.config.HealthMindProperties
 import cn.esuny.healthmind.infrastructure.json.CanonicalJson
 import cn.esuny.healthmind.infrastructure.json.JsonSchemaService
 import cn.esuny.healthmind.application.port.out.TaskOutboxMessage
+import cn.esuny.healthmind.application.port.out.TaskOutcomePort
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
@@ -28,6 +29,7 @@ class TaskCommandRepository(
     private val canonicalJson: CanonicalJson,
     private val schemas: JsonSchemaService,
     private val properties: HealthMindProperties,
+    private val taskOutcomes: TaskOutcomePort,
 ) {
     private val workerId = UUID.randomUUID().toString()
 
@@ -78,29 +80,50 @@ class TaskCommandRepository(
 
         val release = jdbc.query(
             """
-            SELECT tt.task_type_id, wr.release_id, wr.input_schema_version, wr.input_schema::text
+            SELECT tt.task_type_id, wr.release_id, wr.input_schema_version, wr.input_schema::text,
+                   wr.output_schema_version, wr.output_schema::text, wr.timeout_seconds, wr.max_attempts,
+                   wr.agent_deployment_key, wr.agent_assistant_id, wr.agent_artifact_sha256
               FROM healthmind.ai_task_types tt
               JOIN healthmind.workflow_releases wr ON wr.task_type_id = tt.task_type_id
              WHERE tt.task_type_code = :taskTypeCode AND tt.active AND wr.status = 'production'
             """.trimIndent(),
             mapOf("taskTypeCode" to taskTypeCode),
-        ) { rs, _ -> ProductionRelease(rs.getObject(1, UUID::class.java), rs.getObject(2, UUID::class.java), rs.getString(3), rs.getString(4)) }
+        ) { rs, _ ->
+            ProductionRelease(
+                taskTypeId = rs.getObject(1, UUID::class.java),
+                releaseId = rs.getObject(2, UUID::class.java),
+                inputSchemaVersion = rs.getString(3),
+                inputSchema = rs.getString(4),
+                outputSchemaVersion = rs.getString(5),
+                outputSchema = rs.getString(6),
+                timeoutSeconds = rs.getInt(7),
+                maxAttempts = rs.getInt(8),
+                agentDeploymentKey = rs.getString(9),
+                agentAssistantId = rs.getString(10),
+                agentArtifactSha256 = rs.getString(11),
+            )
+        }
             .singleOrNull()
             ?: throw cn.esuny.healthmind.domain.task.ProductionWorkflowUnavailableException()
 
         try {
             schemas.validate(release.inputSchema, eventNode, "INPUT_CONTRACT_INVALID")
         } catch (exception: cn.esuny.healthmind.domain.task.TaskExecutionException) {
+            val taskId = UUID.randomUUID()
+            val command = rejectedExecution(taskId, event, taskTypeCode, contextManifest, release)
+            insertRejectedTask(command, event, payloadDigest, exception.code, exception.message ?: exception.code)
+            insertOutbox(
+                command,
+                taskOutcomes.failedEvent(command, FailureCategory.CONTRACT, exception.code, exception.message ?: exception.code),
+            )
             jdbc.update(
                 """
-                UPDATE healthmind.integration_inbox
-                   SET status='failed', processed_at=NOW(), failure_code=:code,
-                       failure_message='Input event failed the pinned release contract'
+                UPDATE healthmind.integration_inbox SET status='processed', processed_at=NOW()
                  WHERE event_id=:eventId
                 """.trimIndent(),
-                mapOf("eventId" to event.eventId, "code" to exception.code),
+                mapOf("eventId" to event.eventId),
             )
-            return null
+            return taskId
         }
 
         val taskId = UUID.randomUUID()
@@ -526,6 +549,71 @@ class TaskCommandRepository(
         )
     }
 
+    private fun insertRejectedTask(
+        command: TaskExecution,
+        event: IntegrationEvent<*>,
+        payloadDigest: String,
+        code: String,
+        message: String,
+    ) {
+        jdbc.update(
+            """
+            INSERT INTO healthmind.ai_tasks
+                (task_id, task_type_id, workflow_release_id, request_event_id, requester_service, subject_id,
+                 aggregate_type, aggregate_id, idempotency_key, trace_id, input_schema_version, input_digest,
+                 context_manifest, retention_until, status, completed_at, failure_code, failure_message)
+            SELECT :taskId, task_type_id, workflow_release_id, :requestEventId, :requester, :subjectId,
+                   :aggregateType, :aggregateId, :idempotencyKey, :traceId, input_schema_version, :digest,
+                   CAST(:manifest AS jsonb), :retentionUntil, 'failed', NOW(), :code, :message
+              FROM healthmind.workflow_releases
+             WHERE release_id=:releaseId
+            """.trimIndent(),
+            mapOf(
+                "taskId" to command.taskId,
+                "requestEventId" to event.eventId,
+                "requester" to event.producer,
+                "subjectId" to command.subjectId,
+                "aggregateType" to command.aggregateType,
+                "aggregateId" to command.aggregateId,
+                "idempotencyKey" to event.eventId.toString(),
+                "traceId" to command.traceId,
+                "digest" to payloadDigest,
+                "manifest" to command.contextManifest,
+                "retentionUntil" to Timestamp.from(Instant.now().plus(properties.retention.audit)),
+                "code" to code,
+                "message" to message.take(500),
+                "releaseId" to command.releaseId,
+            ),
+        )
+    }
+
+    private fun rejectedExecution(
+        taskId: UUID,
+        event: IntegrationEvent<*>,
+        taskTypeCode: String,
+        contextManifest: String,
+        release: ProductionRelease,
+    ) = TaskExecution(
+        taskId = taskId,
+        attemptId = UUID(0, 0),
+        attemptNo = 0,
+        maxAttempts = release.maxAttempts,
+        lockVersion = 0,
+        taskTypeCode = taskTypeCode,
+        subjectId = event.subjectId,
+        aggregateType = event.aggregateType,
+        aggregateId = event.aggregateId,
+        contextManifest = contextManifest,
+        traceId = event.traceId,
+        releaseId = release.releaseId,
+        agentDeploymentKey = release.agentDeploymentKey,
+        agentAssistantId = release.agentAssistantId,
+        agentArtifactSha256 = release.agentArtifactSha256,
+        outputSchemaVersion = release.outputSchemaVersion,
+        outputSchema = release.outputSchema,
+        timeoutSeconds = release.timeoutSeconds,
+    )
+
     private fun rowToExecution(rs: ResultSet): TaskExecution = TaskExecution(
         taskId = rs.getObject("task_id", UUID::class.java),
         attemptId = UUID(0, 0),
@@ -554,5 +642,12 @@ class TaskCommandRepository(
         val releaseId: UUID,
         val inputSchemaVersion: String,
         val inputSchema: String,
+        val outputSchemaVersion: String,
+        val outputSchema: String,
+        val timeoutSeconds: Int,
+        val maxAttempts: Int,
+        val agentDeploymentKey: String,
+        val agentAssistantId: String,
+        val agentArtifactSha256: String,
     )
 }

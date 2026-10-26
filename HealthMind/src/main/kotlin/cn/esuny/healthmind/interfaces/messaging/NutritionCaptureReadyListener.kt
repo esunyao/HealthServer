@@ -14,6 +14,7 @@ import java.time.Duration
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.support.Acknowledgment
 import cn.esuny.healthmind.domain.task.ProductionWorkflowUnavailableException
+import cn.esuny.healthmind.domain.task.UnrecoverableCaptureEventException
 
 @Component
 class NutritionCaptureReadyListener(
@@ -27,29 +28,37 @@ class NutritionCaptureReadyListener(
         groupId = "\${healthmind.kafka.consumer-group}",
     )
     fun receive(raw: String, acknowledgment: Acknowledgment) {
-        val root = canonicalJson.parse(raw)
-        require(root.path("event_type").asString() == NutritionEventTypes.CAPTURE_READY) { "Unsupported event_type" }
-        require(root.path("schema_version").asString() == NutritionEventTypes.SCHEMA_VERSION) { "Unsupported schema_version" }
-        require(root.path("producer").asString() == "NutriMemo") { "Unsupported event producer" }
-        require(root.path("aggregate_type").asString() == "meal") { "Unsupported aggregate_type" }
-        val payload = root.path("payload")
-        val mealId = payload.path("meal_id").asLong()
-        require(mealId > 0 && root.path("aggregate_id").asString() == mealId.toString()) { "Invalid meal aggregate" }
-        val event = IntegrationEvent(
-            eventId = UUID.fromString(root.path("event_id").asString()),
-            eventType = root.path("event_type").asString(),
-            occurredAt = Instant.parse(root.path("occurred_at").asString()),
-            producer = root.path("producer").asString(),
-            traceId = root.path("trace_id").asString(),
-            subjectId = UUID.fromString(root.path("subject_id").asString()),
-            aggregateType = root.path("aggregate_type").asString(),
-            aggregateId = root.path("aggregate_id").asString(),
-            schemaVersion = root.path("schema_version").asString(),
-            payload = NutritionCaptureReadyPayload(
-                captureSessionId = UUID.fromString(payload.path("capture_session_id").asString()),
-                mealId = mealId,
-            ),
-        )
+        val root = try {
+            canonicalJson.parse(raw)
+        } catch (exception: Exception) {
+            throw UnrecoverableCaptureEventException("Capture-ready event is not valid JSON", exception)
+        }
+        val event = try {
+            require(root.path("event_type").asString() == NutritionEventTypes.CAPTURE_READY) { "Unsupported event_type" }
+            require(root.path("schema_version").asString() == NutritionEventTypes.SCHEMA_VERSION) { "Unsupported schema_version" }
+            require(root.path("producer").asString() == "NutriMemo") { "Unsupported event producer" }
+            require(root.path("aggregate_type").asString() == "meal") { "Unsupported aggregate_type" }
+            val payload = root.path("payload")
+            val mealId = payload.path("meal_id").asLong()
+            require(mealId > 0 && root.path("aggregate_id").asString() == mealId.toString()) { "Invalid meal aggregate" }
+            IntegrationEvent(
+                eventId = UUID.fromString(root.path("event_id").asString()),
+                eventType = root.path("event_type").asString(),
+                occurredAt = Instant.parse(root.path("occurred_at").asString()),
+                producer = root.path("producer").asString(),
+                traceId = root.path("trace_id").asString(),
+                subjectId = UUID.fromString(root.path("subject_id").asString()),
+                aggregateType = root.path("aggregate_type").asString(),
+                aggregateId = root.path("aggregate_id").asString(),
+                schemaVersion = root.path("schema_version").asString(),
+                payload = NutritionCaptureReadyPayload(
+                    captureSessionId = UUID.fromString(payload.path("capture_session_id").asString()),
+                    mealId = mealId,
+                ),
+            )
+        } catch (exception: IllegalArgumentException) {
+            throw UnrecoverableCaptureEventException(exception.message ?: "Capture-ready event contract is invalid", exception)
+        }
         try {
             val submission = mealTaskAdapter.submission(event.payload)
             repository.accept(event, root, canonicalJson.sha256(root), submission.taskTypeCode, submission.contextManifest)
@@ -57,6 +66,11 @@ class NutritionCaptureReadyListener(
             log.warn("Nutrition event {} deferred: no production workflow for nutrition.meal_analysis; retry in 30s", event.eventId)
             acknowledgment.nack(Duration.ofSeconds(30))
             return
+        } catch (exception: cn.esuny.healthmind.domain.task.TaskExecutionException) {
+            if (exception.category == cn.esuny.healthmind.domain.task.FailureCategory.CONTRACT) {
+                throw UnrecoverableCaptureEventException(exception.message ?: "Capture-ready event contract is invalid", exception)
+            }
+            throw exception
         }
         acknowledgment.acknowledge()
     }

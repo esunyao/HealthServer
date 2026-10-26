@@ -1,6 +1,9 @@
 package cn.esuny.healthmind.infrastructure.database
 
 import cn.esuny.healthmind.application.service.MealTaskAdapter
+import cn.esuny.contracts.integration.v1.IntegrationEvent
+import cn.esuny.contracts.integration.v1.NutritionCaptureReadyPayload
+import cn.esuny.contracts.integration.v1.NutritionEventTypes
 import cn.esuny.healthmind.domain.task.AgentRunResult
 import cn.esuny.healthmind.domain.task.TaskExecution
 import cn.esuny.healthmind.infrastructure.config.HealthMindProperties
@@ -28,6 +31,7 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -186,7 +190,7 @@ class HealthMindV6IntegrityIntegrationTest {
         val properties = HealthMindProperties()
         val mealAdapter = MealTaskAdapter(mapper, canonicalJson, properties)
         val taskRepository = TaskCommandRepository(
-            NamedParameterJdbcTemplate(dataSource), canonicalJson, JsonSchemaService(canonicalJson), properties,
+            NamedParameterJdbcTemplate(dataSource), canonicalJson, JsonSchemaService(canonicalJson), properties, mealAdapter,
         )
 
         assertFailsWith<IllegalStateException> {
@@ -231,6 +235,51 @@ class HealthMindV6IntegrityIntegrationTest {
         assertFailsWith<Exception> { jdbc.update("DELETE FROM healthmind.integration_outbox WHERE event_id=?", eventId) }
     }
 
+    @Test
+    fun `input contract rejection creates a terminal failed task and failed outbox`() {
+        FlywayConfig().flyway(dataSource).migrate()
+        val releaseId = insertRelease(inputSchema = """{"type":"object","required":["unsupported"]}""")
+            .also(::promoteRelease)
+        val eventId = UUID.randomUUID()
+        val sessionId = UUID.randomUUID()
+        val subjectId = UUID.randomUUID()
+        val raw = canonicalJson.parse(
+            """{"event_id":"$eventId","event_type":"nutrition.capture.ready.v1","occurred_at":"2026-09-09T00:00:00Z","producer":"NutriMemo","trace_id":"trace-rejected","subject_id":"$subjectId","aggregate_type":"meal","aggregate_id":"42","schema_version":"1.0","payload":{"capture_session_id":"$sessionId","meal_id":42}}""",
+        )
+        val event = IntegrationEvent(
+            eventId = eventId,
+            eventType = NutritionEventTypes.CAPTURE_READY,
+            occurredAt = java.time.Instant.parse("2026-09-09T00:00:00Z"),
+            producer = "NutriMemo",
+            traceId = "trace-rejected",
+            subjectId = subjectId,
+            aggregateType = "meal",
+            aggregateId = "42",
+            payload = NutritionCaptureReadyPayload(sessionId, 42),
+        )
+        val mealAdapter = MealTaskAdapter(mapper, canonicalJson, HealthMindProperties())
+        val repository = TaskCommandRepository(
+            NamedParameterJdbcTemplate(dataSource), canonicalJson, JsonSchemaService(canonicalJson), HealthMindProperties(), mealAdapter,
+        )
+
+        val taskId = repository.accept(
+            event,
+            raw,
+            canonicalJson.sha256(raw),
+            MealTaskAdapter.MEAL_ANALYSIS_TASK_TYPE,
+            """{"capture_session_id":"$sessionId","meal_id":42}""",
+        )
+
+        assertNotNull(taskId)
+        assertEquals("failed", jdbc.queryForObject("SELECT status FROM healthmind.ai_tasks WHERE task_id=?", String::class.java, taskId))
+        assertEquals("INPUT_CONTRACT_INVALID", jdbc.queryForObject("SELECT failure_code FROM healthmind.ai_tasks WHERE task_id=?", String::class.java, taskId))
+        assertEquals("processed", jdbc.queryForObject("SELECT status FROM healthmind.integration_inbox WHERE event_id=?", String::class.java, eventId))
+        assertEquals(
+            NutritionEventTypes.ANALYSIS_FAILED,
+            jdbc.queryForObject("SELECT event_type FROM healthmind.integration_outbox WHERE task_id=?", String::class.java, taskId),
+        )
+    }
+
     private fun flyway(target: String): Flyway = Flyway.configure()
         .dataSource(dataSource)
         .schemas("healthmind")
@@ -241,18 +290,22 @@ class HealthMindV6IntegrityIntegrationTest {
         .target(MigrationVersion.fromVersion(target))
         .load()
 
-    private fun insertRelease(taskTypeId: UUID = mealTaskTypeId()): UUID {
+    private fun insertRelease(
+        taskTypeId: UUID = mealTaskTypeId(),
+        inputSchema: String = "{}",
+    ): UUID {
         val releaseId = UUID.randomUUID()
         jdbc.update(
             """INSERT INTO healthmind.workflow_releases
                    (release_id, task_type_id, release_version, status, agent_deployment_key, agent_assistant_id,
                     agent_artifact_sha256, input_schema_version, input_schema, input_schema_sha256,
                     output_schema_version, output_schema, output_schema_sha256, timeout_seconds, max_attempts)
-                 VALUES (?, ?, 'test-v1', 'candidate', 'test-deployment', 'test-assistant', ?, '1.0', '{}'::jsonb, ?,
+                 VALUES (?, ?, 'test-v1', 'candidate', 'test-deployment', 'test-assistant', ?, '1.0', ?::jsonb, ?,
                          '1.0', '{}'::jsonb, ?, 120, 3)""",
             releaseId,
             taskTypeId,
             "a".repeat(64),
+            inputSchema,
             "b".repeat(64),
             "c".repeat(64),
         )

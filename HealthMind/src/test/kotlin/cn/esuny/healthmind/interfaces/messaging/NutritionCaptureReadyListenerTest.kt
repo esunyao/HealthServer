@@ -1,6 +1,9 @@
 package cn.esuny.healthmind.interfaces.messaging
 
 import cn.esuny.healthmind.domain.task.ProductionWorkflowUnavailableException
+import cn.esuny.healthmind.domain.task.FailureCategory
+import cn.esuny.healthmind.domain.task.TaskExecutionException
+import cn.esuny.healthmind.domain.task.UnrecoverableCaptureEventException
 import cn.esuny.healthmind.application.service.MealTaskAdapter
 import cn.esuny.healthmind.infrastructure.database.TaskCommandRepository
 import cn.esuny.healthmind.infrastructure.json.CanonicalJson
@@ -49,6 +52,37 @@ class NutritionCaptureReadyListenerTest {
         every { mealTaskAdapter.submission(any()) } returns MealTaskAdapter.TaskSubmission("nutrition.meal_analysis", "{}")
         every { repository.accept(any(), any(), any(), any(), any()) } throws IllegalStateException("database unavailable")
         assertFailsWith<IllegalStateException> { listener.receive(raw, acknowledgment) }
+        verify(exactly = 0) { acknowledgment.acknowledge() }
+    }
+
+    @Test
+    fun `unparseable or contract-invalid capture event is marked unrecoverable`() {
+        assertFailsWith<UnrecoverableCaptureEventException> {
+            listener.receive("not-json", acknowledgment)
+        }
+
+        val invalidType = raw.replace(
+            "\"event_type\":\"nutrition.capture.ready.v1\"",
+            "\"event_type\":\"unsupported.event\"",
+        )
+        assertFailsWith<UnrecoverableCaptureEventException> {
+            listener.receive(invalidType, acknowledgment)
+        }
+        verify(exactly = 0) { acknowledgment.acknowledge() }
+    }
+
+    @Test
+    fun `contract conflict from inbox is unrecoverable`() {
+        every { mealTaskAdapter.submission(any()) } returns MealTaskAdapter.TaskSubmission("nutrition.meal_analysis", "{}")
+        every { repository.accept(any(), any(), any(), any(), any()) } throws TaskExecutionException(
+            "EVENT_IDEMPOTENCY_CONFLICT",
+            FailureCategory.CONTRACT,
+            "same event id with different payload",
+        )
+
+        assertFailsWith<UnrecoverableCaptureEventException> {
+            listener.receive(raw, acknowledgment)
+        }
         verify(exactly = 0) { acknowledgment.acknowledge() }
     }
 }
