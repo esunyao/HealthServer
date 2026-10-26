@@ -83,7 +83,7 @@ paths:
   /v1/nutri/capture-sessions/{sessionId}/retry:
     post:
       tags: [拍照采集]
-      summary: 复用失败会话的已确认图片重新排队
+      summary: 复用失败或待复核会话的已确认图片重新排队
       operationId: retryCaptureSession
       parameters: [{ $ref: '#/components/parameters/CaptureSessionId' }]
       responses: { '202': { $ref: '#/components/responses/CaptureSubmission' }, '409': { $ref: '#/components/responses/Conflict' } }
@@ -153,6 +153,10 @@ paths:
                 capture_session_id: { type: string, format: uuid }
                 meal_id: { type: integer, format: int64 }
                 task_id: { type: string, format: uuid }
+                include_meal_notes:
+                  type: boolean
+                  default: false
+                  description: v1.1 capture context 需要 meal notes 时由 HealthMind 显式启用；旧 release 保持 false
       responses:
         '200':
           description: 餐次元数据与 confirmed 图片 5 分钟 URL
@@ -232,6 +236,55 @@ components:
     MealCorrectionItem: { type: object, required: [displayName, nutrients], properties: { itemId: { type: [string, 'null'], description: 雪花 ID，以字符串传输避免 JavaScript 精度丢失 }, displayName: { type: string }, estimatedWeightG: { type: [number, 'null'] }, notes: { type: [string, 'null'] }, nutrients: { type: array, items: { $ref: '#/components/schemas/NutrientInput' } } } }
     MealMetadataPatchRequest: { type: object, properties: { mealType: { $ref: '#/components/schemas/MealType' }, consumedAt: { type: string, format: date-time }, timezone: { type: string }, notes: { type: [string, 'null'] } } }
     MealCorrectionRequest: { type: object, required: [mealType, consumedAt, timezone], properties: { mealType: { $ref: '#/components/schemas/MealType' }, consumedAt: { type: string, format: date-time }, timezone: { type: string }, notes: { type: [string, 'null'] }, items: { type: array, items: { $ref: '#/components/schemas/MealCorrectionItem' } } } }
+    MealAnalysisStatus: { type: string, enum: [queued, analysing, needs_review, completed, failed] }
+    NutrientValue:
+      type: object
+      required: [nutrientCode, nutrientName, unit, amount]
+      properties:
+        nutrientCode: { type: string }
+        nutrientName: { type: string }
+        unit: { type: string }
+        amount: { type: number, minimum: 0 }
+    MealItem:
+      type: object
+      required: [itemId, sequenceNo, displayName, dataSource, userCorrected, nutrients]
+      properties:
+        itemId: { type: string }
+        sequenceNo: { type: integer, minimum: 1 }
+        displayName: { type: string, maxLength: 150 }
+        estimatedWeightG: { type: [number, 'null'], exclusiveMinimum: 0 }
+        confidence: { type: [number, 'null'], minimum: 0, maximum: 1 }
+        dataSource: { type: string, enum: [ai, manual] }
+        userCorrected: { type: boolean }
+        notes: { type: [string, 'null'] }
+        nutrients: { type: array, items: { $ref: '#/components/schemas/NutrientValue' } }
+    AnalysisReport:
+      type: object
+      required: [status, overallConfidence, resultVersion, reasonCode, reasonMessage, analyzedAt]
+      properties:
+        status: { type: string, enum: [completed, failed, needs_review] }
+        overallConfidence: { type: [number, 'null'], minimum: 0, maximum: 1 }
+        resultVersion: { type: [integer, 'null'], minimum: 1 }
+        reasonCode: { type: [string, 'null'], maxLength: 64 }
+        reasonMessage: { type: [string, 'null'], maxLength: 500 }
+        analyzedAt: { type: string, format: date-time }
+    MealView:
+      type: object
+      required: [mealId, captureSessionId, mealType, consumedAt, timezone, localDate, analysisStatus, items, nutrients, analysisReport, createdAt, updatedAt]
+      properties:
+        mealId: { type: string }
+        captureSessionId: { type: string, format: uuid }
+        mealType: { $ref: '#/components/schemas/MealType' }
+        consumedAt: { type: string, format: date-time }
+        timezone: { type: string }
+        localDate: { type: string, format: date }
+        notes: { type: [string, 'null'] }
+        analysisStatus: { $ref: '#/components/schemas/MealAnalysisStatus' }
+        items: { type: array, items: { $ref: '#/components/schemas/MealItem' } }
+        nutrients: { type: array, items: { $ref: '#/components/schemas/NutrientValue' } }
+        analysisReport: { oneOf: [{ $ref: '#/components/schemas/AnalysisReport' }, { type: 'null' }] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     PresignedUrl:
       type: object
       required: [imageId, uploadUrl, objectKey, expiresInSeconds, requiredHeaders]
@@ -249,7 +302,7 @@ components:
     CaptureSubmission: { description: 餐食已入库并排队, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
     CaptureImage: { description: 成功, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/CaptureImage' } } }] } } } }
     PresignedUrl: { description: 成功, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/PresignedUrl' } } }] } } } }
-    Meal: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+    Meal: { description: 成功, content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/MealView' } } }] } } } }
     MealPage: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
     DailySummary: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
     DailyTrend: { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }

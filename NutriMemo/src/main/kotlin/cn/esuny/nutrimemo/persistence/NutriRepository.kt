@@ -41,6 +41,20 @@ class NutriRepository(private val jdbc: JdbcTemplate) {
     private val imageMapper = RowMapper { rs: ResultSet, _: Int -> CaptureImageRecord(rs.getLong("image_id"), rs.getObject("capture_session_id", UUID::class.java), rs.getInt("slot_no"), rs.getString("bucket"), rs.getString("object_key"), rs.getString("content_type"), rs.getLong("content_length"), rs.getObject("captured_at", OffsetDateTime::class.java), rs.getString("status"), rs.getObject("confirmed_at", OffsetDateTime::class.java), rs.getObject("created_at", OffsetDateTime::class.java)) }
     private val mealMapper = RowMapper { rs: ResultSet, _: Int -> MealRecord(rs.getLong("meal_id"), rs.getObject("capture_session_id", UUID::class.java), rs.getObject("user_id", UUID::class.java), rs.getString("meal_type"), rs.getObject("consumed_at", OffsetDateTime::class.java), rs.getString("timezone"), rs.getObject("local_date", LocalDate::class.java), rs.getString("notes"), rs.getString("analysis_status"), rs.getString("status"), rs.getObject("created_at", OffsetDateTime::class.java), rs.getObject("updated_at", OffsetDateTime::class.java)) }
     private val itemMapper = RowMapper { rs: ResultSet, _: Int -> MealItemRecord(rs.getLong("item_id"), rs.getLong("meal_id"), rs.getInt("sequence_no"), rs.getString("display_name"), rs.getBigDecimal("estimated_weight_g"), rs.getBigDecimal("confidence"), rs.getString("data_source"), rs.getBoolean("user_corrected"), rs.getString("notes")) }
+    private val analysisReportMapper = RowMapper { rs: ResultSet, _: Int ->
+        MealAnalysisReportRecord(
+            rs.getLong("meal_id"),
+            rs.getObject("task_id", UUID::class.java),
+            rs.getObject("source_event_id", UUID::class.java),
+            rs.getObject("event_occurred_at", OffsetDateTime::class.java),
+            rs.getString("status"),
+            rs.getBigDecimal("overall_confidence"),
+            rs.getInt("result_version").takeUnless { rs.wasNull() },
+            rs.getString("reason_code"),
+            rs.getString("reason_message"),
+            rs.getObject("analyzed_at", OffsetDateTime::class.java),
+        )
+    }
 
     fun nutrientsByCodes(codes: Collection<String>): List<NutrientDefinition> = if (codes.isEmpty()) emptyList() else jdbc.query("SELECT nutrient_id,nutrient_code,nutrient_name,unit,active FROM nutri.nutrient_definitions WHERE nutrient_code IN (${codes.joinToString(",") { "?" }})", nutrientMapper, *codes.toTypedArray())
 
@@ -105,6 +119,7 @@ class NutriRepository(private val jdbc: JdbcTemplate) {
     fun items(mealId: Long) = jdbc.query("SELECT * FROM nutri.meal_items WHERE meal_id=? ORDER BY sequence_no", itemMapper, mealId)
     fun itemNutrients(itemId: Long) = jdbc.query("SELECT nutrient_code_snapshot,nutrient_name_snapshot,unit_snapshot,amount FROM nutri.meal_item_nutrient_values WHERE item_id=? ORDER BY nutrient_code_snapshot", { rs, _ -> NutrientValue(rs.getString(1), rs.getString(2), rs.getString(3), rs.getBigDecimal(4)) }, itemId)
     fun mealNutrients(mealId: Long) = jdbc.query("SELECT nutrient_code_snapshot,nutrient_name_snapshot,unit_snapshot,total_amount FROM nutri.meal_nutrition_values WHERE meal_id=? ORDER BY nutrient_code_snapshot", { rs, _ -> NutrientValue(rs.getString(1), rs.getString(2), rs.getString(3), rs.getBigDecimal(4)) }, mealId)
+    fun analysisReport(mealId: Long) = jdbc.query("SELECT * FROM nutri.meal_analysis_reports WHERE meal_id=?", analysisReportMapper, mealId).firstOrNull()
     fun replaceItems(mealId: Long, items: List<MealItemRecord>, values: Map<Long, List<Pair<NutrientDefinition, BigDecimal>>>) {
         jdbc.update("DELETE FROM nutri.meal_items WHERE meal_id=?", mealId)
         items.forEach { item ->

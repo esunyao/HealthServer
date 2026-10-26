@@ -10,8 +10,43 @@ class OpenApiContractTest {
         val root = java.nio.file.Path.of(System.getProperty("user.dir"))
         val file = listOf(root.resolve("openapi.yaml"), root.resolve("NutriMemo/openapi.yaml")).first { java.nio.file.Files.exists(it) }
         val text = java.nio.file.Files.readString(file)
-        listOf("/v1/nutri/capture-policy:", "/v1/nutri/capture-sessions:", "capture-sessions/drafts", "CaptureDraftPage", "maxDraftSessionCount", "/submit:", "CaptureSubmitRequest", "/retry:", "/v1/nutri/meals:", "MealCorrectionRequest", "MealMetadataPatchRequest", "X-Idempotency-Key").forEach { assertContains(text, it) }
+        listOf(
+            "/v1/nutri/capture-policy:",
+            "/v1/nutri/capture-sessions:",
+            "capture-sessions/drafts",
+            "CaptureDraftPage",
+            "maxDraftSessionCount",
+            "/submit:",
+            "CaptureSubmitRequest",
+            "/retry:",
+            "/v1/nutri/meals:",
+            "MealCorrectionRequest",
+            "MealMetadataPatchRequest",
+            "X-Idempotency-Key",
+        ).forEach { assertContains(text, it) }
         assertFalse(text.contains("/v1/nutri/foods:"))
         assertFalse(text.contains("/v1/nutri/custom-foods:"))
+    }
+
+    @Test
+    fun `meal detail exposes completed failed and review report states`() {
+        val root = java.nio.file.Path.of(System.getProperty("user.dir"))
+        val file = listOf(root.resolve("openapi.yaml"), root.resolve("NutriMemo/openapi.yaml"))
+            .first { java.nio.file.Files.exists(it) }
+        val text = java.nio.file.Files.readString(file)
+
+        listOf(
+            "MealAnalysisStatus:",
+            "needs_review",
+            "AnalysisReport:",
+            "analysisReport:",
+            "overallConfidence",
+            "resultVersion",
+            "reasonCode",
+            "reasonMessage",
+            "analyzedAt",
+            "失败或待复核",
+            "include_meal_notes",
+        ).forEach { assertContains(text, it) }
     }
 }

@@ -129,7 +129,7 @@ class NutriService(
     @Transactional
     fun retryCapture(user: AuthenticatedUser, sessionId: UUID): CaptureSubmissionView {
         val session = repository.sessionForUpdate(sessionId, user.userId) ?: notFound()
-        if (session.status != "failed") conflict("仅识别失败的会话可以重试")
+        if (session.status !in setOf("failed", "needs_review")) conflict("仅识别失败或需要复核的会话可以重试")
         if (repository.confirmedImageCount(sessionId) == 0) bad("会话没有可用于重试的已确认图片")
         val meal = repository.mealByCaptureSession(sessionId, user.userId) ?: notFound()
         repository.updateMealAnalysisStatus(meal.mealId, user.userId, "queued")
@@ -240,7 +240,24 @@ class NutriService(
         } else null to null
         return CaptureImageView(value.imageId.toString(), value.slotNo, value.objectKey, value.contentType, value.contentLength, value.capturedAt, value.status, value.createdAt, preview.first, preview.second)
     }
-    private fun mealView(value: MealRecord): MealView { val items = repository.items(value.mealId).map { item -> MealItemView(item.itemId.toString(), item.sequenceNo, item.displayName, item.estimatedWeightG, item.confidence, item.dataSource, item.userCorrected, item.notes, repository.itemNutrients(item.itemId)) }; return MealView(value.mealId.toString(), value.captureSessionId, value.mealType, value.consumedAt, value.timezone, value.localDate, value.notes, value.analysisStatus, items, repository.mealNutrients(value.mealId), value.createdAt, value.updatedAt) }
+    private fun mealView(value: MealRecord): MealView {
+        val items = repository.items(value.mealId).map { item ->
+            MealItemView(
+                item.itemId.toString(), item.sequenceNo, item.displayName, item.estimatedWeightG, item.confidence,
+                item.dataSource, item.userCorrected, item.notes, repository.itemNutrients(item.itemId),
+            )
+        }
+        val report = repository.analysisReport(value.mealId)?.let {
+            MealAnalysisReportView(
+                it.status, it.overallConfidence, it.resultVersion, it.reasonCode, it.reasonMessage, it.analyzedAt,
+            )
+        }
+        return MealView(
+            value.mealId.toString(), value.captureSessionId, value.mealType, value.consumedAt, value.timezone,
+            value.localDate, value.notes, value.analysisStatus, items, repository.mealNutrients(value.mealId),
+            report, value.createdAt, value.updatedAt,
+        )
+    }
     private fun daily(userId: UUID, date: LocalDate): DailySummaryView { val rows = repository.summaryRows(userId, date); if (rows.isEmpty()) return DailySummaryView(date, 0, emptyList(), emptyList(), OffsetDateTime.now()); val nutrients = rows.filter { it[2] != null }.map { NutrientValue(it[2] as String, it[3] as String, it[4] as String, it[5] as BigDecimal) }; val breakdown = repository.breakdownRows(userId, date).groupBy { it[0] as String }.map { (type, values) -> DailyMealBreakdown(type, values.first()[1] as Int, values.map { NutrientValue(it[2] as String, it[3] as String, it[4] as String, it[5] as BigDecimal) }) }; return DailySummaryView(date, rows.first()[0] as Int, nutrients, breakdown, rows.first()[1] as OffsetDateTime) }
     private fun deleteObject(image: CaptureImageRecord) { try { s3Client.deleteObject(DeleteObjectRequest.builder().bucket(image.bucket).key(image.objectKey).build()) } catch (_: Exception) { } }
     private fun validateTimezone(value: String) { try { ZoneId.of(value) } catch (_: Exception) { bad("timezone 必须是有效 IANA 时区") } }
