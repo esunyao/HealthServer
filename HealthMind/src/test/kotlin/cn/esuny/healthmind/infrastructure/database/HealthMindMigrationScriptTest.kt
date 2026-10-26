@@ -13,6 +13,7 @@ class HealthMindMigrationScriptTest {
     private val cutover = requireNotNull(javaClass.getResource("/db/migration/V4__replace_dify_with_agent_runs.sql")).readText()
     private val submission = requireNotNull(javaClass.getResource("/db/migration/V5__track_agent_submission_state.sql")).readText()
     private val hardening = requireNotNull(javaClass.getResource("/db/migration/V6__harden_task_run_integrity.sql")).readText()
+    private val notes = requireNotNull(javaClass.getResource("/db/migration/V7__add_meal_notes_to_capture_context.sql")).readText()
 
     @Test
     fun `migration declares workbook twelve tables`() {
@@ -71,6 +72,17 @@ class HealthMindMigrationScriptTest {
         assertTrue(hardening.contains("fk_ai_task_results_attempt_provenance"))
         assertTrue(hardening.contains("request_schema_sha256"))
         assertTrue(hardening.contains("claim_version BIGINT NOT NULL DEFAULT 0"))
+    }
+
+    @Test
+    fun `V7 adds notes only to the capture context definition`() {
+        assertTrue(notes.contains("tool_code = 'nutrimemo.capture_context.get'"))
+        assertTrue(notes.contains("\"notes\":{\"type\":[\"string\",\"null\"],\"maxLength\":1000}"))
+        assertTrue(notes.contains("\"required\":[\"capture_session_id\",\"meal_id\",\"meal_type\",\"consumed_at\",\"timezone\",\"image_urls\"]"))
+        assertTrue(notes.contains("response_schema_version = '1.1'"))
+        assertTrue(notes.contains("updated_rows <> 1"))
+        assertFalse(notes.contains("workflow_release_tools"))
+        assertFalse(notes.contains("orion.nutrition_context.get"))
     }
 
     @Test

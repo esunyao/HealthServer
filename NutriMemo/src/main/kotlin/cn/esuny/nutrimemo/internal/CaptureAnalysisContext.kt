@@ -2,9 +2,11 @@ package cn.esuny.nutrimemo.internal
 
 import cn.esuny.nutrimemo.config.OssProperties
 import cn.esuny.nutrimemo.persistence.NutriRepository
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import org.springframework.stereotype.Service
@@ -24,6 +26,7 @@ data class CaptureAnalysisContextRequest(
     @field:NotNull @JsonProperty("capture_session_id") val captureSessionId: UUID,
     @field:NotNull @JsonProperty("meal_id") val mealId: Long,
     @field:NotNull @JsonProperty("task_id") val taskId: UUID,
+    @JsonProperty("include_meal_notes") val includeMealNotes: Boolean = false,
 )
 
 data class CaptureAnalysisContextResponse(
@@ -32,6 +35,8 @@ data class CaptureAnalysisContextResponse(
     @JsonProperty("meal_type") val mealType: String,
     @JsonProperty("consumed_at") val consumedAt: OffsetDateTime,
     val timezone: String,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL)
+    @field:Size(max = 1000) val notes: String?,
     @JsonProperty("image_urls") val imageUrls: List<ConfirmedImageContext>,
 )
 
@@ -79,6 +84,7 @@ class CaptureAnalysisContextService(
             meal.mealType,
             meal.consumedAt,
             meal.timezone,
+            if (request.includeMealNotes) meal.notes else null,
             images,
         )
     }

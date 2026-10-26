@@ -41,6 +41,7 @@ class InternalContextClient(
                 "capture_session_id" to meal.captureSessionId.toString(),
                 "meal_id" to meal.mealId,
                 "task_id" to grant.taskId.toString(),
+                "include_meal_notes" to (grant.responseSchemaVersion != "1.0"),
             ),
         )
     }
