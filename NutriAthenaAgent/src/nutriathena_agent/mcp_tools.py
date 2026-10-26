@@ -6,12 +6,14 @@ import json
 import re
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Iterable
 from uuid import UUID, uuid5
 
 import httpx
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool, tool
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, ValidationError
 
 from .config import MealSettings
 
@@ -29,6 +31,39 @@ _URL_PATTERN = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 
 class McpSetupError(RuntimeError):
     """The configured HealthMind MCP or OAuth client could not be initialized."""
+
+
+class ConfirmedCaptureImage(BaseModel):
+    """One authorized capture image from HealthMind's response contract."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content_type: str
+    content_length: int = Field(ge=1)
+    captured_at: datetime | None = None
+    url: AnyUrl
+    expires_in_seconds: int = Field(ge=1)
+
+
+class CaptureContext(BaseModel):
+    """Validated capture-context contract consumed by the meal runner."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    capture_session_id: UUID
+    meal_id: int
+    meal_type: str
+    consumed_at: datetime
+    timezone: str
+    notes: str | None = Field(default=None, max_length=1000)
+    image_urls: list[ConfirmedCaptureImage] = Field(min_length=1)
+
+
+def parse_capture_context(payload: dict[str, Any]) -> CaptureContext:
+    try:
+        return CaptureContext.model_validate(payload)
+    except ValidationError as exception:
+        raise McpSetupError("HealthMind MCP capture context does not match the local contract") from exception
 
 
 @dataclass
@@ -151,6 +186,8 @@ def _context_json(result: Any, *, capture: bool) -> tuple[str, dict[str, Any]]:
     if not isinstance(payload, dict):
         raise McpSetupError("HealthMind MCP context must be a JSON object")
     raw_payload = payload
+    if capture:
+        parse_capture_context(payload)
     images = payload.get("image_urls")
     image_count = len(images) if isinstance(images, list) else 0
     safe_payload = _remove_sensitive_fields(payload)

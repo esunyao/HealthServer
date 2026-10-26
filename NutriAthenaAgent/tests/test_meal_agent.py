@@ -17,6 +17,26 @@ from nutriathena_agent.meal_agent import build_meal_agent
 from nutriathena_agent.mcp_tools import _McpSdkRemoteTool, bind_context_tools, _stable_tool_call_id
 
 
+def capture_context_payload(*, url: str = "https://media.example.test/photo") -> dict[str, object]:
+    return {
+        "capture_session_id": "33333333-3333-4333-8333-333333333333",
+        "meal_id": 123,
+        "meal_type": "lunch",
+        "consumed_at": "2026-10-26T12:30:00+08:00",
+        "timezone": "Asia/Shanghai",
+        "notes": "米饭约半碗",
+        "image_urls": [
+            {
+                "content_type": "image/jpeg",
+                "content_length": 128,
+                "captured_at": "2026-10-26T12:29:00+08:00",
+                "url": url,
+                "expires_in_seconds": 300,
+            },
+        ],
+    }
+
+
 def test_local_images_preserve_order_and_encode_supported_types(tmp_path):
     first = tmp_path / "first.jpg"
     second = tmp_path / "second.png"
@@ -170,13 +190,9 @@ def test_mcp_wrappers_inject_ids_and_remove_urls():
     capture = FakeMcpTool(
         "nutrimemo.capture_context.get",
         json.dumps(
-            {
-                "capture_session_id": "capture-id",
-                "meal_id": 123,
-                "meal_type": "lunch",
-                "image_urls": [{"url": "https://storage.invalid/photo?X-Amz-Signature=secret"}],
-                "imageURL": "https://storage.invalid/another?token=secret",
-            }
+            capture_context_payload(
+                url="https://storage.invalid/photo?X-Amz-Signature=secret",
+            )
         ),
     )
     nutrition = FakeMcpTool(
@@ -197,6 +213,7 @@ def test_mcp_wrappers_inject_ids_and_remove_urls():
     assert "X-Amz-Signature" not in capture_result
     assert "storage.invalid" not in capture_result
     assert "capture_session_id" not in capture_result
+    assert json.loads(capture_result)["notes"] == "米饭约半碗"
     assert json.loads(capture_result)["confirmed_image_count"] == 1
     assert "subject_id" not in nutrition_result
     assert {"capture_context", "nutrition_context"} == called
@@ -210,7 +227,7 @@ def test_sdk_mcp_adapter_uses_reserved_request_meta_for_stable_tool_call_id():
 
         async def call_tool(self, name, *, arguments, meta):
             self.calls.append((name, arguments, meta))
-            return {"structuredContent": {"meal_type": "lunch"}}
+            return {"structuredContent": capture_context_payload()}
 
     async def invoke():
         session = Session()
@@ -245,7 +262,7 @@ def test_sdk_mcp_adapter_uses_reserved_request_meta_for_stable_tool_call_id():
 def test_mcp_structured_content_is_available_to_agent():
     message = ToolMessage(
         content="",
-        artifact={"structured_content": {"meal_type": "lunch", "confirmed": True}},
+        artifact={"structured_content": capture_context_payload()},
         tool_call_id="mcp-test-call",
         name="capture_context",
     )
@@ -262,12 +279,12 @@ def test_mcp_structured_content_is_available_to_agent():
     result = asyncio.run(tools[0].ainvoke({}))
     parsed = json.loads(result)
     assert parsed["meal_type"] == "lunch"
-    assert parsed["confirmed_image_count"] == 0
+    assert parsed["confirmed_image_count"] == 1
 
 
 def test_mcp_context_tool_is_limited_to_one_call():
     remote = [
-        FakeMcpTool("nutrimemo.capture_context.get", "{}"),
+        FakeMcpTool("nutrimemo.capture_context.get", json.dumps(capture_context_payload())),
         FakeMcpTool("orion.nutrition_context.get", "{}"),
     ]
     tools, _, _ = bind_context_tools(
