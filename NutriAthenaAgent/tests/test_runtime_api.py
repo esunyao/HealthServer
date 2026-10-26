@@ -1,19 +1,40 @@
 from __future__ import annotations
 
+import json
+from copy import deepcopy
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from pathlib import Path
+from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from nutriathena_agent.api import create_app
 from nutriathena_agent.database import ConflictError
+from nutriathena_agent.models import RunCreateRequest, RunResponse, ThreadCreateRequest, ThreadResponse
 from nutriathena_agent.runtime_config import RuntimeSettings
 
-TASK_ID = UUID("11111111-1111-4111-8111-111111111111")
-ATTEMPT_ID = UUID("22222222-2222-4222-8222-222222222222")
-RELEASE_ID = UUID("33333333-3333-4333-8333-333333333333")
-ARTIFACT_SHA = "a" * 64
+_FIXTURES = (
+    Path(__file__).resolve().parents[2]
+    / "integration-contracts"
+    / "src"
+    / "main"
+    / "resources"
+    / "agent-protocol"
+    / "v1"
+    / "examples"
+)
+THREAD_CREATE_REQUEST = json.loads((_FIXTURES / "thread-create-request.json").read_text(encoding="utf-8"))
+THREAD_RESPONSE = json.loads((_FIXTURES / "thread-response.json").read_text(encoding="utf-8"))
+RUN_CREATE_REQUEST = json.loads((_FIXTURES / "run-create-request.json").read_text(encoding="utf-8"))
+RUN_RESPONSE = json.loads((_FIXTURES / "run-response.json").read_text(encoding="utf-8"))
+
+TASK_ID = UUID(RUN_CREATE_REQUEST["input"]["task_id"])
+ATTEMPT_ID = UUID(RUN_CREATE_REQUEST["input"]["attempt_id"])
+RELEASE_ID = UUID(RUN_CREATE_REQUEST["metadata"]["release_id"])
+ARTIFACT_SHA = RUN_CREATE_REQUEST["metadata"]["artifact_sha256"]
+RUN_ID = UUID(RUN_RESPONSE["run_id"])
+RUN_CREATED_AT = datetime(2026, 10, 26, tzinfo=timezone.utc)
 
 
 def _settings() -> RuntimeSettings:
@@ -68,10 +89,8 @@ class FakeRepository:
             if existing["request_sha256"] != kwargs["request_sha256"]:
                 raise ConflictError("IDEMPOTENCY_CONFLICT")
             return existing, False
-        run_id = uuid4()
-        now = datetime.now(timezone.utc)
         row = {
-            "run_id": run_id,
+            "run_id": RUN_ID,
             "thread_id": kwargs["thread_id"],
             "task_id": kwargs["task_id"],
             "attempt_id": attempt_id,
@@ -82,13 +101,13 @@ class FakeRepository:
             "agent_assistant_id": kwargs["assistant_id"],
             "agent_artifact_sha256": kwargs["artifact_sha256"],
             "status": "pending",
-            "created_at": now,
+            "created_at": RUN_CREATED_AT,
             "started_at": None,
             "completed_at": None,
             "error_code": None,
             "error_message": None,
         }
-        self.runs_by_id[run_id] = row
+        self.runs_by_id[RUN_ID] = row
         self.runs_by_attempt[attempt_id] = row
         return row, True
 
@@ -106,22 +125,12 @@ def _headers() -> dict[str, str]:
     return {"Authorization": "Bearer signed-test-token"}
 
 
+def _thread_body() -> dict[str, object]:
+    return deepcopy(THREAD_CREATE_REQUEST)
+
+
 def _run_body() -> dict[str, object]:
-    return {
-        "assistant_id": "meal-assistant-v1",
-        "input": {
-            "task_id": str(TASK_ID),
-            "attempt_id": str(ATTEMPT_ID),
-            "trace_id": "trace-for-test",
-        },
-        "metadata": {
-            "task_id": str(TASK_ID),
-            "attempt_id": str(ATTEMPT_ID),
-            "release_id": str(RELEASE_ID),
-            "artifact_sha256": ARTIFACT_SHA,
-        },
-        "on_completion": "keep",
-    }
+    return deepcopy(RUN_CREATE_REQUEST)
 
 
 def _client(repository: FakeRepository) -> TestClient:
@@ -135,16 +144,65 @@ def _client(repository: FakeRepository) -> TestClient:
     return TestClient(app)
 
 
+def test_shared_agent_protocol_fixtures_match_pydantic_models():
+    assert ThreadCreateRequest.model_validate(THREAD_CREATE_REQUEST).model_dump(mode="json") == THREAD_CREATE_REQUEST
+    assert ThreadResponse.model_validate(THREAD_RESPONSE).model_dump(mode="json") == THREAD_RESPONSE
+    assert RunCreateRequest.model_validate(RUN_CREATE_REQUEST).model_dump(mode="json") == RUN_CREATE_REQUEST
+    assert RunResponse.model_validate(RUN_RESPONSE).model_dump(mode="json") == RUN_RESPONSE
+
+
+def test_thread_fixture_creation_and_repeated_create_are_idempotent():
+    repository = FakeRepository()
+    with _client(repository) as client:
+        created = client.post("/threads", headers=_headers(), json=_thread_body())
+        repeated = client.post("/threads", headers=_headers(), json=_thread_body())
+
+        assert created.status_code == repeated.status_code == 200
+        assert created.json() == repeated.json() == THREAD_RESPONSE
+        assert client.get(f"/threads/{ATTEMPT_ID}", headers=_headers()).json() == THREAD_RESPONSE
+        assert len(repository.threads) == 1
+
+
+def test_thread_fixture_rejects_conflicting_task_identity():
+    repository = FakeRepository()
+    with _client(repository) as client:
+        client.post("/threads", headers=_headers(), json=_thread_body())
+        conflicting = _thread_body()
+        conflicting["metadata"]["task_id"] = str(UUID("99999999-9999-4999-8999-999999999999"))
+        response = client.post("/threads", headers=_headers(), json=conflicting)
+
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "THREAD_IDENTITY_CONFLICT"
+        assert len(repository.threads) == 1
+
+
+def test_thread_fixture_can_be_rebuilt_after_lost_creation_response():
+    repository = FakeRepository()
+    with _client(repository) as client:
+        client.post("/threads", headers=_headers(), json=_thread_body())
+
+        rebuilt_from_get = client.get(f"/threads/{ATTEMPT_ID}", headers=_headers())
+        rebuilt_from_post = client.post("/threads", headers=_headers(), json=_thread_body())
+
+        assert rebuilt_from_get.json() == rebuilt_from_post.json() == THREAD_RESPONSE
+
+
+def test_thread_attempt_id_remains_optional_for_request_compatibility():
+    body = _thread_body()
+    del body["metadata"]["attempt_id"]
+    with _client(FakeRepository()) as client:
+        response = client.post("/threads", headers=_headers(), json=body)
+
+    assert response.status_code == 200
+    assert response.json() == THREAD_RESPONSE
+
+
 def test_healthmind_http_contract_persists_and_reuses_one_run():
     repository = FakeRepository()
     with _client(repository) as client:
-        thread = client.post(
-            "/threads",
-            headers=_headers(),
-            json={"thread_id": str(ATTEMPT_ID), "metadata": {"task_id": str(TASK_ID)}},
-        )
+        thread = client.post("/threads", headers=_headers(), json=_thread_body())
         assert thread.status_code == 200
-        assert thread.json() == {"thread_id": str(ATTEMPT_ID)}
+        assert thread.json() == THREAD_RESPONSE
 
         url = f"/threads/{ATTEMPT_ID}/runs"
         headers = {**_headers(), "Idempotency-Key": str(ATTEMPT_ID)}
@@ -156,6 +214,7 @@ def test_healthmind_http_contract_persists_and_reuses_one_run():
         assert first.json()["assistant_id"] == "meal-assistant-v1"
         assert first.json()["metadata"]["release_id"] == str(RELEASE_ID)
         assert first.json()["metadata"]["artifact_sha256"] == ARTIFACT_SHA
+        assert RunResponse.model_validate(first.json()) == RunResponse.model_validate(RUN_RESPONSE)
 
         run_id = first.json()["run_id"]
         assert client.get(f"/runs/{run_id}", headers=_headers()).json()["status"] == "pending"

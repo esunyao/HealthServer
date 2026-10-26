@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import json
 from contextlib import asynccontextmanager
-from datetime import datetime
 from typing import Any, AsyncIterator
 from uuid import UUID
 
@@ -17,37 +16,43 @@ from .artifact import compute_artifact_sha256
 from .auth import TokenVerifier
 from .database import ConflictError, Repository
 from .migrations import apply_migrations
-from .models import RunCreateRequest, ThreadCreateRequest
+from .models import RunCreateRequest, RunResponse, ThreadCreateRequest, ThreadResponse
 from .runtime_config import RuntimeSettings, load_runtime_settings
 from .worker import DurableWorker
 
 _bearer = HTTPBearer(auto_error=False)
 
 
-def _time(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+def _thread_response(row: dict[str, Any]) -> ThreadResponse:
+    return ThreadResponse(
+        thread_id=row["thread_id"],
+        metadata={
+            "task_id": row["task_id"],
+            "attempt_id": row["attempt_id"],
+        },
+    )
 
 
-def _run_response(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "run_id": str(row["run_id"]),
-        "thread_id": str(row["thread_id"]),
-        "task_id": str(row["task_id"]),
-        "attempt_id": str(row["attempt_id"]),
-        "assistant_id": row["agent_assistant_id"],
-        "status": row["status"],
-        "metadata": {
-            "task_id": str(row["task_id"]),
-            "attempt_id": str(row["attempt_id"]),
-            "release_id": str(row["release_id"]),
+def _run_response(row: dict[str, Any]) -> RunResponse:
+    return RunResponse(
+        run_id=row["run_id"],
+        thread_id=row["thread_id"],
+        task_id=row["task_id"],
+        attempt_id=row["attempt_id"],
+        assistant_id=row["agent_assistant_id"],
+        status=row["status"],
+        metadata={
+            "task_id": row["task_id"],
+            "attempt_id": row["attempt_id"],
+            "release_id": row["release_id"],
             "artifact_sha256": row["agent_artifact_sha256"].strip(),
         },
-        "created_at": _time(row["created_at"]),
-        "started_at": _time(row.get("started_at")),
-        "completed_at": _time(row.get("completed_at")),
-        "error_code": row.get("error_code"),
-        "error_message": row.get("error_message"),
-    }
+        created_at=row["created_at"],
+        started_at=row.get("started_at"),
+        completed_at=row.get("completed_at"),
+        error_code=row.get("error_code"),
+        error_message=row.get("error_message"),
+    )
 
 
 def create_app(
@@ -126,16 +131,16 @@ def create_app(
             raise HTTPException(status_code=503, detail="Database unavailable")
         return {"status": "ok"}
 
-    @app.post("/threads", status_code=200)
+    @app.post("/threads", status_code=200, response_model=ThreadResponse)
     async def create_thread(
         body: ThreadCreateRequest,
         _: dict[str, Any] = Depends(authorize),
-    ) -> dict[str, str]:
+    ) -> ThreadResponse:
         attempt_id = body.metadata.attempt_id or body.thread_id
         if body.thread_id != attempt_id:
             raise HTTPException(status_code=409, detail={"code": "THREAD_IDENTITY_CONFLICT"})
         try:
-            await asyncio.to_thread(
+            row = await asyncio.to_thread(
                 repository.create_thread,
                 body.thread_id,
                 body.metadata.task_id,
@@ -143,29 +148,25 @@ def create_app(
             )
         except ConflictError as exception:
             raise HTTPException(status_code=409, detail={"code": "THREAD_IDENTITY_CONFLICT"}) from exception
-        return {"thread_id": str(body.thread_id)}
+        return _thread_response(row)
 
-    @app.get("/threads/{thread_id}")
+    @app.get("/threads/{thread_id}", response_model=ThreadResponse)
     async def get_thread(
         thread_id: UUID,
         _: dict[str, Any] = Depends(authorize),
-    ) -> dict[str, Any]:
+    ) -> ThreadResponse:
         row = await asyncio.to_thread(repository.get_thread, thread_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Thread not found")
-        return {
-            "thread_id": str(row["thread_id"]),
-            "task_id": str(row["task_id"]),
-            "attempt_id": str(row["attempt_id"]),
-        }
+        return _thread_response(row)
 
-    @app.post("/threads/{thread_id}/runs", status_code=200)
+    @app.post("/threads/{thread_id}/runs", status_code=200, response_model=RunResponse)
     async def create_run(
         thread_id: UUID,
         body: RunCreateRequest,
         idempotency_key: str = Header(alias="Idempotency-Key"),
         _: dict[str, Any] = Depends(authorize),
-    ) -> dict[str, Any]:
+    ) -> RunResponse:
         if (
             body.input.task_id != body.metadata.task_id
             or body.input.attempt_id != body.metadata.attempt_id
@@ -207,22 +208,22 @@ def create_app(
             raise HTTPException(status_code=409, detail={"code": "THREAD_IDENTITY_CONFLICT"}) from exception
         return _run_response(row)
 
-    @app.get("/threads/{thread_id}/runs")
+    @app.get("/threads/{thread_id}/runs", response_model=list[RunResponse])
     async def list_runs(
         thread_id: UUID,
         _: dict[str, Any] = Depends(authorize),
-    ) -> list[dict[str, Any]]:
+    ) -> list[RunResponse]:
         thread = await asyncio.to_thread(repository.get_thread, thread_id)
         if thread is None:
             raise HTTPException(status_code=404, detail="Thread not found")
         rows = await asyncio.to_thread(repository.list_runs, thread_id)
         return [_run_response(row) for row in rows]
 
-    @app.get("/runs/{run_id}")
+    @app.get("/runs/{run_id}", response_model=RunResponse)
     async def get_run(
         run_id: UUID,
         _: dict[str, Any] = Depends(authorize),
-    ) -> dict[str, Any]:
+    ) -> RunResponse:
         row = await asyncio.to_thread(repository.get_run, run_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Run not found")
@@ -252,11 +253,11 @@ def create_app(
                 return {"status": row["status"], "run_id": str(row["run_id"])}
             await asyncio.sleep(0.25)
 
-    @app.post("/runs/{run_id}/cancel")
+    @app.post("/runs/{run_id}/cancel", response_model=RunResponse)
     async def cancel_run(
         run_id: UUID,
         _: dict[str, Any] = Depends(authorize),
-    ) -> dict[str, Any]:
+    ) -> RunResponse:
         row = await asyncio.to_thread(repository.request_cancel, run_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Run not found")
