@@ -135,7 +135,7 @@ healthmind:
   # 自托管 Agent Protocol 运行端；每个 release 固定一个部署 key。
   agent:
     deployments:
-      meal-v1: ${HEALTHMIND_AGENT_BASE_URL:https://agent.example.invalid}
+      meal-analysis-v1: ${HEALTHMIND_AGENT_BASE_URL:https://agent.example.invalid}
     max-in-flight: ${HEALTHMIND_AGENT_MAX_IN_FLIGHT:10}
     connect-timeout: ${HEALTHMIND_AGENT_CONNECT_TIMEOUT:3s}
     read-timeout: ${HEALTHMIND_AGENT_READ_TIMEOUT:15s}

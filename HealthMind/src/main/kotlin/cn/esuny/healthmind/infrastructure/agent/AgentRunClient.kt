@@ -35,7 +35,11 @@ class AgentRunClient(
             (uri.scheme == "https" || (uri.scheme == "http" && uri.host in setOf("localhost", "127.0.0.1")))) {
             "Agent deployment must use HTTPS or loopback HTTP"
         }
-        val httpClient = HttpClient.newBuilder().connectTimeout(properties.agent.connectTimeout).build()
+        val httpClient = HttpClient.newBuilder()
+            // 受到python Uvicorn 限制，目前只能使用 HTTP/1.1
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(properties.agent.connectTimeout)
+            .build()
         builder.clone()
             .requestFactory(JdkClientHttpRequestFactory(httpClient).apply { setReadTimeout(properties.agent.readTimeout) })
             .baseUrl(address.trimEnd('/'))

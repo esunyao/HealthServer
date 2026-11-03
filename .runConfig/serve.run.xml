@@ -1,0 +1,26 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="serve" type="UvRunConfigurationType" factoryName="UvRunConfigurationType">
+    <option name="args">
+      <list>
+        <option value="serve" />
+      </list>
+    </option>
+    <option name="checkSync" value="true" />
+    <option name="debugJustMyCode" value="false" />
+    <option name="env">
+      <map />
+    </option>
+    <option name="runType" value="MODULE" />
+    <option name="scriptOrModule" value="nutriathena_agent.main" />
+    <option name="uvArgs">
+      <list>
+        <option value="--directory" />
+        <option value="$PROJECT_DIR$/NutriAthenaAgent" />
+        <option value="--env-file" />
+        <option value="$PROJECT_DIR$/NutriAthenaAgent/.env" />
+      </list>
+    </option>
+    <option name="uvSdkKey" value="E:\ProjectSpace\HealthServer\NutriAthenaAgent\.venv" />
+    <method v="2" />
+  </configuration>
+</component>

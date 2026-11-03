@@ -54,6 +54,8 @@ skills-lock.json
 **/.venv
 
 **/doc-project/**
+!**/doc-project/todo/
+!**/doc-project/todo/**
 **/docp/**
 
 ### 本地环境变量（含真实凭据），禁止提交 ###

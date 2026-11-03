@@ -2,6 +2,8 @@
 
 This document records the public HTTP and persistence boundary implemented by NutriAthenaAgent. HealthMind integration details are maintained in `HealthMind/doc/agent-runtime.md`.
 
+Release registration and deployment: [HealthMind release registration guide](release.md).
+
 ## HTTP API
 
 All routes other than `GET /healthz` require `Authorization: Bearer <token>`. The service validates the signature against configured JWKS and checks exact issuer, audience, caller (`azp` or `client_id`) and scope before reading or changing run data.

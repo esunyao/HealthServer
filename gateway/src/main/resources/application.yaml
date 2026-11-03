@@ -24,6 +24,10 @@ spring:
   application:
     name: GateWay
 
+  output:
+    ansi:
+      enabled: always
+
   config:
     import:
       - nacos:GateWay_Application.yaml?group=GATEWAY_GROUP&refreshEnabled=true
