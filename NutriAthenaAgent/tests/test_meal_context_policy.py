@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from nutriathena_agent.debug import DebugLevel
 from nutriathena_agent.images import CapturedImage
 from nutriathena_agent.meal_agent import DeepAgentMealRunner, _load_evidence, _meal_request
 from nutriathena_agent.mcp_tools import (
@@ -182,6 +183,8 @@ def test_runner_passes_capture_notes_to_request_with_empty_evidence(monkeypatch)
     monkeypatch.setattr(
         "nutriathena_agent.meal_agent.load_meal_settings",
         lambda: SimpleNamespace(
+            model="test-model",
+            debug_level=DebugLevel.OFF,
             media_allowed_hosts=frozenset({"media.example.test"}),
             max_images=10,
             max_image_bytes=1024 * 1024,

@@ -14,7 +14,7 @@
 |---|---|
 | Python 包 | `nutriathena_agent`，Python 3.11+，`uv` 管理，`src/` 布局 |
 | 服务入口 | `nutriathena-agent serve`，FastAPI + PostgreSQL worker |
-| CLI | `nutriathena-agent migrate/serve/smoke/meal/graph/agent`；兼容旧 `agentdevelop` 脚本名 |
+| CLI | `nutriathena-agent migrate/serve/smoke/meal/graph/agent`；`serve`/`meal` 支持 `--debug [off\|trace\|full]`；兼容旧 `agentdevelop` 脚本名 |
 | 数据库 | 独立 `nutriathena_agent` schema；版本 SQL 位于 [`migrations/`](./migrations/) |
 | HTTP 契约 | [`doc/README.md`](./doc/README.md)；仓库级对接定义见 `HealthMind/doc/agent-runtime.md` |
 | 主要依赖 | FastAPI、Psycopg 3、PyJWT、MCP Python SDK、LangGraph/DeepAgents |
@@ -29,6 +29,7 @@
 | [`src/nutriathena_agent/worker.py`](./src/nutriathena_agent/worker.py) | pending claim、心跳续租、超时/取消、调用 runner、条件终态写入 |
 | [`src/nutriathena_agent/auth.py`](./src/nutriathena_agent/auth.py) | JWKS 签名、issuer/audience/caller/scope 验证 |
 | [`src/nutriathena_agent/runtime_config.py`](./src/nutriathena_agent/runtime_config.py) | 服务、数据库、OAuth、部署与 worker 配置 |
+| [`src/nutriathena_agent/debug.py`](./src/nutriathena_agent/debug.py) | opt-in 调试级别、脱敏事件日志与 LangChain 执行轨迹回调 |
 | [`src/nutriathena_agent/meal_agent.py`](./src/nutriathena_agent/meal_agent.py) | 可替换 `MealRunner` 协议和现有 DeepAgent meal graph 适配 |
 | [`src/nutriathena_agent/mcp_tools.py`](./src/nutriathena_agent/mcp_tools.py) | MCP SDK session、稳定 `_meta.tool_call_id`、授权上下文预取与脱敏 |
 | [`src/nutriathena_agent/images.py`](./src/nutriathena_agent/images.py) | MCP 授权图片的主机白名单、大小/MIME 限制和内存多模态编码 |

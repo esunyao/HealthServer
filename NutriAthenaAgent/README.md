@@ -50,6 +50,24 @@ uv run nutriathena-agent agent "统计一下这句话的词数：晚饭吃了清
 
 `meal` 命令通过 MCP 和模型运行端直接执行一次已获授权的 attempt。生产任务应通过 `serve` 接入，以使用 PostgreSQL 提供的幂等控制、执行租约、数据保留和取消机制。
 
+## 调试模式
+
+默认关闭。通过环境变量 `NUTRIATHENA_DEBUG` 或 `serve`/`meal` 子命令的 `--debug` 开启；CLI 优先于环境变量：
+
+```bash
+NUTRIATHENA_DEBUG=trace uv run nutriathena-agent serve
+uv run nutriathena-agent meal --debug --task-id <uuid> --attempt-id <uuid>
+uv run nutriathena-agent meal --debug full --task-id <uuid> --attempt-id <uuid>
+```
+
+| 级别 | 输出 |
+|---|---|
+| `off`（默认） | 不改变现有日志行为 |
+| `trace` | 结构化轨迹：run 起止、LangGraph 节点、模型/工具调用、耗时、token 与终态；不含提示词、图片、URL 或餐食内容 |
+| `full` | 在 `trace` 基础上输出模型输入/输出、工具入参与返回及最终结果原文；仅限本地开发 |
+
+调试事件写入 stderr。`full` 会包含真实餐食备注与模型输出，且仍会移除图片 data URL、签名 URL、Bearer/JWT 与常见敏感键；不要在生产环境开启。
+
 ## 餐食分析边界
 
 - 餐食提示词和膳食技能沿用同级目录 [`AgentDeveloper/skills`](../AgentDeveloper/skills/) 中维护的资产，本服务将现有分析流程适配为可替换的执行器。

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Protocol
@@ -18,6 +19,7 @@ from pydantic import ValidationError
 
 from .config import MealSettings, build_meal_model, load_meal_settings
 from .contracts import NeedsReview, parse_meal_result, result_dict
+from .debug import DebugTraceCallback, DebugTracer, configure_debug_logging
 from .dietary_prompt import build_system_prompt
 from .images import CapturedImage, ImageInputError, image_message_parts, load_captured_images
 from .mcp_tools import CaptureContext, McpSetupError, connect_healthmind_mcp
@@ -132,12 +134,19 @@ class DeepAgentMealRunner:
     """Production runner around the existing meal graph and maintained prompt."""
 
     async def run(self, *, task_id: str, attempt_id: str, trace_id: str = "") -> dict[str, object]:
-        del trace_id  # The current meal prompt does not consume trace metadata.
         task_id = str(UUID(task_id))
         attempt_id = str(UUID(attempt_id))
         settings = load_meal_settings()
-        mcp = await connect_healthmind_mcp(settings, task_id=task_id, attempt_id=attempt_id)
+        configure_debug_logging(settings.debug_level)
+        tracer = DebugTracer(settings.debug_level, trace_id=trace_id or "-")
+        started = time.perf_counter()
+        status = "error"
+        reason_code: str | None = None
+        error_type: str | None = None
+        mcp = None
+        tracer.event("meal.started", model=settings.model, debug_level=settings.debug_level)
         try:
+            mcp = await connect_healthmind_mcp(settings, task_id=task_id, attempt_id=attempt_id)
             raw_images = mcp.capture_payload.get("image_urls", []) if mcp.capture_payload else []
             try:
                 images = await load_captured_images(
@@ -148,6 +157,7 @@ class DeepAgentMealRunner:
                     max_total_bytes=settings.max_total_image_bytes,
                 )
             except ImageInputError:
+                status, reason_code = "needs_review", "IMAGE_UNAVAILABLE"
                 return result_dict(
                     NeedsReview(
                         status="needs_review",
@@ -156,6 +166,7 @@ class DeepAgentMealRunner:
                     )
                 )
             if not images:
+                status, reason_code = "needs_review", "IMAGE_UNAVAILABLE"
                 return result_dict(
                     NeedsReview(
                         status="needs_review",
@@ -165,6 +176,7 @@ class DeepAgentMealRunner:
                 )
 
             capture_context = CaptureContext.model_validate(mcp.capture_payload or {})
+            tracer.event("meal.context", images=len(images), notes_present=bool(capture_context.notes))
             evidence = _load_evidence(None, settings)
             system_prompt = build_system_prompt()
             model = build_meal_model(settings)
@@ -173,9 +185,12 @@ class DeepAgentMealRunner:
                 {"type": "text", "text": _meal_request(capture_context.notes, evidence, images)},
                 *image_message_parts(images),
             ]
+            config: dict[str, Any] = {"recursion_limit": 12}
+            if tracer.enabled:
+                config["callbacks"] = [DebugTraceCallback(tracer)]
             response = await agent.ainvoke(
                 {"messages": [HumanMessage(content=message_parts)]},
-                config={"recursion_limit": 12},
+                config=config,
             )
             if not _REQUIRED_CONTEXT_TOOLS.issubset(mcp.presented):
                 missing = ", ".join(sorted(_REQUIRED_CONTEXT_TOOLS - mcp.presented))
@@ -188,10 +203,31 @@ class DeepAgentMealRunner:
                     reason_code="CONTRACT_INVALID",
                     message="模型结果不是符合 HealthMind 契约的严格 JSON，未生成可入库结果。",
                 )
-            return result_dict(parsed)
+            if isinstance(parsed, NeedsReview):
+                status, reason_code = "needs_review", parsed.reason_code
+            else:
+                status = "analysis"
+            result = result_dict(parsed)
+            if tracer.full:
+                tracer.content(
+                    "meal.result",
+                    json.dumps(result, ensure_ascii=False, separators=(",", ":")),
+                )
+            return result
+        except Exception as exception:
+            error_type = type(exception).__name__
+            raise
         finally:
-            with suppress(Exception):
-                await mcp.aclose()
+            tracer.event(
+                "meal.finished",
+                status=status,
+                reason_code=reason_code,
+                error_type=error_type,
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+            if mcp is not None:
+                with suppress(Exception):
+                    await mcp.aclose()
 
 
 _DEFAULT_RUNNER = DeepAgentMealRunner()

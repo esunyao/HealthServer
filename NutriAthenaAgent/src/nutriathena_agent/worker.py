@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from .contracts import parse_meal_result, result_dict
 from .database import Repository
+from .debug import DebugTracer, configure_debug_logging
 from .meal_agent import MealRunner, run_meal_analysis
 from .runtime_config import RuntimeSettings
 
@@ -38,6 +39,7 @@ class DurableWorker:
         self.runner = runner
         self.owner = f"{socket.gethostname()}:{uuid4()}"
         self._stopping = asyncio.Event()
+        configure_debug_logging(settings.debug_level)
 
     async def run_forever(self) -> None:
         while not self._stopping.is_set():
@@ -95,6 +97,12 @@ class DurableWorker:
         task_id = str(row["task_id"])
         payload = row["request_payload"]
         trace_id = payload.get("input", {}).get("trace_id", "")
+        tracer = DebugTracer(
+            self.settings.debug_level,
+            trace_id=trace_id,
+            run_id=str(run_id),
+        )
+        tracer.event("worker.run.started", attempt_id=attempt_id, task_id=task_id)
         lost_lease = asyncio.Event()
         cancel_requested = asyncio.Event()
         stop_heartbeat = asyncio.Event()

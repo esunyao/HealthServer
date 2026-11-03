@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from .config import load_env
+from .debug import DebugLevel, parse_debug_level
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class RuntimeSettings:
     run_timeout_seconds: int = 600
     result_retention_hours: int = 24
     row_retention_days: int = 180
+    debug_level: DebugLevel = DebugLevel.OFF
 
 
 def _required(name: str) -> str:
@@ -83,4 +85,5 @@ def load_runtime_settings() -> RuntimeSettings:
         run_timeout_seconds=timeout,
         result_retention_hours=result_retention,
         row_retention_days=row_retention,
+        debug_level=parse_debug_level(os.environ.get("NUTRIATHENA_DEBUG", "off")),
     )

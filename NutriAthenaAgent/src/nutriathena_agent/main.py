@@ -11,6 +11,7 @@ from uuid import UUID
 
 from .basic_graph import DEFAULT_TEXT, run as run_graph
 from .config import load_env
+from .debug import configure_debug_logging
 from .simple_agent import DEFAULT_QUESTION, run as run_agent
 
 
@@ -21,6 +22,24 @@ def _uuid_argument(value: str) -> str:
         raise argparse.ArgumentTypeError("必须是 UUID") from exception
 
 
+def _add_debug_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--debug",
+        nargs="?",
+        const="trace",
+        default=None,
+        choices=("off", "trace", "full"),
+        type=str.lower,
+        help="输出调试轨迹；省略值等价 trace，full 仅限本地开发",
+    )
+
+
+def _apply_debug_argument(args: argparse.Namespace) -> None:
+    value = getattr(args, "debug", None)
+    if value is not None:
+        os.environ["NUTRIATHENA_DEBUG"] = value
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="nutriathena-agent")
     commands = parser.add_subparsers(dest="command")
@@ -28,9 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
     graph.add_argument("text", nargs="?", default=DEFAULT_TEXT)
     agent = commands.add_parser("agent", help="运行最小 LangChain agent 教学示例")
     agent.add_argument("question", nargs="?", default=DEFAULT_QUESTION)
-    commands.add_parser("serve", help="启动 HealthMind-compatible HTTP 服务和持久 worker")
+    serve = commands.add_parser("serve", help="启动 HealthMind-compatible HTTP 服务和持久 worker")
+    _add_debug_argument(serve)
     commands.add_parser("migrate", help="应用校验和保护的 PostgreSQL 版本迁移")
     meal = commands.add_parser("meal", help="直接运行一个 HealthMind 餐食 attempt（生产使用 serve）")
+    _add_debug_argument(meal)
     meal.add_argument("--task-id", required=True, type=_uuid_argument)
     meal.add_argument("--attempt-id", required=True, type=_uuid_argument)
     meal.add_argument("--trace-id", default="manual-run", help="调用链追踪标识")
@@ -61,6 +82,7 @@ def _migrate() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    _apply_debug_argument(args)
     if args.command == "graph":
         run_graph(args.text)
         return 0
@@ -75,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
 
         settings = load_runtime_settings()
+        configure_debug_logging(settings.debug_level)
         uvicorn.run(create_app(settings=settings), host=settings.host, port=settings.port)
         return 0
     if args.command == "meal":

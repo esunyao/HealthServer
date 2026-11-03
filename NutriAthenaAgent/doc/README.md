@@ -51,6 +51,20 @@ This deployment currently has no food-composition retrieval provider. The produc
 must declare the evidence set empty, allow conservative common-knowledge estimates with reduced
 confidence, and never claim database retrieval or fabricate citations.
 
+## Debug tracing
+
+`NUTRIATHENA_DEBUG` (default `off`) enables opt-in execution tracing; `serve` and `meal` also
+accept `--debug [off|trace|full]`, which takes precedence over the environment.
+
+- `trace` emits structured events for runs, LangGraph nodes, model calls and MCP tool calls,
+  including durations, token usage and terminal state. It never logs prompts, images, URLs or
+  meal content.
+- `full` additionally emits model input/output, tool arguments/results and the final result.
+  It is intended for local development only. Image data URLs, signed URLs, Bearer tokens,
+  JWTs and common sensitive JSON keys are still removed, and fields are truncated.
+- Debug events go to stderr through the dedicated `nutriathena_agent.debug` logger; the default
+  `off` level changes no existing logging behavior.
+
 ## Verification and true smoke
 
 `uv run pytest -q` runs offline contract, auth, image, API and worker tests. The PostgreSQL integration test creates an isolated temporary Docker container and removes only that container afterwards; it never connects to the project's configured database.

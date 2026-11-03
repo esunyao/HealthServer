@@ -9,6 +9,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
+from .debug import DebugLevel, parse_debug_level
+
 # 模块根目录 NutriAthenaAgent/，.env 固定放在这里。
 # config.py 位于 NutriAthenaAgent/src/nutriathena_agent/，故上溯三层。
 _MODULE_ROOT = Path(__file__).resolve().parents[2]
@@ -57,6 +59,7 @@ class MealSettings:
     max_total_image_bytes: int = MAX_MEAL_TOTAL_IMAGE_BYTES
     max_evidence_bytes: int = MAX_EVIDENCE_BYTES
     media_allowed_hosts: frozenset[str] = field(default_factory=frozenset)
+    debug_level: DebugLevel = DebugLevel.OFF
 
 
 def load_env() -> None:
@@ -124,6 +127,7 @@ def load_meal_settings() -> MealSettings:
         **values,
         mcp_scopes=_env("NUTRIATHENA_MCP_SCOPES", DEFAULT_MCP_SCOPES) or DEFAULT_MCP_SCOPES,
         media_allowed_hosts=hosts,
+        debug_level=parse_debug_level(_env("NUTRIATHENA_DEBUG", "off")),
     )
 
 
