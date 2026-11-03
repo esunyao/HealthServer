@@ -52,6 +52,7 @@ def _capture(level: DebugLevel) -> io.StringIO:
         log_format=LogFormat.TEXT,
         level="DEBUG",
         file_path=None,
+        color="never",
         force=True,
     )
     return stream
@@ -103,6 +104,7 @@ def test_configure_logging_is_idempotent():
         log_format=LogFormat.TEXT,
         level="DEBUG",
         file_path=None,
+        color="never",
     )
 
     tracer = DebugTracer(DebugLevel.TRACE, trace_id="trace-test")

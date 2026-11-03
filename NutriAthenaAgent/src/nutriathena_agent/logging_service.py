@@ -28,6 +28,7 @@ DEBUG_ENV = "NUTRIATHENA_DEBUG"
 LOG_FORMAT_ENV = "NUTRIATHENA_LOG_FORMAT"
 LOG_LEVEL_ENV = "NUTRIATHENA_LOG_LEVEL"
 LOG_FILE_ENV = "NUTRIATHENA_LOG_FILE"
+LOG_COLOR_ENV = "NUTRIATHENA_LOG_COLOR"
 
 _MODULE_ROOT = Path(__file__).resolve().parents[2]
 _UNSET = object()
@@ -89,6 +90,24 @@ _SENSITIVE_KEY_PARTS = (
     "signature",
 )
 
+_ANSI_PATTERN = re.compile(
+    r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))"
+)
+_RESET = "\x1b[0m"
+_DIM = "\x1b[2m"
+_LOGGER_COLOR = "\x1b[36m"
+_EVENT_COLOR = "\x1b[1;34m"
+_LEVEL_COLORS = {
+    "TRACE": "\x1b[2;37m",
+    "DEBUG": "\x1b[36m",
+    "INFO": "\x1b[32m",
+    "SUCCESS": "\x1b[1;32m",
+    "WARNING": "\x1b[33m",
+    "ERROR": "\x1b[31m",
+    "CRITICAL": "\x1b[1;31m",
+}
+_IDE_ENV_VARS = ("PYCHARM_HOSTED", "TERMINAL_EMULATOR")
+
 
 class DebugLevel(str, Enum):
     OFF = "off"
@@ -137,6 +156,7 @@ def parse_log_level(value: str | None) -> str:
 _context: ContextVar[dict[str, Any] | None] = ContextVar("nutriathena_log_context", default=None)
 _log_format = LogFormat.TEXT
 _content_mode = False
+_color_enabled = False
 _configured = False
 _handler_ids: list[int] = []
 _default_handler_removed = False
@@ -152,8 +172,9 @@ def _truncate(text: str, limit: int) -> str:
 
 
 def redact_text(text: str, *, content: bool = False) -> str:
-    """Remove credentials, URLs and (outside full mode) validation inputs."""
-    redacted = _DATA_URL_PATTERN.sub("[data-url omitted]", text)
+    """Remove credentials, URLs, terminal escapes and validation inputs."""
+    redacted = _ANSI_PATTERN.sub("", text)
+    redacted = _DATA_URL_PATTERN.sub("[data-url omitted]", redacted)
     redacted = _URL_PATTERN.sub("[URL removed]", redacted)
     redacted = _BEARER_PATTERN.sub("Bearer [redacted]", redacted)
     redacted = _JWT_PATTERN.sub("[jwt removed]", redacted)
@@ -163,6 +184,12 @@ def redact_text(text: str, *, content: bool = False) -> str:
     if not content:
         redacted = _PYDANTIC_INPUT_PATTERN.sub("input_value=[redacted]", redacted)
     return redacted
+
+
+def _paint(text: str, code: str | None, *, enabled: bool) -> str:
+    if not enabled or not code:
+        return text
+    return f"{code}{text}{_RESET}"
 
 
 def _is_sensitive_key(key: Any) -> bool:
@@ -356,28 +383,38 @@ def _render_text(
     fields: dict[str, Any],
     message: str,
     exception_text: str | None,
+    color: bool = False,
 ) -> str:
     content = _content_mode
     values = dict(fields)
-    parts = [_timestamp_text(), f"{level:<8}", f"{name}:{function}:{line}"]
+    parts = [
+        _paint(_timestamp_text(), _DIM, enabled=color),
+        _paint(f"{level:<8}", _LEVEL_COLORS.get(level), enabled=color),
+        _paint(f"{name}:{function}:{line}", _LOGGER_COLOR, enabled=color),
+    ]
     context_parts: list[str] = []
     for key, label in _CONTEXT_LABELS:
         if key in values:
-            context_parts.append(f"{label}={_format_value(values.pop(key), content=content)}")
+            context_parts.append(
+                f"{_paint(label, _DIM, enabled=color)}={_format_value(values.pop(key), content=content)}"
+            )
     if context_parts:
         parts.append(" ".join(context_parts))
     if event is not None:
-        parts.append(f"event={event}")
+        parts.append(_paint(f"event={event}", _EVENT_COLOR, enabled=color))
     for key, value in values.items():
         if key == "text" and event == "content":
             continue
-        parts.append(f"{key}={_format_value(value, content=content)}")
+        parts.append(f"{_paint(key, _DIM, enabled=color)}={_format_value(value, content=content)}")
     rendered = " | ".join(parts)
     if message:
         rendered += " " + _truncate(redact_text(message, content=content), _MAX_FIELD_CHARS)
     if exception_text:
         rendered += "\n" + exception_text
-    return _truncate(rendered, _MAX_EVENT_CHARS)
+    rendered = _truncate(rendered, _MAX_EVENT_CHARS)
+    if color and not rendered.endswith(_RESET):
+        rendered += _RESET
+    return rendered
 
 
 _CONTEXT_KEYS = frozenset(key for key, _ in _CONTEXT_LABELS)
@@ -425,6 +462,7 @@ def _render_content_block(
     function: str,
     line: int,
     fields: dict[str, Any],
+    color: bool = False,
 ) -> str:
     values = dict(fields)
     label = values.pop("label", "")
@@ -438,9 +476,14 @@ def _render_content_block(
         fields={**values, "label": label, "chars": len(text)},
         message="",
         exception_text=None,
+        color=color,
     )
     lines = text.splitlines() or [""]
-    return _truncate(header + "\n" + "\n".join(f"| {item}" for item in lines), _MAX_EVENT_CHARS)
+    body = "\n".join(f"{_paint('|', _DIM, enabled=color)} {item}" for item in lines)
+    rendered = _truncate(header + "\n" + body, _MAX_EVENT_CHARS)
+    if color and not rendered.endswith(_RESET):
+        rendered += _RESET
+    return rendered
 
 
 def _render(
@@ -453,6 +496,7 @@ def _render(
     fields: dict[str, Any],
     message: str,
     exception_text: str | None = None,
+    color: bool = False,
 ) -> str:
     if _log_format is LogFormat.JSON:
         return _render_json(
@@ -472,6 +516,7 @@ def _render(
             function=function,
             line=line,
             fields=fields,
+            color=color,
         )
     return _render_text(
         level=level,
@@ -482,14 +527,63 @@ def _render(
         fields=fields,
         message=message,
         exception_text=exception_text,
+        color=color,
     )
+
+
+def _emit(level: str | int, plain: str, colored: str) -> None:
+    logger.bind(nutriathena_plain=plain, nutriathena_colored=colored).log(level, plain)
+
+
+def _patch_record(record: dict[str, Any]) -> None:
+    extra = record["extra"]
+    extra.setdefault("nutriathena_plain", record["message"])
+    extra.setdefault("nutriathena_colored", record["message"])
+
+
+def _render_variants(
+    *,
+    level: str,
+    name: str,
+    function: str,
+    line: int,
+    event: str | None,
+    fields: dict[str, Any],
+    message: str,
+    exception_text: str | None = None,
+) -> tuple[str, str]:
+    plain = _render(
+        level=level,
+        name=name,
+        function=function,
+        line=line,
+        event=event,
+        fields=fields,
+        message=message,
+        exception_text=exception_text,
+        color=False,
+    )
+    if not (_color_enabled and _log_format is LogFormat.TEXT):
+        return plain, plain
+    colored = _render(
+        level=level,
+        name=name,
+        function=function,
+        line=line,
+        event=event,
+        fields=fields,
+        message=message,
+        exception_text=exception_text,
+        color=True,
+    )
+    return plain, colored
 
 
 def log_event(event: str, *, level: str = "INFO", message: str = "", **fields: Any) -> None:
     try:
         merged = {**(_context.get() or {}), **{key: value for key, value in fields.items() if value is not None}}
         name, function, line = _caller_info()
-        rendered = _render(
+        plain, colored = _render_variants(
             level=str(level),
             name=name,
             function=function,
@@ -498,7 +592,7 @@ def log_event(event: str, *, level: str = "INFO", message: str = "", **fields: A
             fields=merged,
             message=str(message or ""),
         )
-        logger.log(level, rendered)
+        _emit(level, plain, colored)
     except Exception:
         # Logging must never break the meal run or worker loop.
         pass
@@ -531,7 +625,7 @@ def log_exception(
         if validation_errors is not None:
             merged["validation_errors"] = validation_errors
         name, function, line = _caller_info()
-        rendered = _render(
+        plain, colored = _render_variants(
             level=str(level),
             name=name,
             function=function,
@@ -541,7 +635,7 @@ def log_exception(
             message=str(message),
             exception_text=exception_text,
         )
-        logger.log(level, rendered)
+        _emit(level, plain, colored)
     except Exception:
         pass
 
@@ -569,7 +663,7 @@ class InterceptHandler(logging.Handler):
                 if validation_errors is not None:
                     extra["validation_errors"] = validation_errors
             merged = {**(_context.get() or {}), **extra}
-            rendered = _render(
+            plain, colored = _render_variants(
                 level=str(level),
                 name=record.name,
                 function=record.funcName,
@@ -579,7 +673,7 @@ class InterceptHandler(logging.Handler):
                 message=message,
                 exception_text=exception_text,
             )
-            logger.log(level, rendered)
+            _emit(level, plain, colored)
         except Exception:
             pass
 
@@ -606,6 +700,52 @@ def _resolve_file(value: Any) -> Path | None:
     if not path.is_absolute():
         path = _MODULE_ROOT / path
     return path
+
+
+def _auto_color(sink: Any) -> bool:
+    if "NO_COLOR" in os.environ:
+        return False
+    force = os.environ.get("FORCE_COLOR")
+    if force is not None:
+        return force.strip().lower() not in {"0", "false", "no", "off"}
+    if getattr(sink, "isatty", lambda: False)():
+        return True
+    if sink is sys.stderr or sink is sys.stdout:
+        # JetBrains run consoles often report isatty() == False but render ANSI.
+        pycharm = os.environ.get("PYCHARM_HOSTED", "").strip().lower()
+        if pycharm and pycharm != "0":
+            return True
+        emulator = os.environ.get("TERMINAL_EMULATOR", "").lower()
+        if "jetbrains" in emulator:
+            return True
+    return False
+
+
+def _resolve_color(value: Any, sink: Any) -> bool:
+    if value is _UNSET:
+        value = os.environ.get(LOG_COLOR_ENV, "auto")
+    raw = str(value or "auto").strip().lower()
+    if raw in {"always", "force", "true", "1", "yes", "on"}:
+        return True
+    if raw in {"never", "false", "0", "no", "off", "none"}:
+        return False
+    if raw not in {"auto", "tty", ""}:
+        raise RuntimeError("运行配置 NUTRIATHENA_LOG_COLOR 必须是 auto、always 或 never")
+    return _auto_color(sink)
+
+
+def _enable_windows_console(stream: Any) -> Any:
+    if sys.platform != "win32" or stream is not sys.stderr or sys.stderr is not sys.__stderr__:
+        return stream
+    try:
+        from colorama import just_fix_windows_console
+    except Exception:
+        return stream
+    try:
+        just_fix_windows_console()
+    except Exception:
+        return stream
+    return sys.stderr
 
 
 def _remove_our_handlers() -> None:
@@ -687,11 +827,12 @@ def configure_logging(
     log_format: Any = _UNSET,
     level: Any = _UNSET,
     file_path: Any = _UNSET,
+    color: Any = _UNSET,
     intercept_stdlib: bool = False,
     force: bool = False,
 ) -> None:
     """Install the process-wide loguru sink(s) idempotently."""
-    global _configured, _log_format, _content_mode, _full_warning_emitted
+    global _configured, _log_format, _content_mode, _color_enabled, _full_warning_emitted
 
     if _configured and not force:
         if intercept_stdlib:
@@ -702,17 +843,24 @@ def configure_logging(
     selected_format = _resolve_format(log_format)
     selected_level = _resolve_level(level, parsed_debug)
     selected_file = _resolve_file(file_path)
+    target_sink = sys.stderr if sink is None else sink
+    color_requested = _resolve_color(color, target_sink)
+    selected_color = selected_format is LogFormat.TEXT and color_requested
+    if selected_color:
+        target_sink = _enable_windows_console(target_sink)
 
     _log_format = selected_format
     _content_mode = parsed_debug is DebugLevel.FULL
+    _color_enabled = selected_color
     _remove_our_handlers()
     _remove_default_handler_once()
+    logger.configure(patcher=_patch_record)
 
-    target_sink = sys.stderr if sink is None else sink
+    console_format = "{extra[nutriathena_colored]}" if selected_color else "{message}"
     _handler_ids.append(
         logger.add(
             target_sink,
-            format="{message}",
+            format=console_format,
             level=selected_level,
             colorize=False,
             diagnose=False,
@@ -758,10 +906,12 @@ def configure_logging(
 
 def reset_logging() -> None:
     """Remove handlers installed by this service and restore stdlib state."""
-    global _configured, _log_format, _content_mode, _full_warning_emitted
+    global _configured, _log_format, _content_mode, _color_enabled, _full_warning_emitted
     _remove_our_handlers()
     _restore_stdlib_interception()
+    logger.configure(patcher=None)
     _configured = False
     _log_format = LogFormat.TEXT
     _content_mode = False
+    _color_enabled = False
     _full_warning_emitted = False

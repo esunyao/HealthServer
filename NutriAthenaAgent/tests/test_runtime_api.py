@@ -154,6 +154,7 @@ def test_http_request_logs_include_trace_and_status_without_secrets():
         log_format=LogFormat.TEXT,
         level="DEBUG",
         file_path=None,
+        color="never",
         force=True,
     )
     repository = FakeRepository()

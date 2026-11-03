@@ -253,6 +253,7 @@ def test_worker_run_failure_logs_cause_chain_and_context():
         log_format=LogFormat.TEXT,
         level="DEBUG",
         file_path=None,
+        color="never",
         force=True,
     )
     row = _pending_row()

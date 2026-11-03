@@ -59,6 +59,12 @@ sets the base level (default `INFO`); setting `NUTRIATHENA_LOG_FILE` adds a rota
 (10 MB rotation, 7 days retention). When `NUTRIATHENA_DEBUG != off`, the sink level is lowered to
 `DEBUG`.
 
+Text logs use `NUTRIATHENA_LOG_COLOR=auto` by default: timestamps, levels, logger locations,
+trace/run context, events and field names are colored on TTY terminals and in PyCharm/JetBrains run
+consoles. `always` forces color and `never` disables it; `auto` honors `NO_COLOR` and `FORCE_COLOR`,
+and stays plain for pipes, redirected streams, files and JSON. Use `always` when an IDE run
+configuration does not report a terminal. File sinks and JSON output never contain ANSI escapes.
+
 Every event is pre-rendered by the logging service before it reaches loguru. Sinks use
 `format="{message}"`, `diagnose=False` and `backtrace=False`, so loguru never formats raw
 exceptions or local variables. The renderer includes `trace_id`, `run_id`, `task_id` and

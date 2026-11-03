@@ -1,3 +1,5 @@
+> 不是说AI发展快吗，为什么拉的是怎么一坨😫😫😫😫😫😫😫😫😫😫😫😫
+
 # NutriAthenaAgent
 
 NutriAthenaAgent 是为 HealthMind 提供持久化执行能力的餐食分析运行服务。HealthMind 创建一次分析尝试（attempt）后，通过 HTTP 调用本服务；服务先将请求保存到 PostgreSQL，再由持有租约的工作进程（worker）执行餐食分析流程，最后由 HealthMind 获取结果。本模块同时保留两个小型 LangGraph/LangChain 教学示例。
@@ -54,6 +56,8 @@ uv run nutriathena-agent agent "统计一下这句话的词数：晚饭吃了清
 
 服务日志统一由 loguru 输出到 stderr；设置 `NUTRIATHENA_LOG_FILE` 时额外写入轮转文件（10 MB 轮转、保留 7 天）。默认文本格式，`NUTRIATHENA_LOG_FORMAT=json` 时每行输出一个 JSON。`NUTRIATHENA_LOG_LEVEL` 控制基础级别（默认 INFO）；`NUTRIATHENA_DEBUG != off` 时 sink 强制到 DEBUG。
 
+文本日志默认 `NUTRIATHENA_LOG_COLOR=auto`：在 TTY 终端或 PyCharm/JetBrains 运行窗口中为时间戳、级别、logger、trace/run 上下文、event 与字段名着色；`always` 强制彩色，`never` 关闭；`auto` 尊重 `NO_COLOR`/`FORCE_COLOR`，管道/重定向/文件/JSON 默认无色。若 JetBrains Run 窗口没有自动着色，在运行配置或 `.env` 中设 `NUTRIATHENA_LOG_COLOR=always`。
+
 通过环境变量 `NUTRIATHENA_DEBUG` 或 `serve`/`meal` 子命令的 `--debug` 选择细节级别；CLI 优先于环境变量：
 
 ```bash
@@ -61,6 +65,7 @@ NUTRIATHENA_DEBUG=trace uv run nutriathena-agent serve
 uv run nutriathena-agent meal --debug --task-id <uuid> --attempt-id <uuid>
 uv run nutriathena-agent meal --debug full --task-id <uuid> --attempt-id <uuid>
 NUTRIATHENA_LOG_FORMAT=json NUTRIATHENA_LOG_FILE=logs/agent.log uv run nutriathena-agent serve
+NUTRIATHENA_LOG_COLOR=always uv run nutriathena-agent serve
 ```
 
 | 级别 | 输出 |
