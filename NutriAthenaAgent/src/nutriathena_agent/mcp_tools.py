@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Iterable
+from urllib.parse import urlsplit
 from uuid import UUID, uuid5
 
 import httpx
@@ -16,6 +18,7 @@ from langchain_core.tools import BaseTool, tool
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, ValidationError
 
 from .config import MealSettings
+from .logging_service import log_event, log_exception
 
 CAPTURE_CONTEXT_TOOL = "nutrimemo.capture_context.get"
 NUTRITION_CONTEXT_TOOL = "orion.nutrition_context.get"
@@ -31,6 +34,10 @@ _URL_PATTERN = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 
 class McpSetupError(RuntimeError):
     """The configured HealthMind MCP or OAuth client could not be initialized."""
+
+    def __init__(self, message: str, *, stage: str = "mcp") -> None:
+        super().__init__(message)
+        self.stage = stage
 
 
 class ConfirmedCaptureImage(BaseModel):
@@ -63,7 +70,10 @@ def parse_capture_context(payload: dict[str, Any]) -> CaptureContext:
     try:
         return CaptureContext.model_validate(payload)
     except ValidationError as exception:
-        raise McpSetupError("HealthMind MCP capture context does not match the local contract") from exception
+        raise McpSetupError(
+            "HealthMind MCP capture context does not match the local contract",
+            stage="capture_context",
+        ) from exception
 
 
 @dataclass
@@ -98,7 +108,14 @@ def _normalized_tool_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
-def _find_tool(tools: Iterable[Any], expected: str) -> Any:
+def _host(url: str) -> str:
+    try:
+        return (urlsplit(url).hostname or "").lower()
+    except (TypeError, ValueError):
+        return ""
+
+
+def _find_tool(tools: Iterable[Any], expected: str, *, stage: str = "list_tools") -> Any:
     normalized = _normalized_tool_name(expected)
     matches = [
         remote
@@ -107,7 +124,10 @@ def _find_tool(tools: Iterable[Any], expected: str) -> Any:
         or _normalized_tool_name(remote.name).endswith(f"_{normalized}")
     ]
     if len(matches) != 1:
-        raise McpSetupError(f"HealthMind MCP 必须恰好暴露只读工具 {expected}；实际匹配 {len(matches)} 个")
+        raise McpSetupError(
+            f"HealthMind MCP 必须恰好暴露只读工具 {expected}；实际匹配 {len(matches)} 个",
+            stage=stage,
+        )
     return matches[0]
 
 
@@ -146,13 +166,13 @@ def _parse_mcp_json(result: Any) -> Any:
             return _parse_mcp_json(texts[0])
         if texts:
             return _parse_mcp_json("\n".join(texts))
-        raise McpSetupError("HealthMind MCP returned no JSON text")
+        raise McpSetupError("HealthMind MCP returned no JSON text", stage="parse_context")
     if isinstance(result, str):
         try:
             return json.loads(result)
         except json.JSONDecodeError as exception:
-            raise McpSetupError("HealthMind MCP returned invalid JSON") from exception
-    raise McpSetupError("HealthMind MCP returned an unsupported response")
+            raise McpSetupError("HealthMind MCP returned invalid JSON", stage="parse_context") from exception
+    raise McpSetupError("HealthMind MCP returned an unsupported response", stage="parse_context")
 
 
 def _remove_sensitive_fields(value: Any) -> Any:
@@ -182,9 +202,10 @@ def _is_sensitive_key(key: Any) -> bool:
 
 
 def _context_json(result: Any, *, capture: bool) -> tuple[str, dict[str, Any]]:
+    stage = "capture_context" if capture else "nutrition_context"
     payload = _parse_mcp_json(result)
     if not isinstance(payload, dict):
-        raise McpSetupError("HealthMind MCP context must be a JSON object")
+        raise McpSetupError("HealthMind MCP context must be a JSON object", stage=stage)
     raw_payload = payload
     if capture:
         parse_capture_context(payload)
@@ -195,7 +216,7 @@ def _context_json(result: Any, *, capture: bool) -> tuple[str, dict[str, Any]]:
         safe_payload["confirmed_image_count"] = image_count
     serialized = json.dumps(safe_payload, ensure_ascii=False, separators=(",", ":"))
     if len(serialized) > MAX_CONTEXT_CHARS:
-        raise McpSetupError("HealthMind MCP context exceeded the safe response size")
+        raise McpSetupError("HealthMind MCP context exceeded the safe response size", stage=stage)
     return serialized, raw_payload
 
 
@@ -258,6 +279,7 @@ def bind_context_tools(
             if name in attempted:
                 raise RuntimeError(f"{name} may be called only once for one meal run")
             attempted.add(name)
+            started = time.perf_counter()
             try:
                 if cached_context is not None and name in cached_context:
                     result = cached_context[name]
@@ -272,9 +294,29 @@ def bind_context_tools(
                         capture_payload.update(raw_payload)
                     called.add(name)
             except Exception as exception:
+                log_event(
+                    "mcp.tool.finished",
+                    level="ERROR",
+                    tool=name,
+                    status="error",
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                    error_type=type(exception).__name__,
+                    error_message=str(exception),
+                )
                 if isinstance(exception, McpSetupError):
                     raise
-                raise McpSetupError(f"HealthMind MCP read failed for {name}") from exception
+                raise McpSetupError(
+                    f"HealthMind MCP read failed for {name}",
+                    stage=f"tool:{name}",
+                ) from exception
+            log_event(
+                "mcp.tool.finished",
+                level="INFO",
+                tool=name,
+                status="success",
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                result_chars=len(result),
+            )
             presented.add(name)
             return result
 
@@ -300,19 +342,63 @@ async def _access_token(settings: MealSettings) -> str:
         "client_secret": settings.oauth_client_secret,
         "scope": settings.mcp_scopes,
     }
+    started = time.perf_counter()
+    scopes = settings.mcp_scopes or ""
+    log_event(
+        "mcp.oauth.started",
+        level="DEBUG",
+        token_host=_host(settings.token_url),
+        scope_count=len(scopes.split()),
+    )
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=False) as session:
             response = await session.post(settings.token_url, data=form)
     except httpx.HTTPError as exception:
-        raise McpSetupError("OAuth token endpoint could not be reached") from exception
+        log_event(
+            "mcp.oauth.finished",
+            level="DEBUG",
+            status="error",
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            error_type=type(exception).__name__,
+        )
+        raise McpSetupError("OAuth token endpoint could not be reached", stage="oauth") from exception
+    duration_ms = int((time.perf_counter() - started) * 1000)
     if not response.is_success:
-        raise McpSetupError(f"OAuth token request failed with HTTP {response.status_code}")
+        error = McpSetupError(
+            f"OAuth token request failed with HTTP {response.status_code}",
+            stage="oauth",
+        )
+        try:
+            payload = response.json()
+        except (ValueError, AttributeError):
+            payload = {}
+        if isinstance(payload, dict):
+            for key in ("error", "error_description"):
+                value = payload.get(key)
+                if isinstance(value, str) and value:
+                    error.add_note(f"oauth_{key}={value[:200]}")
+        log_event(
+            "mcp.oauth.finished",
+            level="DEBUG",
+            status="error",
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+            error_type="McpSetupError",
+        )
+        raise error
+    log_event(
+        "mcp.oauth.finished",
+        level="DEBUG",
+        status="success",
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+    )
     try:
         access_token = response.json().get("access_token")
     except (ValueError, AttributeError) as exception:
-        raise McpSetupError("OAuth token endpoint returned invalid JSON") from exception
+        raise McpSetupError("OAuth token endpoint returned invalid JSON", stage="oauth") from exception
     if not isinstance(access_token, str) or not access_token:
-        raise McpSetupError("OAuth token response did not contain access_token")
+        raise McpSetupError("OAuth token response did not contain access_token", stage="oauth")
     return access_token
 
 
@@ -323,12 +409,15 @@ async def connect_healthmind_mcp(
     attempt_id: str,
 ) -> McpToolBindings:
     """Open one authenticated streamable HTTP MCP session and prefetch reads."""
-    from mcp import ClientSession
-    from mcp.client.streamable_http import streamablehttp_client
-
     token = await _access_token(settings)
+    stage = "connect"
+    connected_at = time.perf_counter()
+    log_event("mcp.connect.started", level="DEBUG", mcp_host=_host(settings.mcp_url))
     stack = AsyncExitStack()
     try:
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamablehttp_client
+
         read_stream, write_stream, _ = await stack.enter_async_context(
             streamablehttp_client(
                 settings.mcp_url,
@@ -337,14 +426,27 @@ async def connect_healthmind_mcp(
                 sse_read_timeout=20,
             )
         )
+        stage = "initialize"
         session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
         await session.initialize()
+        stage = "list_tools"
         listed = await session.list_tools()
+        tool_names = [item.name for item in listed.tools]
+        log_event(
+            "mcp.connected",
+            level="INFO",
+            mcp_host=_host(settings.mcp_url),
+            tool_count=len(tool_names),
+            tools=tool_names[:20],
+            duration_ms=int((time.perf_counter() - connected_at) * 1000),
+        )
         remote_tools = [_McpSdkRemoteTool(session, item.name) for item in listed.tools]
         capture = _find_tool(remote_tools, CAPTURE_CONTEXT_TOOL)
         nutrition = _find_tool(remote_tools, NUTRITION_CONTEXT_TOOL)
 
+        stage = "capture_prefetch"
         captured: dict[str, Any] = {}
+        prefetch_started = time.perf_counter()
         response = await _invoke_remote(
             capture,
             {"taskId": task_id, "attemptId": attempt_id},
@@ -352,8 +454,17 @@ async def connect_healthmind_mcp(
         )
         capture_context, raw_payload = _context_json(response, capture=True)
         captured.update(raw_payload)
+        images = captured.get("image_urls")
+        log_event(
+            "mcp.capture.prefetched",
+            level="INFO",
+            image_count=len(images) if isinstance(images, list) else 0,
+            notes_present=bool(captured.get("notes")),
+            duration_ms=int((time.perf_counter() - prefetch_started) * 1000),
+        )
         safe_context = {"capture_context": capture_context}
 
+        stage = "bind_tools"
         tools, called, presented = bind_context_tools(
             remote_tools,
             task_id=task_id,
@@ -369,8 +480,22 @@ async def connect_healthmind_mcp(
             presented=presented,
             capture_payload=captured,
         )
-    except Exception as exception:
-        await stack.aclose()
-        if isinstance(exception, McpSetupError):
+    except BaseException as exception:
+        try:
+            await stack.aclose()
+        except BaseException as close_exception:
+            log_exception(
+                "mcp.close.failed",
+                close_exception,
+                level="WARNING",
+                mcp_stage=stage,
+            )
+            add_note = getattr(exception, "add_note", None)
+            if callable(add_note):
+                add_note(f"MCP cleanup failed: {type(close_exception).__name__}")
+        if not isinstance(exception, Exception) or isinstance(exception, McpSetupError):
             raise
-        raise McpSetupError("Unable to load the required read-only HealthMind MCP tools") from exception
+        raise McpSetupError(
+            "Unable to load the required read-only HealthMind MCP tools",
+            stage=stage,
+        ) from exception

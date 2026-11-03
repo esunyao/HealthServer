@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from nutriathena_agent.api import create_app
 from nutriathena_agent.database import ConflictError
+from nutriathena_agent.logging_service import DebugLevel, LogFormat, configure_logging
 from nutriathena_agent.models import RunCreateRequest, RunResponse, ThreadCreateRequest, ThreadResponse
 from nutriathena_agent.runtime_config import RuntimeSettings
 
@@ -142,6 +144,35 @@ def _client(repository: FakeRepository) -> TestClient:
         artifact_sha256=ARTIFACT_SHA,
     )
     return TestClient(app)
+
+
+def test_http_request_logs_include_trace_and_status_without_secrets():
+    stream = io.StringIO()
+    configure_logging(
+        DebugLevel.TRACE,
+        sink=stream,
+        log_format=LogFormat.TEXT,
+        level="DEBUG",
+        file_path=None,
+        force=True,
+    )
+    repository = FakeRepository()
+    with _client(repository) as client:
+        response = client.get(
+            "/healthz?token=never-log",
+            headers={**_headers(), "X-Trace-Id": "trace-test"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-Id"] == "trace-test"
+    output = stream.getvalue()
+    assert "event=http.request.finished" in output
+    assert 'method="GET"' in output
+    assert 'path="/healthz"' in output
+    assert "status_code=200" in output
+    assert 'trace="trace-test"' in output
+    assert "never-log" not in output
+    assert "signed-test-token" not in output
 
 
 def test_shared_agent_protocol_fixtures_match_pydantic_models():

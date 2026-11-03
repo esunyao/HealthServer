@@ -10,6 +10,8 @@ from typing import Any
 
 from psycopg.rows import dict_row
 
+from .logging_service import log_event
+
 SCHEMA = "nutriathena_agent"
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 _MIGRATION_NAME = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
@@ -53,6 +55,7 @@ def apply_migrations(pool: Any, migrations_dir: Path = MIGRATIONS_DIR) -> list[s
         )
 
     applied_names: list[str] = []
+    applied_details: list[tuple[str, int, int]] = []
     with pool.connection() as connection:
         with connection.transaction():
             connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", ("nutriathena_agent.migrations",))
@@ -69,8 +72,20 @@ def apply_migrations(pool: Any, migrations_dir: Path = MIGRATIONS_DIR) -> list[s
                     if existing is not None:
                         if existing["script_name"] != path.name or existing["checksum_sha256"].strip() != checksum:
                             raise MigrationError(f"已应用的迁移文件或校验和发生变化：{path.name}")
+                        log_event(
+                            "migration.skipped",
+                            level="DEBUG",
+                            file=path.name,
+                            version=version,
+                        )
                         continue
 
+                    log_event(
+                        "migration.applying",
+                        level="INFO",
+                        file=path.name,
+                        version=version,
+                    )
                     started = perf_counter()
                     cursor.execute(sql, prepare=False)
                     elapsed_ms = max(0, int((perf_counter() - started) * 1000))
@@ -82,5 +97,14 @@ def apply_migrations(pool: Any, migrations_dir: Path = MIGRATIONS_DIR) -> list[s
                         """,
                         (version, path.name, checksum, elapsed_ms),
                     )
+                    applied_details.append((path.name, version, elapsed_ms))
                     applied_names.append(path.name)
+    for script_name, version, elapsed_ms in applied_details:
+        log_event(
+            "migration.applied",
+            level="INFO",
+            file=script_name,
+            version=version,
+            duration_ms=elapsed_ms,
+        )
     return applied_names

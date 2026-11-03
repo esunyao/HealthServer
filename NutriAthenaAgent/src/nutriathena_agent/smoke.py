@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
 
 from .artifact import compute_artifact_sha256
 from .config import load_env
+from .logging_service import log_event
 from .runtime_config import load_runtime_settings
 
 
@@ -21,6 +23,10 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
     task = str(UUID(task_id))
     attempt = str(UUID(attempt_id))
     base_url = os.environ.get("NUTRIATHENA_SMOKE_BASE_URL", f"http://127.0.0.1:{settings.port}").rstrip("/")
+    try:
+        base_host = urlsplit(base_url).hostname or ""
+    except ValueError:
+        base_host = ""
     token_url = os.environ.get("NUTRIATHENA_SMOKE_TOKEN_URL", "").strip()
     client_id = os.environ.get("NUTRIATHENA_SMOKE_CLIENT_ID", "").strip()
     client_secret = os.environ.get("NUTRIATHENA_SMOKE_CLIENT_SECRET", "")
@@ -37,6 +43,14 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
     if missing:
         raise RuntimeError(f"缺少真实 smoke 配置：{'、'.join(missing)}")
 
+    log_event(
+        "smoke.started",
+        level="INFO",
+        base_host=base_host,
+        task_id=task,
+        attempt_id=attempt,
+        trace_id=trace_id,
+    )
     async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
         token_response = await client.post(
             token_url,
@@ -60,6 +74,7 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
         )
         if not thread_response.is_success:
             raise RuntimeError(f"Agent 创建或复用 thread 失败，HTTP {thread_response.status_code}")
+        log_event("smoke.thread.ready", level="INFO", attempt_id=attempt)
 
         body = {
             "assistant_id": settings.assistant_id,
@@ -100,6 +115,12 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
         run_id = run.get("run_id")
         if not isinstance(run_id, str):
             raise RuntimeError("Agent 响应缺少 run_id")
+        log_event(
+            "smoke.run.submitted",
+            level="INFO",
+            run_id=run_id,
+            status=run.get("status"),
+        )
         deadline = time.monotonic() + int(os.environ.get("NUTRIATHENA_SMOKE_TIMEOUT_SECONDS", "660"))
         status = run.get("status", "pending")
         while status in {"pending", "running"} and time.monotonic() < deadline:
@@ -126,4 +147,13 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
             summary["error_code"] = run.get("error_code")
         else:
             summary["status"] = "still_running"
+        log_event(
+            "smoke.finished",
+            level="INFO",
+            run_id=run_id,
+            status=summary.get("status"),
+            output_status=summary.get("output_status"),
+            item_count=summary.get("item_count"),
+            error_code=summary.get("error_code"),
+        )
         return summary

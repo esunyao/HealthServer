@@ -1,130 +1,41 @@
-"""Opt-in, redacted execution tracing for the meal agent."""
+"""Opt-in execution tracing for the meal agent.
+
+Lifecycle logging lives in :mod:`nutriathena_agent.logging_service`; this
+module only keeps the debug-only tracer and the LangChain callback.
+"""
 
 from __future__ import annotations
 
 import json
-import logging
-import re
-import sys
 import time
-from enum import Enum
 from typing import Any
 from uuid import UUID
 
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.outputs import LLMResult
 
-DEBUG_ENV = "NUTRIATHENA_DEBUG"
-DEBUG_LOGGER_NAME = "nutriathena_agent.debug"
-_HANDLER_MARKER = "_nutriathena_debug_handler"
-_MAX_FIELD_CHARS = 64 * 1024
-_MAX_EVENT_CHARS = 256 * 1024
-
-_OFF_VALUES = frozenset({"", "0", "false", "no", "none", "off"})
-_TRACE_VALUES = frozenset({"1", "true", "yes", "on", "debug", "trace"})
-_FULL_VALUES = frozenset({"full", "verbose", "content"})
-
-_DATA_URL_PATTERN = re.compile(r"data:[^\s\"'<>]+", re.IGNORECASE)
-_URL_PATTERN = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
-_BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+\S+")
-_JWT_PATTERN = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
-_JSON_SECRET_PATTERN = re.compile(
-    r'(?i)("(?:access_token|token|secret|authorization|password|cookie|api_?key|signature|'
-    r'taskid|attemptid|capturesessionid|subjectid|userid)"\s*:\s*)"(?:[^"\\]|\\.)*"'
+from .logging_service import (
+    DebugLevel,
+    configure_logging,
+    log_event,
+    parse_debug_level,
+    redact_text,
 )
-_SENSITIVE_KEY_PARTS = ("token", "secret", "authorization", "credential", "password", "cookie", "apikey", "signature")
+
+DEBUG_ENV = "NUTRIATHENA_DEBUG"
+_MAX_CONTENT_CHARS = 64 * 1024
 _IMAGE_BLOCK_TYPES = frozenset({"image_url", "input_image", "image"})
-
-_full_warning_emitted = False
-
-
-class DebugLevel(str, Enum):
-    OFF = "off"
-    TRACE = "trace"
-    FULL = "full"
-
-
-def parse_debug_level(value: str | DebugLevel | None) -> DebugLevel:
-    if isinstance(value, DebugLevel):
-        return value
-    raw = (value or "").strip().lower()
-    if raw in _OFF_VALUES:
-        return DebugLevel.OFF
-    if raw in _TRACE_VALUES:
-        return DebugLevel.TRACE
-    if raw in _FULL_VALUES:
-        return DebugLevel.FULL
-    raise RuntimeError("运行配置 NUTRIATHENA_DEBUG 必须是 off、trace 或 full")
 
 
 def configure_debug_logging(level: DebugLevel) -> None:
-    """Install one stderr handler for debug events, idempotently."""
-    global _full_warning_emitted
-
-    logger = logging.getLogger(DEBUG_LOGGER_NAME)
-    for handler in list(logger.handlers):
-        if getattr(handler, _HANDLER_MARKER, False):
-            logger.removeHandler(handler)
-    if level is DebugLevel.OFF:
-        logger.setLevel(logging.NOTSET)
-        logger.propagate = True
-        return
-
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    setattr(handler, _HANDLER_MARKER, True)
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
-    logger.propagate = False
-    if level is DebugLevel.FULL and not _full_warning_emitted:
-        _full_warning_emitted = True
-        logger.warning("NUTRIATHENA_DEBUG=full: 将输出模型输入输出与工具返回，仅限本地开发使用")
-
-
-def redact_text(text: str) -> str:
-    """Remove image payloads, URLs and credentials from free-form debug text."""
-    redacted = _DATA_URL_PATTERN.sub("[data-url removed]", text)
-    redacted = _URL_PATTERN.sub("[URL removed]", redacted)
-    redacted = _BEARER_PATTERN.sub("Bearer [redacted]", redacted)
-    redacted = _JWT_PATTERN.sub("[jwt removed]", redacted)
-    return _JSON_SECRET_PATTERN.sub(r'\1"[redacted]"', redacted)
+    """Backward-compatible wrapper around the unified logging service."""
+    configure_logging(level)
 
 
 def _truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return f"{text[:limit]}... [truncated {len(text) - limit} chars]"
-
-
-def _is_sensitive_key(key: Any) -> bool:
-    normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
-    return any(part in normalized for part in _SENSITIVE_KEY_PARTS)
-
-
-def _plain(value: Any) -> Any:
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, dict):
-        return {
-            key: "[redacted]" if _is_sensitive_key(key) else _plain(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple, set)):
-        return [_plain(item) for item in value]
-    if isinstance(value, str):
-        return redact_text(value)
-    return value
-
-
-def _format_value(value: Any) -> str:
-    if isinstance(value, bool) or isinstance(value, (int, float)):
-        return json.dumps(value)
-    if isinstance(value, str):
-        return json.dumps(redact_text(value), ensure_ascii=False)
-    if isinstance(value, (dict, list, tuple, set)):
-        return json.dumps(_plain(value), ensure_ascii=False, default=str)
-    return json.dumps(str(value), ensure_ascii=False)
 
 
 def _content_text(content: Any) -> str:
@@ -172,16 +83,16 @@ def _tool_output_text(output: Any) -> str:
 class DebugTracer:
     def __init__(
         self,
-        level: DebugLevel,
+        level: DebugLevel | str,
         *,
         trace_id: str = "",
         run_id: str = "",
-        logger: logging.Logger | None = None,
+        logger: Any = None,
     ) -> None:
-        self.level = level
+        self.level = parse_debug_level(level)
         self.trace_id = trace_id
         self.run_id = run_id
-        self._logger = logger or logging.getLogger(DEBUG_LOGGER_NAME)
+        self._logger = logger
 
     @property
     def enabled(self) -> bool:
@@ -191,35 +102,29 @@ class DebugTracer:
     def full(self) -> bool:
         return self.level is DebugLevel.FULL
 
-    def _prefix(self) -> str:
-        parts: list[str] = []
-        if self.trace_id:
-            parts.append(f"trace={_format_value(self.trace_id)}")
-        if self.run_id:
-            parts.append(f"run={_format_value(self.run_id)}")
-        return " ".join(parts)
-
     def event(self, name: str, **fields: Any) -> None:
         if not self.enabled:
             return
-        parts = [self._prefix(), f"event={name}"]
-        parts.extend(
-            f"{key}={_format_value(value)}"
-            for key, value in fields.items()
-            if value is not None
-        )
-        self._emit(" ".join(part for part in parts if part))
+        try:
+            log_event(
+                name,
+                level="DEBUG",
+                trace_id=self.trace_id or None,
+                run_id=self.run_id or None,
+                **fields,
+            )
+        except Exception:
+            # Tracing must never fail the agent run.
+            pass
 
     def content(self, label: str, text: str) -> None:
         if not self.full:
             return
-        redacted = _truncate(redact_text(str(text)), _MAX_FIELD_CHARS)
-        prefix = self._prefix()
-        line = f"{prefix} event=content label={_format_value(label)} text={json.dumps(redacted, ensure_ascii=False)}"
-        self._emit(line.lstrip())
-
-    def _emit(self, line: str) -> None:
-        self._logger.debug("%s", _truncate(line, _MAX_EVENT_CHARS))
+        try:
+            value = _truncate(redact_text(str(text), content=True), _MAX_CONTENT_CHARS)
+            log_event("content", level="DEBUG", label=label, text=value)
+        except Exception:
+            pass
 
 
 def _model_name(serialized: dict[str, Any] | None, metadata: dict[str, Any] | None, kwargs: dict[str, Any]) -> str:

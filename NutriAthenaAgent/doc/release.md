@@ -36,6 +36,8 @@ WHERE tool_code IN ('nutrimemo.capture_context.get', 'orion.nutrition_context.ge
 
 Agent 本身还需使用独立数据库，完成其版本化迁移并启动；不要用 HealthMind 的 release 脚本代替 Agent 迁移。确认 Authentik、MCP、模型及图片访问配置可用。`/healthz` 仅检查 Agent 与数据库的连通性，不能证明整条链路可用。
 
+> **日志/依赖变更后的制品摘要**：`artifact_sha256` 由 `NutriAthenaAgent/src/nutriathena_agent/*.py`、`migrations/*.sql`、`pyproject.toml`、`uv.lock` 和餐食 skill 资产计算。升级日志库（如新增 `loguru`）或改动源码都会产生新摘要。升级前先 drain/对账旧 release 的 pending/running run；新 worker 只 claim 摘要完全匹配的 run。部署后必须重新登记并提升 release，否则旧 pending run 会一直停留在 pending。
+
 ## 2. 准备 release 身份
 
 | `psql` 变量 | 来源和约束 |

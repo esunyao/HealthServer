@@ -29,7 +29,8 @@
 | [`src/nutriathena_agent/worker.py`](./src/nutriathena_agent/worker.py) | pending claim、心跳续租、超时/取消、调用 runner、条件终态写入 |
 | [`src/nutriathena_agent/auth.py`](./src/nutriathena_agent/auth.py) | JWKS 签名、issuer/audience/caller/scope 验证 |
 | [`src/nutriathena_agent/runtime_config.py`](./src/nutriathena_agent/runtime_config.py) | 服务、数据库、OAuth、部署与 worker 配置 |
-| [`src/nutriathena_agent/debug.py`](./src/nutriathena_agent/debug.py) | opt-in 调试级别、脱敏事件日志与 LangChain 执行轨迹回调 |
+| [`src/nutriathena_agent/logging_service.py`](./src/nutriathena_agent/logging_service.py) | 统一 loguru 日志服务：文本/JSON 预渲染、上下文、脱敏、异常链、可选文件 sink、stdlib 接管 |
+| [`src/nutriathena_agent/debug.py`](./src/nutriathena_agent/debug.py) | opt-in 调试级别与 LangChain 执行轨迹回调（日志出口统一走 logging_service） |
 | [`src/nutriathena_agent/meal_agent.py`](./src/nutriathena_agent/meal_agent.py) | 可替换 `MealRunner` 协议和现有 DeepAgent meal graph 适配 |
 | [`src/nutriathena_agent/mcp_tools.py`](./src/nutriathena_agent/mcp_tools.py) | MCP SDK session、稳定 `_meta.tool_call_id`、授权上下文预取与脱敏 |
 | [`src/nutriathena_agent/images.py`](./src/nutriathena_agent/images.py) | MCP 授权图片的主机白名单、大小/MIME 限制和内存多模态编码 |

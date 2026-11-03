@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-from .debug import DebugLevel, parse_debug_level
+from .logging_service import DebugLevel, parse_debug_level
 
 # 模块根目录 NutriAthenaAgent/，.env 固定放在这里。
 # config.py 位于 NutriAthenaAgent/src/nutriathena_agent/，故上溯三层。

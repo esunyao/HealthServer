@@ -6,12 +6,11 @@ import argparse
 import asyncio
 import json
 import os
-import sys
 from uuid import UUID
 
 from .basic_graph import DEFAULT_TEXT, run as run_graph
 from .config import load_env
-from .debug import configure_debug_logging
+from .logging_service import configure_logging, log_event, log_exception, parse_debug_level
 from .simple_agent import DEFAULT_QUESTION, run as run_agent
 
 
@@ -67,14 +66,18 @@ def _migrate() -> int:
     load_env()
     database_url = os.environ.get("NUTRIATHENA_DATABASE_URL", "").strip()
     if not database_url:
-        print("缺少运行配置：NUTRIATHENA_DATABASE_URL", file=sys.stderr)
+        log_event(
+            "migration.config.missing",
+            level="ERROR",
+            message="缺少运行配置：NUTRIATHENA_DATABASE_URL",
+        )
         return 2
     from .api import migrate_database
 
     try:
         applied = migrate_database(database_url)
     except Exception as exception:
-        print(f"数据库迁移失败：{type(exception).__name__}", file=sys.stderr)
+        log_exception("migration.failed", exception)
         return 2
     print(json.dumps({"applied": applied}, ensure_ascii=False, separators=(",", ":")))
     return 0
@@ -83,6 +86,8 @@ def _migrate() -> int:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _apply_debug_argument(args)
+    load_env()
+    configure_logging(parse_debug_level(os.environ.get("NUTRIATHENA_DEBUG", "off")))
     if args.command == "graph":
         run_graph(args.text)
         return 0
@@ -96,9 +101,29 @@ def main(argv: list[str] | None = None) -> int:
         from .runtime_config import load_runtime_settings
         import uvicorn
 
-        settings = load_runtime_settings()
-        configure_debug_logging(settings.debug_level)
-        uvicorn.run(create_app(settings=settings), host=settings.host, port=settings.port)
+        try:
+            settings = load_runtime_settings()
+            configure_logging(settings.debug_level, intercept_stdlib=True, force=True)
+            log_event(
+                "service.starting",
+                level="INFO",
+                host=settings.host,
+                port=settings.port,
+                release_id=str(settings.release_id),
+                deployment_key=settings.deployment_key,
+                assistant_id=settings.assistant_id,
+            )
+            app = create_app(settings=settings)
+            uvicorn.run(
+                app,
+                host=settings.host,
+                port=settings.port,
+                log_config=None,
+                access_log=False,
+            )
+        except Exception as exception:
+            log_exception("service.failed", exception)
+            return 2
         return 0
     if args.command == "meal":
         from .meal_agent import run_meal_analysis
@@ -112,7 +137,15 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         except Exception as exception:
-            print(f"餐食 Agent 运行失败：{type(exception).__name__}", file=sys.stderr)
+            log_event(
+                "cli.meal.failed",
+                level="ERROR",
+                trace_id=args.trace_id,
+                task_id=args.task_id,
+                attempt_id=args.attempt_id,
+                error_type=type(exception).__name__,
+                error_message=str(exception),
+            )
             return 2
         print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
         return 0
@@ -124,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
                 run_smoke(task_id=args.task_id, attempt_id=args.attempt_id, trace_id=args.trace_id)
             )
         except Exception as exception:
-            print(f"真实 smoke 失败：{type(exception).__name__}", file=sys.stderr)
+            log_exception("smoke.failed", exception)
             return 2
         print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
         if result.get("status") == "success" and result.get("output_status") == "analysis":

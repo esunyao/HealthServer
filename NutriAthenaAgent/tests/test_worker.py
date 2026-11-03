@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import io
 from uuid import UUID, uuid4
 
 import pytest
 
+from nutriathena_agent.logging_service import DebugLevel, LogFormat, configure_logging
+from nutriathena_agent.mcp_tools import McpSetupError
 from nutriathena_agent.runtime_config import RuntimeSettings
 from nutriathena_agent.worker import DurableWorker
 
@@ -103,6 +106,15 @@ class SuccessfulRunner:
                 }
             ],
         }
+
+
+class FailingRunner:
+    async def run(self, *, task_id, attempt_id, trace_id):
+        del task_id, attempt_id, trace_id
+        try:
+            raise ConnectionError("connect failed https://issuer.test/token?token=never-log")
+        except ConnectionError as inner:
+            raise McpSetupError("HealthMind MCP read failed", stage="oauth") from inner
 
 
 class BlockingRunner:
@@ -231,3 +243,37 @@ def test_worker_terminates_identity_mismatch_before_runner(identity_field, wrong
         "error_message": "Run identity does not match this worker.",
     }
     assert row[identity_field] == wrong_value
+
+
+def test_worker_run_failure_logs_cause_chain_and_context():
+    stream = io.StringIO()
+    configure_logging(
+        DebugLevel.TRACE,
+        sink=stream,
+        log_format=LogFormat.TEXT,
+        level="DEBUG",
+        file_path=None,
+        force=True,
+    )
+    row = _pending_row()
+    repository = FakeRepository(row)
+    worker = DurableWorker(
+        repository,
+        _settings(),
+        artifact_sha256=_ARTIFACT_SHA256,
+        runner=FailingRunner(),
+    )
+
+    asyncio.run(worker._execute({**row, "lease_owner": worker.owner}))
+
+    output = stream.getvalue()
+    assert "event=worker.run.failed" in output
+    assert "McpSetupError" in output
+    assert "ConnectionError" in output
+    assert "direct cause" in output
+    assert f'run="{row["run_id"]}"' in output
+    assert f'task="{row["task_id"]}"' in output
+    assert f'attempt="{row["attempt_id"]}"' in output
+    assert "issuer.test" not in output
+    assert "never-log" not in output
+    assert repository.finished_terminal[0][-1]["error_code"] == "AGENT_RUN_FAILED"

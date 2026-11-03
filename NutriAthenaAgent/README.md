@@ -50,23 +50,39 @@ uv run nutriathena-agent agent "统计一下这句话的词数：晚饭吃了清
 
 `meal` 命令通过 MCP 和模型运行端直接执行一次已获授权的 attempt。生产任务应通过 `serve` 接入，以使用 PostgreSQL 提供的幂等控制、执行租约、数据保留和取消机制。
 
-## 调试模式
+## 日志与调试模式
 
-默认关闭。通过环境变量 `NUTRIATHENA_DEBUG` 或 `serve`/`meal` 子命令的 `--debug` 开启；CLI 优先于环境变量：
+服务日志统一由 loguru 输出到 stderr；设置 `NUTRIATHENA_LOG_FILE` 时额外写入轮转文件（10 MB 轮转、保留 7 天）。默认文本格式，`NUTRIATHENA_LOG_FORMAT=json` 时每行输出一个 JSON。`NUTRIATHENA_LOG_LEVEL` 控制基础级别（默认 INFO）；`NUTRIATHENA_DEBUG != off` 时 sink 强制到 DEBUG。
+
+通过环境变量 `NUTRIATHENA_DEBUG` 或 `serve`/`meal` 子命令的 `--debug` 选择细节级别；CLI 优先于环境变量：
 
 ```bash
 NUTRIATHENA_DEBUG=trace uv run nutriathena-agent serve
 uv run nutriathena-agent meal --debug --task-id <uuid> --attempt-id <uuid>
 uv run nutriathena-agent meal --debug full --task-id <uuid> --attempt-id <uuid>
+NUTRIATHENA_LOG_FORMAT=json NUTRIATHENA_LOG_FILE=logs/agent.log uv run nutriathena-agent serve
 ```
 
 | 级别 | 输出 |
 |---|---|
-| `off`（默认） | 不改变现有日志行为 |
-| `trace` | 结构化轨迹：run 起止、LangGraph 节点、模型/工具调用、耗时、token 与终态；不含提示词、图片、URL 或餐食内容 |
-| `full` | 在 `trace` 基础上输出模型输入/输出、工具入参与返回及最终结果原文；仅限本地开发 |
+| `off`（默认） | INFO 运行日记：HTTP/worker/meal 阶段、耗时、状态与 trace/run/task/attempt 上下文；失败带完整异常链 |
+| `trace` | 在 `off` 基础上增加 DEBUG 步骤：MCP OAuth/连接、LangGraph 节点、模型/工具调用、token 与租约心跳 |
+| `full` | 在 `trace` 基础上输出餐食备注、模型输入输出、工具返回与最终结果；仅限本地开发 |
 
-调试事件写入 stderr。`full` 会包含真实餐食备注与模型输出，且仍会移除图片 data URL、签名 URL、Bearer/JWT 与常见敏感键；不要在生产环境开启。
+失败时即使 `off` 也能直接看到阶段与根因，例如：
+
+```text
+... | ERROR | nutriathena_agent.meal_agent:run:335 | trace="..." run="..." task="..." attempt="..." | event=meal.failed | stage="oauth" | mcp_stage="oauth" | status="error" | error_type="McpSetupError" | error_chain="McpSetupError <- ConnectError <- OSError <- ConnectionRefusedError" OAuth token endpoint could not be reached
+Traceback (most recent call last):
+  ...
+httpx.ConnectError: All connection attempts failed
+The above exception was the direct cause of the following exception:
+nutriathena_agent.mcp_tools.McpSetupError: OAuth token endpoint could not be reached
+```
+
+常规日志（`off`/`trace`）不会输出 `.env`、OAuth token/模型 key、Authorization、JWT、data URL、签名图片 URL 或图片字节；`ValidationError` 只输出 `loc/type` 摘要。`full` 会包含真实餐食备注与模型输出，仍会移除上述凭据与 URL，并在启动时打印一次警告；不要在生产环境或长期留存中使用。文件 sink 面向当前单进程 `serve`；若未来启用多进程，应改用外部日志采集。
+
+新增依赖或源码会改变 `artifact_sha256`。升级本模块前先 drain/对账旧 release 的 pending/running run，部署后重新登记 release（见 [`doc/release.md`](./doc/release.md)），避免旧 pending run 无法被新 worker claim。
 
 ## 餐食分析边界
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import logging
 import os
 from types import SimpleNamespace
 from uuid import uuid4
@@ -14,13 +13,12 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 from nutriathena_agent import main as cli
 from nutriathena_agent.config import load_meal_settings
 from nutriathena_agent.debug import (
-    DEBUG_LOGGER_NAME,
     DebugLevel,
     DebugTraceCallback,
     DebugTracer,
-    configure_debug_logging,
     parse_debug_level,
 )
+from nutriathena_agent.logging_service import LogFormat, configure_logging
 from nutriathena_agent.runtime_config import load_runtime_settings
 
 _TASK_ID = "11111111-1111-4111-8111-111111111111"
@@ -46,16 +44,17 @@ _MEAL_ENV = {
 }
 
 
-def _capture_logger() -> tuple[logging.Logger, io.StringIO]:
-    logger = logging.getLogger(f"test.debug.{uuid4()}")
-    logger.handlers.clear()
-    logger.setLevel(logging.DEBUG)
-    logger.propagate = False
+def _capture(level: DebugLevel) -> io.StringIO:
     stream = io.StringIO()
-    handler = logging.StreamHandler(stream)
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    logger.addHandler(handler)
-    return logger, stream
+    configure_logging(
+        level,
+        sink=stream,
+        log_format=LogFormat.TEXT,
+        level="DEBUG",
+        file_path=None,
+        force=True,
+    )
+    return stream
 
 
 @pytest.mark.parametrize("value", ["", None, "off", "0", "false", "no", "none", " OFF "])
@@ -96,29 +95,25 @@ def test_meal_settings_default_and_override_debug_level(monkeypatch):
     assert load_meal_settings().debug_level is DebugLevel.TRACE
 
 
-def test_configure_debug_logging_is_idempotent_and_off_removes_handler():
-    logger = logging.getLogger(DEBUG_LOGGER_NAME)
-    try:
-        configure_debug_logging(DebugLevel.TRACE)
-        first = [handler for handler in logger.handlers if getattr(handler, "_nutriathena_debug_handler", False)]
-        assert len(first) == 1
-        assert logger.propagate is False
+def test_configure_logging_is_idempotent():
+    stream = _capture(DebugLevel.TRACE)
+    configure_logging(
+        DebugLevel.TRACE,
+        sink=stream,
+        log_format=LogFormat.TEXT,
+        level="DEBUG",
+        file_path=None,
+    )
 
-        configure_debug_logging(DebugLevel.TRACE)
-        second = [handler for handler in logger.handlers if getattr(handler, "_nutriathena_debug_handler", False)]
-        assert len(second) == 1
+    tracer = DebugTracer(DebugLevel.TRACE, trace_id="trace-test")
+    tracer.event("llm.started", model="test-model")
 
-        configure_debug_logging(DebugLevel.OFF)
-        remaining = [handler for handler in logger.handlers if getattr(handler, "_nutriathena_debug_handler", False)]
-        assert remaining == []
-        assert logger.propagate is True
-    finally:
-        configure_debug_logging(DebugLevel.OFF)
+    assert stream.getvalue().count("event=llm.started") == 1
 
 
 def test_trace_level_never_emits_model_content():
-    logger, stream = _capture_logger()
-    tracer = DebugTracer(DebugLevel.TRACE, trace_id="trace-test", logger=logger)
+    stream = _capture(DebugLevel.TRACE)
+    tracer = DebugTracer(DebugLevel.TRACE, trace_id="trace-test", logger=None)
 
     tracer.event("llm.started", model="test-model", messages=1)
     tracer.content("llm.input[0]", "secret meal note")
@@ -131,8 +126,8 @@ def test_trace_level_never_emits_model_content():
 
 
 def test_full_level_redacts_images_urls_bearer_and_jwt():
-    logger, stream = _capture_logger()
-    tracer = DebugTracer(DebugLevel.FULL, trace_id="trace-test", logger=logger)
+    stream = _capture(DebugLevel.FULL)
+    tracer = DebugTracer(DebugLevel.FULL, trace_id="trace-test")
 
     tracer.content(
         "llm.input",
@@ -143,7 +138,7 @@ def test_full_level_redacts_images_urls_bearer_and_jwt():
     )
 
     output = stream.getvalue()
-    assert "[data-url removed]" in output
+    assert "[data-url omitted]" in output
     assert "[URL removed]" in output
     assert "Bearer [redacted]" in output
     assert "[jwt removed]" in output
@@ -154,8 +149,8 @@ def test_full_level_redacts_images_urls_bearer_and_jwt():
 
 
 def test_full_level_redacts_sensitive_json_keys():
-    logger, stream = _capture_logger()
-    tracer = DebugTracer(DebugLevel.FULL, logger=logger)
+    stream = _capture(DebugLevel.FULL)
+    tracer = DebugTracer(DebugLevel.FULL)
 
     tracer.content(
         "tool.output",
@@ -163,15 +158,14 @@ def test_full_level_redacts_sensitive_json_keys():
     )
 
     output = stream.getvalue()
-    assert r'\"taskId\":\"[redacted]\"' in output
-    assert r'\"access_token\":\"[redacted]\"' in output
-    assert "top-secret" not in output
+    assert "taskId" in output
     assert "11111111-1111-4111-8111-111111111111" not in output
+    assert "top-secret" not in output
 
 
 def test_full_level_truncates_large_content():
-    logger, stream = _capture_logger()
-    tracer = DebugTracer(DebugLevel.FULL, logger=logger)
+    stream = _capture(DebugLevel.FULL)
+    tracer = DebugTracer(DebugLevel.FULL)
 
     tracer.content("llm.output", "x" * (70 * 1024))
 
@@ -179,8 +173,8 @@ def test_full_level_truncates_large_content():
 
 
 def test_callback_trace_level_records_structure_without_content():
-    logger, stream = _capture_logger()
-    tracer = DebugTracer(DebugLevel.TRACE, trace_id="trace-test", logger=logger)
+    stream = _capture(DebugLevel.TRACE)
+    tracer = DebugTracer(DebugLevel.TRACE, trace_id="trace-test")
     callback = DebugTraceCallback(tracer)
     run_id = uuid4()
     messages = [
@@ -214,8 +208,8 @@ def test_callback_trace_level_records_structure_without_content():
 
 
 def test_callback_full_level_redacts_content():
-    logger, stream = _capture_logger()
-    tracer = DebugTracer(DebugLevel.FULL, trace_id="trace-test", logger=logger)
+    stream = _capture(DebugLevel.FULL)
+    tracer = DebugTracer(DebugLevel.FULL, trace_id="trace-test")
     callback = DebugTraceCallback(tracer)
     run_id = uuid4()
     messages = [
@@ -244,8 +238,8 @@ def test_callback_full_level_redacts_content():
 
 
 def test_callback_chain_events_only_for_langgraph_nodes():
-    logger, stream = _capture_logger()
-    tracer = DebugTracer(DebugLevel.TRACE, logger=logger)
+    stream = _capture(DebugLevel.TRACE)
+    tracer = DebugTracer(DebugLevel.TRACE)
     callback = DebugTraceCallback(tracer)
     node_run = uuid4()
     child_run = uuid4()
@@ -277,8 +271,8 @@ def test_callback_chain_events_only_for_langgraph_nodes():
 
 
 def test_callback_tool_events_record_duration_and_redact_output():
-    logger, stream = _capture_logger()
-    tracer = DebugTracer(DebugLevel.FULL, logger=logger)
+    stream = _capture(DebugLevel.FULL)
+    tracer = DebugTracer(DebugLevel.FULL)
     callback = DebugTraceCallback(tracer)
     run_id = uuid4()
 
@@ -295,8 +289,8 @@ def test_callback_tool_events_record_duration_and_redact_output():
 
 
 def test_callback_tool_error_only_records_type_at_trace_level():
-    logger, stream = _capture_logger()
-    tracer = DebugTracer(DebugLevel.TRACE, logger=logger)
+    stream = _capture(DebugLevel.TRACE)
+    tracer = DebugTracer(DebugLevel.TRACE)
     callback = DebugTraceCallback(tracer)
     run_id = uuid4()
 

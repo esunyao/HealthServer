@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from .config import load_env
-from .debug import DebugLevel, parse_debug_level
+from .logging_service import DebugLevel, parse_debug_level
 
 
 @dataclass(frozen=True)

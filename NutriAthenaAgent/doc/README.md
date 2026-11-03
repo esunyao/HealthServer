@@ -51,19 +51,43 @@ This deployment currently has no food-composition retrieval provider. The produc
 must declare the evidence set empty, allow conservative common-knowledge estimates with reduced
 confidence, and never claim database retrieval or fabricate citations.
 
-## Debug tracing
+## Logging and debug tracing
 
-`NUTRIATHENA_DEBUG` (default `off`) enables opt-in execution tracing; `serve` and `meal` also
-accept `--debug [off|trace|full]`, which takes precedence over the environment.
+All service logs go through one loguru-based renderer. The default is human-readable text on
+stderr; `NUTRIATHENA_LOG_FORMAT=json` emits one flat JSON object per line. `NUTRIATHENA_LOG_LEVEL`
+sets the base level (default `INFO`); setting `NUTRIATHENA_LOG_FILE` adds a rotating file sink
+(10 MB rotation, 7 days retention). When `NUTRIATHENA_DEBUG != off`, the sink level is lowered to
+`DEBUG`.
 
-- `trace` emits structured events for runs, LangGraph nodes, model calls and MCP tool calls,
-  including durations, token usage and terminal state. It never logs prompts, images, URLs or
-  meal content.
-- `full` additionally emits model input/output, tool arguments/results and the final result.
-  It is intended for local development only. Image data URLs, signed URLs, Bearer tokens,
-  JWTs and common sensitive JSON keys are still removed, and fields are truncated.
-- Debug events go to stderr through the dedicated `nutriathena_agent.debug` logger; the default
-  `off` level changes no existing logging behavior.
+Every event is pre-rendered by the logging service before it reaches loguru. Sinks use
+`format="{message}"`, `diagnose=False` and `backtrace=False`, so loguru never formats raw
+exceptions or local variables. The renderer includes `trace_id`, `run_id`, `task_id` and
+`attempt_id`, resolves `__cause__`/`__context__`/`ExceptionGroup`, and redacts data URLs, URLs,
+Bearer/JWT values, URI credentials, secret query/form parameters and sensitive JSON keys. Outside
+`full`, a `ValidationError` in the chain is represented only by its `loc`/`type` summary so
+`input_value` cannot leak meal notes, signed URLs or model output.
+
+| Level | Output |
+|---|---|
+| `off` (default) | INFO run diary: HTTP/worker/meal stages, durations, terminal status and IDs; failures include the full safe exception chain |
+| `trace` | Adds DEBUG events for MCP OAuth/connect, LangGraph nodes, model/tool calls, token usage and lease heartbeats |
+| `full` | Adds meal notes, model input/output, tool arguments/results and the final result. Local development only. |
+
+Representative events: `http.request.finished`, `run.submitted`,
+`worker.run.claimed/started/failed/succeeded`,
+`meal.started/context/images.unavailable/agent.finished/contract.invalid/finished/failed`,
+`mcp.oauth.started/finished`, `mcp.connected`, `mcp.capture.prefetched`, `mcp.tool.finished`.
+
+In `serve`, stdlib logging is intercepted for `uvicorn` at INFO and third-party loggers are capped
+at WARNING; uvicorn's access log is disabled and replaced by `http.request.*` events.
+`GET /healthz` request logs are DEBUG. Debug events go to stderr; the optional file sink is intended
+for the current single-process runtime.
+
+`NUTRIATHENA_DEBUG=full` is local-only and emits a one-time warning. It can include real meal notes
+and model output; credentials and URLs remain redacted.
+
+Any dependency or source change alters `artifact.py`'s digest. Drain/reconcile pending runs from the
+old release before upgrading, then register a new release with the new `artifact_sha256`.
 
 ## Verification and true smoke
 
