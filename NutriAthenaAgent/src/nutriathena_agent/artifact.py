@@ -18,7 +18,7 @@ def _manifest_files(root: Path, *, suffixes: set[str] | None = None) -> Iterable
 def compute_artifact_sha256(module_root: Path | None = None, skills_root: Path | None = None) -> str:
     root = module_root or Path(__file__).resolve().parents[2]
     package_root = root / "src" / "nutriathena_agent"
-    prompt_root = skills_root or root.parent / "AgentDeveloper" / "skills"
+    prompt_root = skills_root or root / "skills"
     if not package_root.is_dir() or not prompt_root.is_dir():
         raise RuntimeError("NutriAthenaAgent 代码或餐食规范资产缺失，无法计算部署摘要")
 

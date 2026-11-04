@@ -1,4 +1,4 @@
-"""Build the meal-agent prompt from the maintained AgentDeveloper skill bundle."""
+"""Build the meal-agent prompt from the maintained local skill bundle."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ _RUNTIME_CONTRACT = """## 本次运行的最终优先规则
 
 
 def default_skill_root() -> Path:
-    return Path(__file__).resolve().parents[3] / "AgentDeveloper" / "skills"
+    return Path(__file__).resolve().parents[2] / "skills"
 
 
 def build_system_prompt(skill_root: str | Path | None = None) -> str:

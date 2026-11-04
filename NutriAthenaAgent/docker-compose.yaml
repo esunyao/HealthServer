@@ -1,12 +1,12 @@
 services:
   nutriathena-agent:
     build:
-      context: ..
-      dockerfile: NutriAthenaAgent/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     image: nutriathena-agent:local
     restart: unless-stopped
     env_file:
-      - .env
+      - ${NUTRIATHENA_ENV_FILE:-.env}
     environment:
       NUTRIATHENA_HOST: 0.0.0.0
       NUTRIATHENA_PORT: "8101"

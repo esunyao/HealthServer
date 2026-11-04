@@ -1,34 +1,34 @@
 # AgentDeveloper — AI 工作指南（导航）
 
-> 本文件只做导航与理解，不新增规范；规范来源是根 [`AGENTS.md`](../AGENTS.md)。本目录不是可部署模块，是 Dify 膳食分析技能（Skill）套件的开发工作区。
+> 本文件只做导航与理解，不新增规范；规范来源是根 [`AGENTS.md`](../AGENTS.md)。本目录不是可部署模块；Dify 膳食分析技能资产已迁至 `NutriAthenaAgent/skills/`。
 
 ## 这个目录是什么
 
-面向 Dify 工作流的**膳食分析技能套件**：教模型「怎样分析与使用证据」的提示词资产。食物成分与指南原文由 Dify 知识库提供，本目录**不包含**知识库正文。
+原面向 Dify 工作流的**膳食分析技能套件**现由 NutriAthenaAgent 统一维护：教模型「怎样分析与使用证据」的提示词资产。食物成分与指南原文由 Dify 知识库提供，本目录**不包含**知识库正文。
 
 边界：
-- owns：技能正文（`SKILL.md`）、按需参考材料（`references/`）、评测用例（`evals/`）、评测工作区（`diet-suite-workspace/`）。
+- 技能正文、参考材料、评测用例和评测工作区均已迁至 `../NutriAthenaAgent/skills/`；本目录仅保留导航。
 - not owns：Dify 内部配置与线上版本（本地与 Dify 内的 Skill 版本不同）、知识库内容、HealthMind/NutriMemo 的运行实现。
 
 ## 目录结构
 
 | 位置 | 内容 |
 |---|---|
-| [`skills/README.md`](./skills/README.md) | 套件总览、在 Dify 的推荐编排、验证与边界 |
-| [`skills/meal-evidence-analysis/SKILL.md`](./skills/meal-evidence-analysis/SKILL.md) | 多图识别、去重、可食重量与营养计算；输出带证据与不确定性的草案（参考 [`references/calculation.md`](./skills/meal-evidence-analysis/references/calculation.md)） |
-| [`skills/china-dietary-fiber/SKILL.md`](./skills/china-dietary-fiber/SKILL.md) | 用中国指南/DRI/食物成分证据评估膳食纤维，区分人群、版次、单餐与全天（参考 [`references/knowledge-base.md`](./skills/china-dietary-fiber/references/knowledge-base.md)） |
-| [`skills/diet-result-contract/SKILL.md`](./skills/diet-result-contract/SKILL.md) | 校验并整理成可入库的结构化结果；不虚构缺失值、不生成 Kafka 事件或业务 ID（参考 [`references/contract.md`](./skills/diet-result-contract/references/contract.md)） |
-| [`skills/diet-suite-workspace/`](./skills/diet-suite-workspace/) | skill-creator 评测工作区：[`TEST-NOTES.md`](./skills/diet-suite-workspace/TEST-NOTES.md)、[`iteration-1/`](./skills/diet-suite-workspace/iteration-1/)（六道题 × with/without skill 输出与评分）、[`review.html`](./skills/diet-suite-workspace/review.html) |
+| [`skills/README.md`](../NutriAthenaAgent/skills/README.md) | 套件总览、在 Dify 的推荐编排、验证与边界 |
+| [`skills/meal-evidence-analysis/SKILL.md`](../NutriAthenaAgent/skills/meal-evidence-analysis/SKILL.md) | 多图识别、去重、可食重量与营养计算；输出带证据与不确定性的草案（参考 [`references/calculation.md`](../NutriAthenaAgent/skills/meal-evidence-analysis/references/calculation.md)） |
+| [`skills/china-dietary-fiber/SKILL.md`](../NutriAthenaAgent/skills/china-dietary-fiber/SKILL.md) | 用中国指南/DRI/食物成分证据评估膳食纤维，区分人群、版次、单餐与全天（参考 [`references/knowledge-base.md`](../NutriAthenaAgent/skills/china-dietary-fiber/references/knowledge-base.md)） |
+| [`skills/diet-result-contract/SKILL.md`](../NutriAthenaAgent/skills/diet-result-contract/SKILL.md) | 校验并整理成可入库的结构化结果；不虚构缺失值、不生成 Kafka 事件或业务 ID（参考 [`references/contract.md`](../NutriAthenaAgent/skills/diet-result-contract/references/contract.md)） |
+| [`skills/diet-suite-workspace/`](../NutriAthenaAgent/skills/diet-suite-workspace/) | skill-creator 评测工作区：[`TEST-NOTES.md`](../NutriAthenaAgent/skills/diet-suite-workspace/TEST-NOTES.md)、[`iteration-1/`](../NutriAthenaAgent/skills/diet-suite-workspace/iteration-1/)（六道题 × with/without skill 输出与评分）、[`review.html`](../NutriAthenaAgent/skills/diet-suite-workspace/review.html) |
 | 各技能 `evals/evals.json` | 评测题目（缺图、多图重复、单位换算、来源冲突、单餐不冒充全天、缺值不补零、严格输出） |
 
 ## 任务 → 读什么
 
 | 你要做的事 | 先读 |
 |---|---|
-| 了解套件与 Dify 编排建议 | [`skills/README.md`](./skills/README.md) |
+| 了解套件与 Dify 编排建议 | [`skills/README.md`](../NutriAthenaAgent/skills/README.md) |
 | 改某个技能的提示词 | 对应 `SKILL.md`（先读其开头的 references 指引） |
-| 校验分析输出能否落库 | [`diet-result-contract/references/contract.md`](./skills/diet-result-contract/references/contract.md) → [../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md) → [../HealthMind/AGENTS.md](../HealthMind/AGENTS.md)（校验方） |
-| 查评测状态与结论 | [`diet-suite-workspace/TEST-NOTES.md`](./skills/diet-suite-workspace/TEST-NOTES.md) |
+| 校验分析输出能否落库 | [`diet-result-contract/references/contract.md`](../NutriAthenaAgent/skills/diet-result-contract/references/contract.md) → [../integration-contracts/AGENTS.md](../integration-contracts/AGENTS.md) → [../HealthMind/AGENTS.md](../HealthMind/AGENTS.md)（校验方） |
+| 查评测状态与结论 | [`diet-suite-workspace/TEST-NOTES.md`](../NutriAthenaAgent/skills/diet-suite-workspace/TEST-NOTES.md) |
 | 了解结果结构规范（私有背景） | 仓库根 `doc-project/0917Dify餐食AI结构化输出规范.md`（私有、不提交） |
 
 ## 关键事实与易错点

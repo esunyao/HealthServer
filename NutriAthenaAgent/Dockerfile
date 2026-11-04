@@ -1,4 +1,4 @@
-# Build context: repository root (the Agent also loads AgentDeveloper/skills).
+# Build context: NutriAthenaAgent directory.
 FROM python:3.11-alpine3.22 AS builder
 
 RUN sed -i 's@dl-cdn.alpinelinux.org@mirrors.aliyun.com@g' /etc/apk/repositories \
@@ -6,7 +6,7 @@ RUN sed -i 's@dl-cdn.alpinelinux.org@mirrors.aliyun.com@g' /etc/apk/repositories
     && python -m pip install --no-cache-dir --index-url https://mirrors.aliyun.com/pypi/simple/ uv==0.12.13
 
 WORKDIR /workspace/NutriAthenaAgent
-COPY NutriAthenaAgent/pyproject.toml NutriAthenaAgent/uv.lock ./
+COPY pyproject.toml uv.lock ./
 # Export registry dependencies as pinned, hashed requirements. uv.lock contains
 # PyPI artifact URLs; installing the export makes uv actually use the mirror.
 RUN uv export --locked --offline --no-dev --no-emit-project --no-header --no-annotate \
@@ -29,10 +29,10 @@ ENV PATH="/opt/nutriathena-venv/bin:$PATH" \
     TZ=Asia/Shanghai
 WORKDIR /workspace/NutriAthenaAgent
 COPY --from=builder /opt/nutriathena-venv /opt/nutriathena-venv
-COPY NutriAthenaAgent/pyproject.toml NutriAthenaAgent/uv.lock ./
-COPY NutriAthenaAgent/src ./src
-COPY NutriAthenaAgent/migrations ./migrations
-COPY AgentDeveloper/skills /workspace/AgentDeveloper/skills
+COPY pyproject.toml uv.lock ./
+COPY src ./src
+COPY migrations ./migrations
+COPY skills ./skills
 USER nutriathena
 EXPOSE 8101
 

@@ -1,15 +1,13 @@
-# Only send the files needed to build the runtime and its artifact digest.
+# Only send runtime sources, migrations, skills and locked dependencies.
 **
-!NutriAthenaAgent/
-!NutriAthenaAgent/pyproject.toml
-!NutriAthenaAgent/uv.lock
-!NutriAthenaAgent/src/
-!NutriAthenaAgent/src/**
-!NutriAthenaAgent/migrations/
-!NutriAthenaAgent/migrations/**
-!AgentDeveloper/
-!AgentDeveloper/skills/
-!AgentDeveloper/skills/**
+!pyproject.toml
+!uv.lock
+!src/
+!src/**
+!migrations/
+!migrations/**
+!skills/
+!skills/**
 **/__pycache__/
 **/*.pyc
 **/.env

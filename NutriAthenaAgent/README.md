@@ -28,29 +28,64 @@ HealthMind 运行协议见 [`doc/README.md`](./doc/README.md)。本服务为每�
 
 ## Docker 部署
 
-Docker 构建需要整个仓库：构建上下文是仓库根目录，镜像会同时包含本模块和同级 `AgentDeveloper/skills`。Alpine 与 Python 依赖使用阿里云镜像源；依赖版本与哈希来自 `uv.lock`。不要从单独复制的 Agent 目录构建。
+Agent 的代码、迁移与餐食技能都位于本目录，可以单独构建。镜像使用 Python 3.11 Alpine，Alpine 和 Python 依赖使用阿里云镜像源；Python 依赖版本和哈希来自 `uv.lock`。
 
-在部署服务器的 `NutriAthenaAgent/.env` 中配置现有数据库、模型、OAuth、HealthMind MCP 等参数，并将 `HEALTHSERVER_DOCKER_NETWORK` 设为已有 Docker 网络的实际名称。`NUTRIATHENA_PUBLISHED_PORT` 可选，默认是宿主机端口 8101；容器始终监听 8101。Compose 会覆盖 `NUTRIATHENA_HOST` 和 `NUTRIATHENA_PORT`，不影响直接运行 Python 的配置。容器中的 `localhost` 仅指容器本身；数据库、HealthMind MCP 等应填写容器网络内可访问的服务名或地址，OAuth issuer 则必须继续与签发的令牌一致。确认 HealthMind 的 Agent 部署地址也能访问此容器。Compose 对 `.env` 进行变量插值，含美元符号的密钥使用单引号包裹或按 Compose 规则转义。
+### 从 GitHub 拉取并部署
 
-从仓库根目录执行：
-
-```bash
-docker network ls
-docker compose -f NutriAthenaAgent/docker-compose.yaml build
-docker compose -f NutriAthenaAgent/docker-compose.yaml up -d
-docker compose -f NutriAthenaAgent/docker-compose.yaml ps
-docker compose -f NutriAthenaAgent/docker-compose.yaml logs -f nutriathena-agent
-```
-
-每次容器启动先执行已有的版本化迁移，再启动服务；迁移失败时不会启动 HTTP 服务，容器会按重启策略重试。数据库账号必须有相应 schema 和迁移权限；迁移账本会校验已应用文件，不能改写已应用的 SQL。`/healthz` 检查数据库连通性；Compose 不创建数据库，也不创建指定的外部网络。
-
-镜像内运行代码、迁移、技能资产、`pyproject.toml` 与 `uv.lock` 必须和 HealthMind 的 release 制品摘要一致。构建后可以在不连接数据库的情况下计算镜像内摘要：
+部署服务器需要 Git、Docker 和 Docker Compose。先将本次更改提交并推送到 GitHub 的 `master`，服务器才能拉取到。首次部署时准备一个专用目录：
 
 ```bash
-docker compose -f NutriAthenaAgent/docker-compose.yaml run --rm --no-deps --entrypoint python nutriathena-agent -c "from nutriathena_agent.artifact import compute_artifact_sha256; print(compute_artifact_sha256())"
+mkdir -p ~/nutriathena-agent
+cd ~/nutriathena-agent
+curl -fsSLo deploy.sh https://raw.githubusercontent.com/esunyao/HealthServer/master/NutriAthenaAgent/deploy.sh
+curl -fsSLo .env.example https://raw.githubusercontent.com/esunyao/HealthServer/master/NutriAthenaAgent/.env.example
+cp -n .env.example .env
+chmod +x deploy.sh
 ```
 
-将结果与 HealthMind release 的 `agent_artifact_sha256` 比对，同时核对 `NUTRIATHENA_RELEASE_ID`、`NUTRIATHENA_DEPLOYMENT_KEY` 和 `NUTRIATHENA_ASSISTANT_ID`。仅当摘要或 release 身份发生变化时，按 [release 登记指南](doc/release.md) 处理；升级前先对账旧 release 的 pending/running 任务。默认日志输出到容器 stderr；如果设置了文件日志，需要自行挂载可写且持久化的目录。
+编辑该目录下的 `.env`：设置 PostgreSQL、模型、OAuth、HealthMind MCP，及已有 Docker 网络的名称 `HEALTHSERVER_DOCKER_NETWORK`。`NUTRIATHENA_PUBLISHED_PORT` 可选，默认宿主机端口 8101；容器内固定监听 8101。容器中的 `localhost` 指容器自身，数据库与 MCP 等地址应使用容器内可访问的服务名或地址；OAuth issuer 仍须与签发令牌保持一致。Compose 解析 `.env` 时，含美元符号的密钥使用单引号包裹或按 Compose 规则转义。
+
+执行部署；以后每次需要更新时重新执行同一命令：
+
+```bash
+./deploy.sh
+```
+
+脚本从 GitHub 的 `master` 使用浅克隆与稀疏检出，工作区仅检出 `NutriAthenaAgent/`；Git 元数据保存在本目录的 `.source/` 中。GitHub 支持部分克隆时按需下载文件；网络或服务端不支持过滤时，Git 可能下载更多仓库数据。每次执行都会获取最新提交、构建镜像并启动容器；脚本不监听 GitHub 提交。部署配置 `.env` 位于 `.source/` 之外，不随更新覆盖。如脚本本身有更新，重新下载 `deploy.sh`。已有 `.source/` 存在未提交修改时脚本会停止，不会强制覆盖。
+
+```bash
+export NUTRIATHENA_ENV_FILE="$PWD/.env"
+docker compose --project-name nutriathena-agent --env-file .env \
+  -f .source/NutriAthenaAgent/docker-compose.yaml ps
+docker compose --project-name nutriathena-agent --env-file .env \
+  -f .source/NutriAthenaAgent/docker-compose.yaml logs -f nutriathena-agent
+```
+
+上面查询命令通过 `NUTRIATHENA_ENV_FILE` 指定容器环境文件，并使用相同的 Compose 项目名称。
+
+### 从本地源码构建
+
+在 `NutriAthenaAgent` 目录配置 `.env` 后执行：
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f nutriathena-agent
+```
+
+每次容器启动会先执行现有版本化迁移，成功后才启动服务；迁移失败时容器退出并按重启策略重试。数据库账号必须有相应 schema 和迁移权限；不能改写已经应用的 SQL。`/healthz` 检查数据库连通性；Compose 不创建数据库，也不创建指定的外部网络。默认日志输出到容器 stderr；如启用文件日志，需要自行挂载可写且持久化的目录。
+
+镜像代码或技能变更会改变制品摘要。先对账旧 release 的 pending/running 任务，在镜像构建完成后计算实际部署镜像内的摘要，并与 HealthMind release 的 `agent_artifact_sha256`、release ID、deployment key、assistant ID 对齐；参见 [release 登记指南](doc/release.md)。首次迁移技能目录也改变了代码摘要，**不要继续使用旧 release 的摘要**。
+
+```bash
+# 镜像构建后可在服务器上执行，不连接数据库。
+docker run --rm --network none --entrypoint python nutriathena-agent:local \
+  -c "from nutriathena_agent.artifact import compute_artifact_sha256; print(compute_artifact_sha256())"
+```
+
+`deploy.sh` 会自动重建并重启容器，但不会自动登记或晋升 HealthMind release。如果镜像摘要与现有 release 不一致，请登记匹配的新 release 并配置相应的 `NUTRIATHENA_RELEASE_ID`；否则请求会被拒绝或旧任务无法被新 worker 领取。
+
+HealthMind 当前只接受 HTTPS 或指向自身回环地址的 HTTP Agent 地址。不同 Docker 容器通过服务名访问时，需配置可信 HTTPS 入口，或先调整 HealthMind 的对应校验；直接填写内网 HTTP 会导致 HealthMind 启动失败。
 
 ## 真实环境冒烟测试
 
@@ -117,7 +152,7 @@ nutriathena_agent.mcp_tools.McpSetupError: OAuth token endpoint could not be rea
 
 ## 餐食分析边界
 
-- 餐食提示词和膳食技能沿用同级目录 [`AgentDeveloper/skills`](../AgentDeveloper/skills/) 中维护的资产，本服务将现有分析流程适配为可替换的执行器。
+- 餐食提示词和膳食技能维护在本模块 [`skills`](./skills/)，本服务将现有分析流程适配为可替换的执行器。
 - 每次 attempt 在视觉模型调用前预取一次餐食采集 MCP 上下文，以获得已授权的图片 URL；面向模型的工具返回脱敏后的缓存上下文。营养画像 MCP 工具仍由模型按原有时序调用。稳定审计 ID 使用 attempt UUID 和完整 MCP 工具代码派生的 UUIDv5，通过 MCP `_meta.tool_call_id` 传递；每个工具在一次 attempt 中最多远程读取一次。
 - 餐食采集上下文包含可空的餐食备注 `notes`。备注作为数据传入视觉分析流程，不能覆盖系统指令。
 - 仅下载已授权采集记录返回的签名图片 URL。下载主机必须匹配 `NUTRIATHENA_MEDIA_ALLOWED_HOSTS` 逗号分隔的白名单，支持 `*.example.test` 和 `*` 通配符，HTTPS 允许任意有效端口；重定向、不支持的 MIME 类型或文件签名、图片数量超限、响应体大小超限都会被拒绝。图片 URL 和原始字节不会作为工具上下文或服务输出暴露给模型；视觉输入使用经过校验的内存编码图片。

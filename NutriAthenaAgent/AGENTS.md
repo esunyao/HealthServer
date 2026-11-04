@@ -6,7 +6,7 @@
 
 本模块拥有 HealthMind-compatible HTTP run API、JWT 校验、独立 PostgreSQL schema、持久化 worker、餐食分析 runner、只读 HealthMind MCP 客户端和本目录工程。它不拥有 HealthMind 业务记录、Kafka、NutriMemo/Orion 业务服务或跨模块数据库迁移。不得从 Agent 写入业务数据或绕过 HealthMind 的授权流程。
 
-餐食 prompt/营养推理规则沿用相邻 `../AgentDeveloper/skills/`。运行端可适配执行方式，但本任务范围不调整 prompt 文本、工具编排策略或营养估算规则。
+餐食 prompt 与营养推理规则维护在本模块 [`skills/`](./skills/)；迁移保留原有资产，不调整 prompt 文本、工具编排策略或营养估算规则。
 
 ## 快速事实
 
@@ -24,7 +24,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| [`Dockerfile`](./Dockerfile)、[`docker-compose.yaml`](./docker-compose.yaml) | Alpine 镜像、现有网络与自动迁移启动；部署说明见 README |
+| [`Dockerfile`](./Dockerfile)、[`docker-compose.yaml`](./docker-compose.yaml)、[`deploy.sh`](./deploy.sh) | 单目录 Alpine 镜像、GitHub 稀疏拉取部署、现有网络与自动迁移启动；部署说明见 README |
 | [`src/nutriathena_agent/api.py`](./src/nutriathena_agent/api.py) | HealthMind 线程/run HTTP 契约、JWT 依赖、显式数据库迁移入口 |
 | [`src/nutriathena_agent/database.py`](./src/nutriathena_agent/database.py) | 线程/run 幂等、持久化队列、worker 租约 fencing、取消与保留清理 |
 | [`src/nutriathena_agent/worker.py`](./src/nutriathena_agent/worker.py) | pending claim、心跳续租、超时/取消、调用 runner、条件终态写入 |
