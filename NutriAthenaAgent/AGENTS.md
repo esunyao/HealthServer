@@ -51,7 +51,7 @@
 - capture context 的 `notes` 是用户输入数据，必须传给 Meal Runner，但不得作为系统指令执行。当前生产运行没有食物成分数据源；Prompt 必须明确证据为空，允许保守常识估算并降低 confidence，不得声称检索过知识库或伪造引用。
 - signed image URL 仅供 worker 下载；host allowlist 使用逗号分隔，支持 `*` 通配符，HTTPS 允许任意有效端口；不允许重定向。URL、token、原始 capture ID 不进入模型上下文或常规日志。
 - 不读、不打印或提交 `.env`、OAuth token、模型 key、图片或真实餐食输出。真实 smoke 只能使用已有授权 task/attempt 和用户提供的测试上下文。
-- `artifact_sha256` 从当前加载代码、迁移、模型 prompt 资产和 lock 文件计算，不能回显调用请求中的值。
+- `artifact_sha256` 从当前加载代码、迁移、模型 prompt 资产和 lock 文件计算，不能回显调用请求中的值。受 Git 管理的制品输入通过 `.gitattributes` 固定 LF；旧工作副本需转换，未跟踪文件仍会影响摘要。
 
 ## 本地验证
 

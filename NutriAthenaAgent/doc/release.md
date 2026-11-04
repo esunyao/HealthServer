@@ -63,6 +63,8 @@ Agent 的配置可来自环境变量或 `NutriAthenaAgent/.env`，以实际启�
 python -B -c "from nutriathena_agent.artifact import compute_artifact_sha256; print(compute_artifact_sha256())"
 ```
 
+仓库中的制品输入通过 `.gitattributes` 固定 LF 换行，已有 Windows 工作区需将这些文件的工作副本转换为 LF；新检出自动遵守规则。摘要仍按实际字节计算，未跟踪文件、文件内容或依赖锁差异也会影响结果。以目标容器的启动日志或容器内计算结果为最终依据。
+
 输出为 64 位小写十六进制值。实现见 [`artifact.py`](../src/nutriathena_agent/artifact.py)：它包含 Python 代码、迁移、`NutriAthenaAgent/skills`、`pyproject.toml` 和 `uv.lock`，不是某一个文件的哈希。Agent 启动时也会计算摘要；如果启动后改变了这些文件，重新计算的值可能与运行进程持有的值不一致。先确定制品，再计算并启动与之相同的制品。
 
 ## 4. 准备输入、输出 schema 及摘要

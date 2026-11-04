@@ -1,2 +1,8 @@
 # Keep new migration files byte-stable across Windows and Linux.
 /migrations/*.sql text eol=lf
+
+# Artifact inputs must have identical bytes in Windows and Linux checkouts.
+/src/nutriathena_agent/**/*.py text eol=lf
+/skills/** text=auto eol=lf
+/pyproject.toml text eol=lf
+/uv.lock text eol=lf
