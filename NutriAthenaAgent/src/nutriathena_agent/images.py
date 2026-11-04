@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -107,12 +108,13 @@ def _validate_capture_url(url: str, allowed_hosts: frozenset[str]) -> str:
         parsed = urlsplit(url)
         host = (parsed.hostname or "").lower().rstrip(".")
         scheme = parsed.scheme.lower()
-        port = parsed.port
+        _ = parsed.port  # Validate the port without restricting its value.
         if parsed.username or parsed.password or parsed.fragment or not host:
             raise ValueError
-        if scheme not in {"https", "http"} or host not in allowed_hosts:
-            raise ValueError
-        if scheme == "https" and port not in {None, 443}:
+        if scheme not in {"https", "http"} or not any(
+            re.fullmatch(re.escape(pattern).replace(r"\*", ".*"), host)
+            for pattern in allowed_hosts
+        ):
             raise ValueError
         if scheme == "http":
             try:

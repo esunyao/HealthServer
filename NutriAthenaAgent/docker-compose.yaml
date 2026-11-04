@@ -1,0 +1,27 @@
+services:
+  nutriathena-agent:
+    build:
+      context: ..
+      dockerfile: NutriAthenaAgent/Dockerfile
+    image: nutriathena-agent:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NUTRIATHENA_HOST: 0.0.0.0
+      NUTRIATHENA_PORT: "8101"
+    ports:
+      - "${NUTRIATHENA_PUBLISHED_PORT:-8101}:8101"
+    networks:
+      - healthserver
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8101/healthz', timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  healthserver:
+    external: true
+    name: ${HEALTHSERVER_DOCKER_NETWORK:?Set HEALTHSERVER_DOCKER_NETWORK to an existing Docker network}

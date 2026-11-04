@@ -14,7 +14,7 @@ subprojects {
     apply plugin: 'io.spring.dependency-management'
 
     group = 'cn.esuny'
-    version = '0.0.2-SNAPSHOT'
+    version = '0.0.3-SNAPSHOT'
 
     ext {
         set('springCloudVersion', "2025.1.2")

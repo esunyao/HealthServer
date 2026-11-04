@@ -15,6 +15,7 @@ from uuid import UUID, uuid5
 import httpx
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool, tool
+from mcp.types import CallToolResult
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, ValidationError
 
 from .config import MealSettings
@@ -132,6 +133,12 @@ def _find_tool(tools: Iterable[Any], expected: str, *, stage: str = "list_tools"
 
 
 def _parse_mcp_json(result: Any) -> Any:
+    if isinstance(result, CallToolResult):
+        if result.isError:
+            raise McpSetupError("HealthMind MCP tool returned an error", stage="parse_context")
+        if isinstance(result.structuredContent, dict):
+            return result.structuredContent
+        return _parse_mcp_json(result.content)
     if isinstance(result, ToolMessage):
         artifact = result.artifact
         if isinstance(artifact, dict):

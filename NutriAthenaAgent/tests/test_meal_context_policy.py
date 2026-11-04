@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from mcp.types import CallToolResult, TextContent
 
 from nutriathena_agent.debug import DebugLevel
 from nutriathena_agent.images import CapturedImage
@@ -12,6 +13,7 @@ from nutriathena_agent.meal_agent import DeepAgentMealRunner, _load_evidence, _m
 from nutriathena_agent.mcp_tools import (
     CaptureContext,
     McpSetupError,
+    _context_json,
     bind_context_tools,
     parse_capture_context,
 )
@@ -37,6 +39,44 @@ def capture_payload(*, notes: str | None = None, include_notes: bool = True) -> 
     if include_notes:
         payload["notes"] = notes
     return payload
+
+
+def test_mcp_sdk_call_tool_result_text_preserves_capture_context():
+    payload = capture_payload(notes="test note")
+    response = CallToolResult(
+        content=[TextContent(type="text", text=json.dumps(payload))],
+        isError=False,
+    )
+
+    safe_json, raw = _context_json(response, capture=True)
+
+    assert raw == payload
+    assert "image_urls" not in json.loads(safe_json)
+    assert json.loads(safe_json)["notes"] == "test note"
+
+
+def test_mcp_sdk_call_tool_result_prefers_structured_content():
+    payload = capture_payload()
+    response = CallToolResult(
+        content=[TextContent(type="text", text="not JSON")],
+        structuredContent=payload,
+        isError=False,
+    )
+
+    _, raw = _context_json(response, capture=True)
+
+    assert raw == payload
+
+
+def test_mcp_sdk_call_tool_error_is_not_treated_as_context():
+    response = CallToolResult(
+        content=[TextContent(type="text", text=json.dumps(capture_payload()))],
+        structuredContent=capture_payload(),
+        isError=True,
+    )
+
+    with pytest.raises(McpSetupError, match="tool returned an error"):
+        _context_json(response, capture=True)
 
 
 def test_capture_context_notes_schema_accepts_null_empty_and_limits_length():

@@ -93,7 +93,6 @@ def test_authorized_capture_images_are_downloaded_in_memory_with_limits():
     "url,allowed_hosts,headers,content,max_bytes,message",
     [
         ("https://attacker.test/picture?token=secret", frozenset({"media.example.test"}), {}, b"\xff\xd8\xffok", 100, "地址"),
-        ("https://media.example.test:8443/picture?token=secret", frozenset({"media.example.test"}), {}, b"\xff\xd8\xffok", 100, "地址"),
         ("https://media.example.test/picture?token=secret", frozenset({"media.example.test"}), {"content-type": "image/png"}, b"\xff\xd8\xffok", 100, "内容"),
         ("https://media.example.test/picture?token=secret", frozenset({"media.example.test"}), {"content-type": "image/jpeg"}, b"\xff\xd8\xffoversize", 4, "大小"),
     ],
@@ -114,6 +113,48 @@ def test_authorized_capture_images_fail_closed(url, allowed_hosts, headers, cont
     with pytest.raises(ImageInputError, match=message) as captured:
         asyncio.run(load())
     assert "secret" not in str(captured.value)
+
+
+@pytest.mark.parametrize(
+    "url,allowed_hosts",
+    [
+        ("https://media.example.test:8444/photo", frozenset({"media.example.test"})),
+        ("https://api.lovedage.test:8444/photo", frozenset({"*.lovedage.test"})),
+        ("https://deep.api.lovedage.test:65535/photo", frozenset({"*.lovedage.test"})),
+        ("https://arbitrary.example:1234/photo", frozenset({"*"})),
+    ],
+)
+def test_authorized_capture_images_accept_wildcard_hosts_and_https_ports(url, allowed_hosts):
+    content = b"\xff\xd8\xffimage"
+
+    async def load():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, headers={"content-type": "image/jpeg"}, content=content)
+            )
+        ) as client:
+            return await load_captured_images([{"url": url}], allowed_hosts=allowed_hosts, client=client)
+
+    assert asyncio.run(load())[0].data == content
+
+
+@pytest.mark.parametrize(
+    "url,allowed_hosts",
+    [
+        ("https://lovedage.test/photo", frozenset({"*.lovedage.test"})),
+        ("https://evil-lovedage.test/photo", frozenset({"*.lovedage.test"})),
+        ("http://api.lovedage.test:8444/photo", frozenset({"*"})),
+        ("https://user:password@api.lovedage.test/photo", frozenset({"*"})),
+        ("https://api.lovedage.test:65536/photo", frozenset({"*"})),
+    ],
+)
+def test_authorized_capture_images_preserve_url_restrictions(url, allowed_hosts):
+    async def load():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200))) as client:
+            return await load_captured_images([{"url": url}], allowed_hosts=allowed_hosts, client=client)
+
+    with pytest.raises(ImageInputError, match="地址"):
+        asyncio.run(load())
 
 
 def test_authorized_capture_image_rejects_redirects():

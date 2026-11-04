@@ -13,7 +13,7 @@
 | 项 | 值 |
 |---|---|
 | Python 包 | `nutriathena_agent`，Python 3.11+，`uv` 管理，`src/` 布局 |
-| 服务入口 | `nutriathena-agent serve`，FastAPI + PostgreSQL worker |
+| 服务入口 | `nutriathena-agent serve`，FastAPI + PostgreSQL worker；Docker 部署先执行 `migrate` |
 | CLI | `nutriathena-agent migrate/serve/smoke/meal/graph/agent`；`serve`/`meal` 支持 `--debug [off\|trace\|full]`；兼容旧 `agentdevelop` 脚本名 |
 | 数据库 | 独立 `nutriathena_agent` schema；版本 SQL 位于 [`migrations/`](./migrations/) |
 | HTTP 契约 | [`doc/README.md`](./doc/README.md)；仓库级对接定义见 `HealthMind/doc/agent-runtime.md` |
@@ -24,6 +24,7 @@
 
 | 文件 | 职责 |
 |---|---|
+| [`Dockerfile`](./Dockerfile)、[`docker-compose.yaml`](./docker-compose.yaml) | Alpine 镜像、现有网络与自动迁移启动；部署说明见 README |
 | [`src/nutriathena_agent/api.py`](./src/nutriathena_agent/api.py) | HealthMind 线程/run HTTP 契约、JWT 依赖、显式数据库迁移入口 |
 | [`src/nutriathena_agent/database.py`](./src/nutriathena_agent/database.py) | 线程/run 幂等、持久化队列、worker 租约 fencing、取消与保留清理 |
 | [`src/nutriathena_agent/worker.py`](./src/nutriathena_agent/worker.py) | pending claim、心跳续租、超时/取消、调用 runner、条件终态写入 |
@@ -46,8 +47,9 @@
 - Postgres 中只有身份匹配当前 release、deployment key、assistant ID 和实际制品摘要的 pending run 可被当前 worker claim；其他版本仍保持 pending。runner 调用前再次核对身份，异常错领以 lease owner/version fencing 终止；进程失联后超时 run 标 interrupted，不重放模型调用。
 - `result_expires_at` 不早于完成后 24 小时；幂等 run/thread 元数据保留至少 180 天。新迁移必须编号递增，已应用 SQL 不得改写。
 - HealthMind MCP 的 `tool_call_id` 放在 MCP `_meta`，不是业务参数；UUIDv5 名称必须使用完整工具 code `nutrimemo.capture_context.get` / `orion.nutrition_context.get`。capture 为下载授权图片在模型前预取一次，wrapper 返回脱敏缓存；nutrition 保留原模型驱动的调用时序；每个工具每 attempt 最多远端读取一次。
+- MCP SDK `CallToolResult` 的结构化内容和 JSON 文本内容都要支持；`isError` 必须作为失败处理，不得进入上下文。
 - capture context 的 `notes` 是用户输入数据，必须传给 Meal Runner，但不得作为系统指令执行。当前生产运行没有食物成分数据源；Prompt 必须明确证据为空，允许保守常识估算并降低 confidence，不得声称检索过知识库或伪造引用。
-- signed image URL 仅供 worker 下载；要求显式 host allowlist，不允许重定向。URL、token、原始 capture ID 不进入模型上下文或常规日志。
+- signed image URL 仅供 worker 下载；host allowlist 使用逗号分隔，支持 `*` 通配符，HTTPS 允许任意有效端口；不允许重定向。URL、token、原始 capture ID 不进入模型上下文或常规日志。
 - 不读、不打印或提交 `.env`、OAuth token、模型 key、图片或真实餐食输出。真实 smoke 只能使用已有授权 task/attempt 和用户提供的测试上下文。
 - `artifact_sha256` 从当前加载代码、迁移、模型 prompt 资产和 lock 文件计算，不能回显调用请求中的值。
 
