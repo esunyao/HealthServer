@@ -1,0 +1,2 @@
+# Keep new migration files byte-stable across Windows and Linux.
+/migrations/*.sql text eol=lf

@@ -16,6 +16,22 @@ SCHEMA = "nutriathena_agent"
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 _MIGRATION_NAME = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
 
+# The original 0001 was applied from Windows with CRLF, while Git stores LF.
+# These exact known hashes differ only in line endings; no other bytes qualify.
+_LEGACY_CHECKSUM_EQUIVALENTS = {
+    "0001_create_agent_runtime.sql": frozenset({
+        "f3b079ca7328b288795c6825fdb76c9394987bcf230774533e46ff8ae1101607",
+        "f660e6b7c6dc6fa20a76df94828289e602673356dce1c72eebc7b36574d2719c",
+    }),
+}
+
+
+def _checksum_matches(script_name: str, actual: str, recorded: str) -> bool:
+    if actual == recorded:
+        return True
+    equivalents = _LEGACY_CHECKSUM_EQUIVALENTS.get(script_name, frozenset())
+    return actual in equivalents and recorded in equivalents
+
 
 class MigrationError(RuntimeError):
     """A migration is missing, changed after apply, or cannot be applied."""
@@ -70,8 +86,18 @@ def apply_migrations(pool: Any, migrations_dir: Path = MIGRATIONS_DIR) -> list[s
                 for version, path, sql, checksum in scripts:
                     existing = applied.get(version)
                     if existing is not None:
-                        if existing["script_name"] != path.name or existing["checksum_sha256"].strip() != checksum:
+                        recorded_checksum = existing["checksum_sha256"].strip()
+                        if existing["script_name"] != path.name or not _checksum_matches(
+                            path.name, checksum, recorded_checksum
+                        ):
                             raise MigrationError(f"已应用的迁移文件或校验和发生变化：{path.name}")
+                        if recorded_checksum != checksum:
+                            log_event(
+                                "migration.checksum.line_endings_compatible",
+                                level="WARNING",
+                                file=path.name,
+                                version=version,
+                            )
                         log_event(
                             "migration.skipped",
                             level="DEBUG",

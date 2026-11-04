@@ -215,6 +215,20 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
         assert apply_migrations(repository.pool) == []
         repository.assert_schema_ready()
 
+        original = Path(__file__).resolve().parents[1] / "migrations" / "0001_create_agent_runtime.sql"
+        raw = original.read_bytes()
+        lf = raw.replace(b"\r\n", b"\n")
+        alternative = lf.replace(b"\n", b"\r\n") if raw == lf else lf
+        alternate_dir = tmp_path / "alternate-line-endings"
+        alternate_dir.mkdir()
+        (alternate_dir / original.name).write_bytes(alternative)
+        assert apply_migrations(repository.pool, alternate_dir) == []
+        with repository.pool.connection() as connection:
+            ledger = connection.execute(
+                "SELECT checksum_sha256 FROM nutriathena_agent.schema_migrations WHERE version = 1"
+            ).fetchone()
+        assert ledger["checksum_sha256"].strip() == hashlib.sha256(raw).hexdigest()
+
         with repository.pool.connection() as connection:
             names = connection.execute(
                 """SELECT table_name FROM information_schema.tables

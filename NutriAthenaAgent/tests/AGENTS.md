@@ -9,6 +9,6 @@
 - `test_meal_agent.py` 覆盖视觉输入、备注、空证据、MCP 工具和输出契约。
 - `test_debug.py` 覆盖调试级别解析、脱敏、回调事件与 CLI 优先级。
 - `test_logging_service.py` 覆盖文本/JSON 格式、上下文、完整异常链、ValidationError 安全摘要、stdlib 接管、文件 sink、颜色（auto/always/never、文件与 JSON 保持无色）与 OAuth 失败根因；`conftest.py` 负责 loguru/stdlib 全局状态隔离。
-- `test_postgres_runtime.py` 需要 Docker；跳过时必须报告。
+- `test_migration_checksums.py` 覆盖历史迁移换行兼容及篡改拒绝；`test_postgres_runtime.py` 需要 Docker；跳过时必须报告。
 - 默认测试不得连接真实 OAuth、MCP、模型或生产数据库，不得读取或打印 `.env`。
 

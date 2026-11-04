@@ -28,7 +28,7 @@ HealthMind 运行协议见 [`doc/README.md`](./doc/README.md)。本服务为每�
 
 ## Docker 部署
 
-Agent 的代码、迁移与餐食技能都位于本目录，可以单独构建。镜像使用 Python 3.11 Alpine，Alpine 和 Python 依赖使用阿里云镜像源；Python 依赖版本和哈希来自 `uv.lock`。
+Agent 的代码、迁移与餐食技能都位于本目录。Compose 默认从 GitHub `master` 的 `NutriAthenaAgent/` 构建镜像，`pull_policy: build` 使启动时重新构建；本地未提交或未推送的源码不会进入镜像。可通过 `NUTRIATHENA_GIT_REF` 指定其他分支、标签或完整提交 SHA。镜像使用 Python 3.11 Alpine，Alpine 和 Python 依赖使用阿里云镜像源；Python 依赖版本和哈希来自 `uv.lock`。
 
 ### 从 GitHub 拉取并部署
 
@@ -51,7 +51,7 @@ chmod +x deploy.sh
 ./deploy.sh
 ```
 
-脚本从 GitHub 的 `master` 使用浅克隆与稀疏检出，工作区仅检出 `NutriAthenaAgent/`；Git 元数据保存在本目录的 `.source/` 中。GitHub 支持部分克隆时按需下载文件；网络或服务端不支持过滤时，Git 可能下载更多仓库数据。每次执行都会获取最新提交、构建镜像并启动容器；脚本不监听 GitHub 提交。部署配置 `.env` 位于 `.source/` 之外，不随更新覆盖。如脚本本身有更新，重新下载 `deploy.sh`。已有 `.source/` 存在未提交修改时脚本会停止，不会强制覆盖。
+脚本从 GitHub 的 `master` 使用浅克隆与稀疏检出获取部署配置，工作区仅检出 `NutriAthenaAgent/`；Git 元数据保存在本目录的 `.source/` 中。脚本将检出的完整提交 SHA 传给 Compose，Docker 随后从 GitHub 的同一提交构建镜像。Docker 的远程 Git 上下文使用浅克隆，构建上下文限定为 Agent 子目录；传输仓库元数据时不保证只下载该目录。每次执行都会获取最新提交、构建镜像并启动容器；脚本不监听 GitHub 提交。部署配置 `.env` 位于 `.source/` 之外，不随更新覆盖。如脚本本身有更新，重新下载 `deploy.sh`。已有 `.source/` 存在未提交修改时脚本会停止，不会强制覆盖。
 
 ```bash
 export NUTRIATHENA_ENV_FILE="$PWD/.env"
@@ -63,9 +63,9 @@ docker compose --project-name nutriathena-agent --env-file .env \
 
 上面查询命令通过 `NUTRIATHENA_ENV_FILE` 指定容器环境文件，并使用相同的 Compose 项目名称。
 
-### 从本地源码构建
+### 使用本地 Compose 或 Dockge 部署
 
-在 `NutriAthenaAgent` 目录配置 `.env` 后执行：
+在 `NutriAthenaAgent` 目录配置 `.env` 后执行。Dockge 用户可将相同 Compose 配置放在自己的 stack 中，并在 Dockge 中配置已有的环境变量与网络：
 
 ```bash
 docker compose up -d --build
@@ -73,7 +73,9 @@ docker compose ps
 docker compose logs -f nutriathena-agent
 ```
 
-每次容器启动会先执行现有版本化迁移，成功后才启动服务；迁移失败时容器退出并按重启策略重试。数据库账号必须有相应 schema 和迁移权限；不能改写已经应用的 SQL。`/healthz` 检查数据库连通性；Compose 不创建数据库，也不创建指定的外部网络。默认日志输出到容器 stderr；如启用文件日志，需要自行挂载可写且持久化的目录。
+这会构建 GitHub 上的 `master`，不使用当前工作目录的源码。直接启动 Compose 前须先将希望部署的改动提交并推送；`docker compose up` 的构建来源与本地 Dockerfile 无关。
+
+每次容器启动会先执行现有版本化迁移，成功后才启动服务；迁移失败时容器退出并按重启策略重试。数据库账号必须有相应 schema 和迁移权限；不能改写已经应用的 SQL。历史 `0001_create_agent_runtime.sql` 已知的 LF 与 CRLF 摘要可以互认，数据库账本原值不变；其他摘要差异仍会中止迁移。`/healthz` 检查数据库连通性；Compose 不创建数据库，也不创建指定的外部网络。默认日志输出到容器 stderr；如启用文件日志，需要自行挂载可写且持久化的目录。
 
 镜像代码或技能变更会改变制品摘要。先对账旧 release 的 pending/running 任务，在镜像构建完成后计算实际部署镜像内的摘要，并与 HealthMind release 的 `agent_artifact_sha256`、release ID、deployment key、assistant ID 对齐；参见 [release 登记指南](doc/release.md)。首次迁移技能目录也改变了代码摘要，**不要继续使用旧 release 的摘要**。
 

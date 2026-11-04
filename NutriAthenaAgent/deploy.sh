@@ -29,7 +29,9 @@ else
     git -C "$source_dir" checkout --detach FETCH_HEAD
 fi
 
-printf '正在部署 Git 提交：%s\n' "$(git -C "$source_dir" rev-parse HEAD)"
+NUTRIATHENA_GIT_REF=$(git -C "$source_dir" rev-parse HEAD)
+export NUTRIATHENA_GIT_REF
+printf '正在部署 Git 提交：%s\n' "$NUTRIATHENA_GIT_REF"
 export NUTRIATHENA_ENV_FILE="$env_file"
 docker compose --project-name nutriathena-agent --env-file "$env_file" \
     -f "$source_dir/NutriAthenaAgent/docker-compose.yaml" up -d --build

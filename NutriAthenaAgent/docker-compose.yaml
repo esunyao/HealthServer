@@ -1,9 +1,10 @@
 services:
   nutriathena-agent:
     build:
-      context: .
+      context: "https://github.com/esunyao/HealthServer.git#${NUTRIATHENA_GIT_REF:-master}:NutriAthenaAgent"
       dockerfile: Dockerfile
     image: nutriathena-agent:local
+    pull_policy: build
     restart: unless-stopped
     env_file:
       - ${NUTRIATHENA_ENV_FILE:-.env}
