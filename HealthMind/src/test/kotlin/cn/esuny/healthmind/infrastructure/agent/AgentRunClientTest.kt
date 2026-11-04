@@ -142,6 +142,36 @@ class AgentRunClientTest {
         assertEquals("AGENT_IDENTITY_MISMATCH", error.code)
     }
 
+    @Test
+    fun `non loopback HTTP requires explicit opt in`() {
+        val address = "http://agent.example.invalid:8101"
+        assertFailsWith<IllegalArgumentException> { clientForAddress(address) }
+        clientForAddress(address, allowInsecureHttp = true)
+    }
+
+    @Test
+    fun `opt in still rejects unsafe or invalid deployment URLs`() {
+        listOf(
+            "ftp://agent.example.invalid",
+            "http://user@agent.example.invalid",
+            "http://agent.example.invalid/path",
+            "http://agent.example.invalid?query=value",
+            "http://agent.example.invalid#fragment",
+        ).forEach { address ->
+            assertFailsWith<IllegalArgumentException> { clientForAddress(address, allowInsecureHttp = true) }
+        }
+        clientForAddress("https://agent.example.invalid")
+        clientForAddress("http://127.0.0.1:8101")
+    }
+
+    private fun clientForAddress(address: String, allowInsecureHttp: Boolean = false) = AgentRunClient(
+        RestClient.builder(), mapper, tokens,
+        HealthMindProperties(agent = HealthMindProperties.Agent(
+            deployments = mapOf("meal-v1" to address),
+            allowInsecureHttp = allowInsecureHttp,
+        )),
+    )
+
     private fun client(): AgentRunClient {
         every { tokens.token(any<HealthMindProperties.OAuth.Credentials>()) } returns "test-token"
         return AgentRunClient(

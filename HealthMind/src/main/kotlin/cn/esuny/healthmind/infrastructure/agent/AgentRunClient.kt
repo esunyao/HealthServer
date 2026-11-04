@@ -32,8 +32,9 @@ class AgentRunClient(
         val uri = URI.create(address)
         require(uri.host != null && uri.userInfo == null && uri.rawQuery == null && uri.rawFragment == null &&
             (uri.path.isNullOrEmpty() || uri.path == "/") &&
-            (uri.scheme == "https" || (uri.scheme == "http" && uri.host in setOf("localhost", "127.0.0.1")))) {
-            "Agent deployment must use HTTPS or loopback HTTP"
+            (uri.scheme == "https" || (uri.scheme == "http" &&
+                (uri.host in setOf("localhost", "127.0.0.1") || properties.agent.allowInsecureHttp)))) {
+            "Agent deployment must use HTTPS or loopback HTTP unless insecure HTTP is explicitly enabled"
         }
         val httpClient = HttpClient.newBuilder()
             // 受到python Uvicorn 限制，目前只能使用 HTTP/1.1

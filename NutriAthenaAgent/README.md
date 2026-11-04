@@ -30,42 +30,11 @@ HealthMind 运行协议见 [`doc/README.md`](./doc/README.md)。本服务为每�
 
 Agent 的代码、迁移与餐食技能都位于本目录。Compose 默认从 GitHub `master` 的 `NutriAthenaAgent/` 构建镜像，`pull_policy: build` 使启动时重新构建；本地未提交或未推送的源码不会进入镜像。可通过 `NUTRIATHENA_GIT_REF` 指定其他分支、标签或完整提交 SHA。镜像使用 Python 3.11 Alpine，Alpine 和 Python 依赖使用阿里云镜像源；Python 依赖版本和哈希来自 `uv.lock`。
 
-### 从 GitHub 拉取并部署
-
-部署服务器需要 Git、Docker 和 Docker Compose。先将本次更改提交并推送到 GitHub 的 `master`，服务器才能拉取到。首次部署时准备一个专用目录：
-
-```bash
-mkdir -p ~/nutriathena-agent
-cd ~/nutriathena-agent
-curl -fsSLo deploy.sh https://raw.githubusercontent.com/esunyao/HealthServer/master/NutriAthenaAgent/deploy.sh
-curl -fsSLo .env.example https://raw.githubusercontent.com/esunyao/HealthServer/master/NutriAthenaAgent/.env.example
-cp -n .env.example .env
-chmod +x deploy.sh
-```
-
-编辑该目录下的 `.env`：设置 PostgreSQL、模型、OAuth、HealthMind MCP，及已有 Docker 网络的名称 `HEALTHSERVER_DOCKER_NETWORK`。`NUTRIATHENA_PUBLISHED_PORT` 可选，默认宿主机端口 8101；容器内固定监听 8101。容器中的 `localhost` 指容器自身，数据库与 MCP 等地址应使用容器内可访问的服务名或地址；OAuth issuer 仍须与签发令牌保持一致。Compose 解析 `.env` 时，含美元符号的密钥使用单引号包裹或按 Compose 规则转义。
-
-执行部署；以后每次需要更新时重新执行同一命令：
-
-```bash
-./deploy.sh
-```
-
-脚本从 GitHub 的 `master` 使用浅克隆与稀疏检出获取部署配置，工作区仅检出 `NutriAthenaAgent/`；Git 元数据保存在本目录的 `.source/` 中。脚本将检出的完整提交 SHA 传给 Compose，Docker 随后从 GitHub 的同一提交构建镜像。Docker 的远程 Git 上下文使用浅克隆，构建上下文限定为 Agent 子目录；传输仓库元数据时不保证只下载该目录。每次执行都会获取最新提交、构建镜像并启动容器；脚本不监听 GitHub 提交。部署配置 `.env` 位于 `.source/` 之外，不随更新覆盖。如脚本本身有更新，重新下载 `deploy.sh`。已有 `.source/` 存在未提交修改时脚本会停止，不会强制覆盖。
-
-```bash
-export NUTRIATHENA_ENV_FILE="$PWD/.env"
-docker compose --project-name nutriathena-agent --env-file .env \
-  -f .source/NutriAthenaAgent/docker-compose.yaml ps
-docker compose --project-name nutriathena-agent --env-file .env \
-  -f .source/NutriAthenaAgent/docker-compose.yaml logs -f nutriathena-agent
-```
-
-上面查询命令通过 `NUTRIATHENA_ENV_FILE` 指定容器环境文件，并使用相同的 Compose 项目名称。
-
 ### 使用本地 Compose 或 Dockge 部署
 
-在 `NutriAthenaAgent` 目录配置 `.env` 后执行。Dockge 用户可将相同 Compose 配置放在自己的 stack 中，并在 Dockge 中配置已有的环境变量与网络：
+在本地 `NutriAthenaAgent` 目录或 Dockge 的 stack 目录配置 `.env`：设置 PostgreSQL、模型、OAuth、HealthMind MCP 以及已有 Docker 网络名称 `HEALTHSERVER_DOCKER_NETWORK`。`NUTRIATHENA_PUBLISHED_PORT` 可选，默认宿主机端口 8101，容器内固定监听 8101。容器中的 `localhost` 指容器自身；数据库和 MCP 地址需在容器网络内可访问，OAuth issuer 须与令牌一致。Compose 解析 `.env` 时，含美元符号的密钥使用单引号包裹或按 Compose 规则转义。
+
+首次部署请先将相关代码提交并推送；每次手动重新部署可在 stack 目录执行：
 
 ```bash
 docker compose up -d --build
@@ -73,7 +42,7 @@ docker compose ps
 docker compose logs -f nutriathena-agent
 ```
 
-这会构建 GitHub 上的 `master`，不使用当前工作目录的源码。直接启动 Compose 前须先将希望部署的改动提交并推送；`docker compose up` 的构建来源与本地 Dockerfile 无关。
+这会构建 GitHub 上的 `master`，不使用当前工作目录的源码；构建上下文限定为 Agent 子目录，但 Git 浅克隆仍可能传输其他仓库数据。Compose 不会自动监听 GitHub 提交。
 
 每次容器启动会先执行现有版本化迁移，成功后才启动服务；迁移失败时容器退出并按重启策略重试。数据库账号必须有相应 schema 和迁移权限；不能改写已经应用的 SQL。历史 `0001_create_agent_runtime.sql` 已知的 LF 与 CRLF 摘要可以互认，数据库账本原值不变；其他摘要差异仍会中止迁移。`/healthz` 检查数据库连通性；Compose 不创建数据库，也不创建指定的外部网络。默认日志输出到容器 stderr；如启用文件日志，需要自行挂载可写且持久化的目录。
 
@@ -85,7 +54,7 @@ docker run --rm --network none --entrypoint python nutriathena-agent:local \
   -c "from nutriathena_agent.artifact import compute_artifact_sha256; print(compute_artifact_sha256())"
 ```
 
-`deploy.sh` 会自动重建并重启容器，但不会自动登记或晋升 HealthMind release。如果镜像摘要与现有 release 不一致，请登记匹配的新 release 并配置相应的 `NUTRIATHENA_RELEASE_ID`；否则请求会被拒绝或旧任务无法被新 worker 领取。
+Compose 重建并重启容器，但不会自动登记或晋升 HealthMind release。如果镜像摘要与现有 release 不一致，请登记匹配的新 release 并配置相应的 `NUTRIATHENA_RELEASE_ID`；否则请求会被拒绝或旧任务无法被新 worker 领取。
 
 HealthMind 当前只接受 HTTPS 或指向自身回环地址的 HTTP Agent 地址。不同 Docker 容器通过服务名访问时，需配置可信 HTTPS 入口，或先调整 HealthMind 的对应校验；直接填写内网 HTTP 会导致 HealthMind 启动失败。
 

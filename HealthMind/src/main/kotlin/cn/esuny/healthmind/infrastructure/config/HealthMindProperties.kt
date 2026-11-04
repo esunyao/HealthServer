@@ -29,6 +29,7 @@ data class HealthMindProperties(
 
     data class Agent(
         val deployments: Map<String, String> = emptyMap(),
+        val allowInsecureHttp: Boolean = false,
         @field:Min(1) @field:Max(1000) val maxInFlight: Int = 10,
         val connectTimeout: Duration = Duration.ofSeconds(3),
         val readTimeout: Duration = Duration.ofSeconds(15),

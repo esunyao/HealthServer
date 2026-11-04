@@ -15,7 +15,7 @@ HealthMind 不拥有用户健康记录、餐食记录、图片、Prompt、知识
 | 工作流 | 通用任务状态机与自托管 LangGraph HTTP 运行端；后台 run + 持久化轮询 |
 | 认证 | Authentik OIDC Resource Server 与 M2M client credentials |
 
-所有服务地址、issuer 和凭据均由环境变量或 Nacos 注入。Agent 部署地址由配置中的部署 key 映射，不从数据库字段拼接任意 URL。
+所有服务地址、issuer 和凭据均由环境变量或 Nacos 注入。Agent 部署地址由配置中的部署 key 映射，不从数据库字段拼接任意 URL。默认仅允许 HTTPS 或 loopback HTTP；可信容器网络可通过 `HEALTHMIND_AGENT_ALLOW_INSECURE_HTTP=true` 显式允许其他 HTTP 地址，变更后需重启。
 
 ## MCP 工具
 

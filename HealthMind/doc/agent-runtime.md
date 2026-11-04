@@ -4,7 +4,7 @@
 
 ## 调用与授权
 
-HealthMind 使用 Authentik `client_credentials` 获取短期 Bearer token，调用 Agent 运行端。运行端必须验证签名、issuer、`aud=healthmind-agent`、`azp/client_id=healthmind-agent` 与 `healthmind.agent.run` scope。调用使用 HTTPS；仅 loopback 开发测试可用 HTTP。密钥只在环境或 Nacos，不能入库、日志或 Git。
+HealthMind 使用 Authentik `client_credentials` 获取短期 Bearer token，调用 Agent 运行端。运行端必须验证签名、issuer、`aud=healthmind-agent`、`azp/client_id=healthmind-agent` 与 `healthmind.agent.run` scope。默认使用 HTTPS，loopback 开发测试可用 HTTP。可信容器网络如需其他 HTTP 地址，须显式设置 `HEALTHMIND_AGENT_ALLOW_INSECURE_HTTP=true`（或 `healthmind.agent.allow-insecure-http: true`），并重启 HealthMind；HTTP 会明文传输 Bearer token。密钥只在环境或 Nacos，不能入库、日志或 Git。
 
 Agent 回调 HealthMind MCP 时使用独立的服务身份 `langgraph-healthmind`，token 必须含 `aud=healthmind-mcp` 与相应工具 scope。业务 arguments 只能有 `task_id`、`attempt_id`；稳定 UUID `tool_call_id` 放在 MCP request `_meta`，不进入工具 JSON Schema。相同逻辑读取的 HTTP/MCP 传输重试必须复用该 ID。图片及授权上下文由 MCP 按任务读取。HealthMind 向运行端的输入只有 `task_id`、`attempt_id`、`trace_id`，不传用户画像、图片 URL 或文件字节。
 
@@ -39,6 +39,6 @@ capture context 的 `notes` 是用户输入数据，会传入 Agent，但不得�
 
 Flyway V4 是破坏性切换，会清空 HealthMind 旧运行记录；V5 增加提交对账状态；V6 仅追加完整性约束、lease fencing、调用重放审计和 release 工具 schema 快照；V7 为 capture-context MCP response schema 增加可空 `notes`。升级前停止 HealthMind 并备份 `healthmind` schema。若有多个活动 attempt、成功结果缺失 run provenance 或 production 工具定义晚于 release，迁移会报出 ID 并中止，不会清空/挑选/静默升级历史数据。旧的已消费事件不会自动重放。
 
-使用 `db/manual/register_agent_release.sql` 以 `psql -v` 提供 `release_id`、`release_version`、`deployment_key`、`assistant_id`、实际制品的 `artifact_sha256`、`input_schema_version`、`input_schema`、`input_schema_sha256`、`output_schema_version`、`output_schema`、`output_schema_sha256`、`timeout_seconds`、`max_attempts`、`actor_id`、`reason` 和 `trace_id`。Schema 哈希按 HealthMind `CanonicalJson` 的排序 JSON 计算。脚本登记 candidate 并绑定两项 MCP 工具；经部署与契约验证后，使用 `promote_workflow_release.sql` 提升为 production。提升后 release 身份、契约和工具绑定均不可修改。生产 release 固定在任务创建时，重试不切换版本。新的部署必须使用新的 deployment key；从配置或 Nacos 提供该 key 到 HTTPS URL 的映射，随后重启 HealthMind 使客户端映射生效。
+使用 `db/manual/register_agent_release.sql` 以 `psql -v` 提供 `release_id`、`release_version`、`deployment_key`、`assistant_id`、实际制品的 `artifact_sha256`、`input_schema_version`、`input_schema`、`input_schema_sha256`、`output_schema_version`、`output_schema`、`output_schema_sha256`、`timeout_seconds`、`max_attempts`、`actor_id`、`reason` 和 `trace_id`。Schema 哈希按 HealthMind `CanonicalJson` 的排序 JSON 计算。脚本登记 candidate 并绑定两项 MCP 工具；经部署与契约验证后，使用 `promote_workflow_release.sql` 提升为 production。提升后 release 身份、契约和工具绑定均不可修改。生产 release 固定在任务创建时，重试不切换版本。新的部署必须使用新的 deployment key；从配置或 Nacos 提供该 key 到运行端 URL 的映射，随后重启 HealthMind 使客户端映射生效。
 
 HMC 的当前版本页面和部分数据构造 SQL 仍使用旧模型，本阶段禁止修改 HMC，因此不能用它登记或提升 Agent release；数据构造等功能需在后续适配时重新验收。即使 HMC 能创建手工 running attempt，HealthMind 也不会接管其运行。

@@ -136,6 +136,8 @@ healthmind:
   agent:
     deployments:
       meal-analysis-v1: ${HEALTHMIND_AGENT_BASE_URL:https://agent.example.invalid}
+    # 仅在可信容器网络明确启用；HTTP 会明文传输 Bearer token。
+    allow-insecure-http: ${HEALTHMIND_AGENT_ALLOW_INSECURE_HTTP:false}
     max-in-flight: ${HEALTHMIND_AGENT_MAX_IN_FLIGHT:10}
     connect-timeout: ${HEALTHMIND_AGENT_CONNECT_TIMEOUT:3s}
     read-timeout: ${HEALTHMIND_AGENT_READ_TIMEOUT:15s}

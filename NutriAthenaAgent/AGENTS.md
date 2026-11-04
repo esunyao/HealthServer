@@ -24,7 +24,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| [`Dockerfile`](./Dockerfile)、[`docker-compose.yaml`](./docker-compose.yaml)、[`deploy.sh`](./deploy.sh) | GitHub 子目录远程构建、脚本提交固定、现有网络与自动迁移启动；部署说明见 README |
+| [`Dockerfile`](./Dockerfile)、[`docker-compose.yaml`](./docker-compose.yaml) | GitHub 子目录远程构建、现有网络与自动迁移启动；部署说明见 README |
 | [`src/nutriathena_agent/api.py`](./src/nutriathena_agent/api.py) | HealthMind 线程/run HTTP 契约、JWT 依赖、显式数据库迁移入口 |
 | [`src/nutriathena_agent/database.py`](./src/nutriathena_agent/database.py) | 线程/run 幂等、持久化队列、worker 租约 fencing、取消与保留清理 |
 | [`src/nutriathena_agent/worker.py`](./src/nutriathena_agent/worker.py) | pending claim、心跳续租、超时/取消、调用 runner、条件终态写入 |
