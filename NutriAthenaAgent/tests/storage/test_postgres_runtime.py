@@ -7,17 +7,17 @@ import shutil
 import socket
 import subprocess
 import time
-from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import pytest
 import psycopg
 
-from nutriathena_agent.database import ConflictError, Repository
-from nutriathena_agent.migrations import MigrationError, apply_migrations
-from nutriathena_agent.runtime_config import RuntimeSettings
-from nutriathena_agent.worker import DurableWorker
+from nutriathena_agent.storage import ConflictError, Repository
+from nutriathena_agent.runtime.paths import MIGRATIONS_ROOT
+from nutriathena_agent.storage.migrations import MigrationError, apply_migrations
+from nutriathena_agent.config import RuntimeSettings
+from nutriathena_agent.execution.worker import DurableWorker
 
 pytestmark = pytest.mark.integration
 _TASK = UUID("11111111-1111-4111-8111-111111111111")
@@ -215,7 +215,7 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
         assert apply_migrations(repository.pool) == []
         repository.assert_schema_ready()
 
-        original = Path(__file__).resolve().parents[1] / "migrations" / "0001_create_agent_runtime.sql"
+        original = MIGRATIONS_ROOT / "0001_create_agent_runtime.sql"
         raw = original.read_bytes()
         lf = raw.replace(b"\r\n", b"\n")
         alternative = lf.replace(b"\n", b"\r\n") if raw == lf else lf
@@ -238,7 +238,7 @@ def test_migration_idempotency_fencing_cancel_retention_and_worker(postgres_data
 
         changed_dir = tmp_path / "changed-migration"
         changed_dir.mkdir()
-        original = Path(__file__).resolve().parents[1] / "migrations" / "0001_create_agent_runtime.sql"
+        original = MIGRATIONS_ROOT / "0001_create_agent_runtime.sql"
         (changed_dir / original.name).write_bytes(original.read_bytes() + b"\n-- changed checksum\n")
         with pytest.raises(MigrationError, match="校验和发生变化"):
             apply_migrations(repository.pool, changed_dir)

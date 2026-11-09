@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 
-from nutriathena_agent.migrations import _checksum_matches
+from nutriathena_agent.runtime.paths import MIGRATIONS_ROOT
+from nutriathena_agent.storage.migrations import _checksum_matches
 
 
 def test_known_migration_accepts_only_original_lf_and_crlf_variants():
-    path = Path(__file__).resolve().parents[1] / "migrations" / "0001_create_agent_runtime.sql"
+    path = MIGRATIONS_ROOT / "0001_create_agent_runtime.sql"
     raw = path.read_bytes().replace(b"\r\n", b"\n")
     lf = hashlib.sha256(raw).hexdigest()
     crlf = hashlib.sha256(raw.replace(b"\n", b"\r\n")).hexdigest()
