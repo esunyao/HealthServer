@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from nutriathena_agent.artifact import compute_artifact_sha256
+from nutriathena_agent.runtime.artifact import compute_artifact_sha256
 
 
 def test_artifact_digest_is_derived_from_deployed_files(tmp_path):

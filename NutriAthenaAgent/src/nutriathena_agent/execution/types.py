@@ -20,3 +20,21 @@ class RuntimeIdentity:
             and row["agent_assistant_id"] == self.assistant_id
             and str(row["agent_artifact_sha256"]).strip() == self.artifact_sha256
         )
+
+@dataclass(frozen=True)
+class RunSubmission:
+    assistant_id: str
+    task_id: UUID
+    attempt_id: UUID
+    metadata_task_id: UUID
+    metadata_attempt_id: UUID
+    release_id: UUID
+    artifact_sha256: str
+    payload: dict[str, Any]
+
+class RunServiceError(RuntimeError):
+    """An execution error translated to HTTP by the transport adapter."""
+    def __init__(self, *, status_code: int, detail: str | dict[str, Any]):
+        super().__init__(str(detail))
+        self.status_code = status_code
+        self.detail = detail

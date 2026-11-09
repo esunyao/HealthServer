@@ -11,13 +11,13 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from nutriathena_agent.api import create_app
-from nutriathena_agent.database import ConflictError
+from nutriathena_agent.execution.types import ConflictError
 from nutriathena_agent.logging_service import DebugLevel, LogFormat, configure_logging
 from nutriathena_agent.models import RunCreateRequest, RunResponse, ThreadCreateRequest, ThreadResponse
 from nutriathena_agent.runtime_config import RuntimeSettings
 
 _FIXTURES = (
-    Path(__file__).resolve().parents[2]
+    Path(__file__).resolve().parents[3]
     / "integration-contracts"
     / "src"
     / "main"
@@ -267,8 +267,8 @@ def test_api_passes_its_computed_artifact_digest_to_worker(monkeypatch):
         def __init__(self, repository, settings, *, artifact_sha256, runner):
             observed["artifact_sha256"] = artifact_sha256
 
-    monkeypatch.setattr("nutriathena_agent.api.compute_artifact_sha256", lambda: ARTIFACT_SHA)
-    monkeypatch.setattr("nutriathena_agent.api.DurableWorker", WorkerStub)
+    monkeypatch.setattr("nutriathena_agent.runtime.bootstrap.compute_artifact_sha256", lambda: ARTIFACT_SHA)
+    monkeypatch.setattr("nutriathena_agent.runtime.bootstrap.DurableWorker", WorkerStub)
 
     app = create_app(
         settings=_settings(),
