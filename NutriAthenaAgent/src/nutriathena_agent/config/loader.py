@@ -129,6 +129,19 @@ class _RuntimeEnvironment(_Environment):
     )
 
     @field_validator(
+        "port",
+        "lease_seconds",
+        "run_timeout_seconds",
+        "result_retention_hours",
+        "row_retention_days",
+        mode="before",
+    )
+    @classmethod
+    def parse_integer(cls, value):
+        # Preserve int(environment_string), rather than accepting "8101.0".
+        return int(value) if isinstance(value, str) else value
+
+    @field_validator(
         "database_url",
         "oauth_issuer",
         "oauth_jwks_url",

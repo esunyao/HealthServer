@@ -49,7 +49,9 @@ def test_new_alias_wins_and_empty_new_value_falls_back(monkeypatch):
 
 def test_csv_hosts_debug_alias_and_secret_repr(monkeypatch):
     meal_environment(monkeypatch)
-    monkeypatch.setenv("NUTRIATHENA_MEDIA_ALLOWED_HOSTS", " Media.Example.Test, *.example.test, ,*")
+    monkeypatch.setenv(
+        "NUTRIATHENA_MEDIA_ALLOWED_HOSTS", " Media.Example.Test, *.example.test, ,*"
+    )
     monkeypatch.setenv("NUTRIATHENA_DEBUG", "yes")
     settings = loader.load_meal_settings()
     assert settings.media_allowed_hosts == {"media.example.test", "*.example.test", "*"}
@@ -58,12 +60,22 @@ def test_csv_hosts_debug_alias_and_secret_repr(monkeypatch):
     assert "unit-test-secret" not in repr(settings)
 
 
-@pytest.mark.parametrize("suffix,value", [
-    ("PORT", "0"), ("LEASE_SECONDS", "3"), ("RUN_TIMEOUT_SECONDS", "0.05"),
-    ("WORKER_POLL_SECONDS", "nan"), ("RESULT_RETENTION_HOURS", "23"),
-    ("ROW_RETENTION_DAYS", "179"), ("RELEASE_ID", "invalid"),
-])
-def test_environment_limits_are_enforced_without_leaking_values(monkeypatch, suffix, value):
+@pytest.mark.parametrize(
+    "suffix,value",
+    [
+        ("PORT", "0"),
+        ("PORT", "8101.0"),
+        ("LEASE_SECONDS", "3"),
+        ("RUN_TIMEOUT_SECONDS", "0.05"),
+        ("WORKER_POLL_SECONDS", "nan"),
+        ("RESULT_RETENTION_HOURS", "23"),
+        ("ROW_RETENTION_DAYS", "179"),
+        ("RELEASE_ID", "invalid"),
+    ],
+)
+def test_environment_limits_are_enforced_without_leaking_values(
+    monkeypatch, suffix, value
+):
     runtime_environment(monkeypatch)
     monkeypatch.setenv("NUTRIATHENA_" + suffix, value)
     with pytest.raises(RuntimeError) as error:
@@ -71,7 +83,9 @@ def test_environment_limits_are_enforced_without_leaking_values(monkeypatch, suf
     assert "postgresql://test-only" not in str(error.value)
 
 
-def test_model_example_configuration_does_not_require_runtime_configuration(monkeypatch):
+def test_model_example_configuration_does_not_require_runtime_configuration(
+    monkeypatch,
+):
     monkeypatch.setenv("AGENTDEVELOP_API_KEY", "unit-test-key")
     monkeypatch.setenv("AGENTDEVELOP_BASE_URL", "https://model.example.invalid/v1")
     assert loader.load_model_settings().model == "deepseek-chat"
@@ -79,6 +93,8 @@ def test_model_example_configuration_does_not_require_runtime_configuration(monk
 
 def test_injected_short_timeouts_remain_usable_for_isolated_worker_tests(monkeypatch):
     runtime_environment(monkeypatch)
-    settings = loader.load_runtime_settings().model_copy(update={"lease_seconds": 3, "run_timeout_seconds": 0.05})
+    settings = loader.load_runtime_settings().model_copy(
+        update={"lease_seconds": 3, "run_timeout_seconds": 0.05}
+    )
     assert settings.lease_seconds == 3
     assert settings.run_timeout_seconds == 0.05
