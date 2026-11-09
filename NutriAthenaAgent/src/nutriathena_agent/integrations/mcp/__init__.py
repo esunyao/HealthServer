@@ -1,4 +1,4 @@
-"""Read-only HealthMind MCP integration and compatibility exports."""
+"""Read-only HealthMind MCP integration boundary."""
 
 from .client import _access_token, _host, connect_healthmind_mcp
 from .context import (

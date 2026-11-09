@@ -61,8 +61,8 @@ def pick_branch(state: ReviewState) -> str:
 def build_graph():
     """组装并编译图。
 
-        START → normalize → judge ─┬─ accept → END
-                                   └─ reject → END
+    START → normalize → judge ─┬─ accept → END
+                               └─ reject → END
     """
     graph = StateGraph(ReviewState)
 

@@ -15,7 +15,9 @@ _ALGORITHMS = ("RS256", "RS384", "ES256", "ES384")
 
 
 class TokenVerifier:
-    def __init__(self, settings: RuntimeSettings, jwks_client: Any | None = None) -> None:
+    def __init__(
+        self, settings: RuntimeSettings, jwks_client: Any | None = None
+    ) -> None:
         self.settings = settings
         self.jwks_client = jwks_client or PyJWKClient(
             settings.oauth_jwks_url,
@@ -26,7 +28,9 @@ class TokenVerifier:
 
     async def verify(self, token: str) -> dict[str, Any]:
         try:
-            signing_key = await asyncio.to_thread(self.jwks_client.get_signing_key_from_jwt, token)
+            signing_key = await asyncio.to_thread(
+                self.jwks_client.get_signing_key_from_jwt, token
+            )
             claims = jwt.decode(
                 token,
                 signing_key.key,

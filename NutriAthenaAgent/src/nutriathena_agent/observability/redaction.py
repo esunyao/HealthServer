@@ -11,8 +11,12 @@ MAX_FIELD_CHARS = 64 * 1024
 _DATA_URL_PATTERN = re.compile(r"data:[^\s\"'<>]+", re.IGNORECASE)
 _URL_PATTERN = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 _BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+\S+")
-_JWT_PATTERN = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
-_URI_CREDENTIAL_PATTERN = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^/\s@]+)@")
+_JWT_PATTERN = re.compile(
+    r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"
+)
+_URI_CREDENTIAL_PATTERN = re.compile(
+    r"(?i)\b([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^/\s@]+)@"
+)
 _SECRET_PARAM_PATTERN = re.compile(
     r"(?i)\b(password|passwd|client_secret|api[_-]?key|access_token|refresh_token|token)"
     r"=([^&\s\"'<>]+)"
@@ -21,7 +25,9 @@ _JSON_SECRET_PATTERN = re.compile(
     r'(?i)("(?:access_token|token|secret|authorization|password|cookie|api_?key|signature|'
     r'taskid|attemptid|capturesessionid|subjectid|userid)"\s*:\s*)"(?:[^"\\]|\\.)*"'
 )
-_PYDANTIC_INPUT_PATTERN = re.compile(r"input_value=.*?(?=,\s*input_type=|\n|$)", re.DOTALL)
+_PYDANTIC_INPUT_PATTERN = re.compile(
+    r"input_value=.*?(?=,\s*input_type=|\n|$)", re.DOTALL
+)
 _SENSITIVE_KEY_PARTS = (
     "token",
     "secret",
@@ -33,9 +39,9 @@ _SENSITIVE_KEY_PARTS = (
     "signature",
 )
 
-_ANSI_PATTERN = re.compile(
-    r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))"
-)
+_ANSI_PATTERN = re.compile(r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+
+
 def truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
@@ -68,7 +74,9 @@ def safe_value(value: Any, *, content: bool) -> Any:
     if isinstance(value, dict):
         return {
             str(key): (
-                "[redacted]" if is_sensitive_key(key) else safe_value(item, content=content)
+                "[redacted]"
+                if is_sensitive_key(key)
+                else safe_value(item, content=content)
             )
             for key, item in value.items()
         }
@@ -79,9 +87,10 @@ def safe_value(value: Any, *, content: bool) -> Any:
     if isinstance(value, str):
         return truncate(redact_text(value, content=content), MAX_FIELD_CHARS)
     if isinstance(value, BaseException):
-        return truncate(redact_text(f"{type(value).__name__}: {value}", content=content), MAX_FIELD_CHARS)
+        return truncate(
+            redact_text(f"{type(value).__name__}: {value}", content=content),
+            MAX_FIELD_CHARS,
+        )
     if value is None or isinstance(value, (bool, int, float)):
         return value
     return truncate(redact_text(str(value), content=content), MAX_FIELD_CHARS)
-
-

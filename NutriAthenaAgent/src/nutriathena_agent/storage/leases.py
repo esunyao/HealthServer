@@ -67,10 +67,19 @@ class LeaseStore(ConnectionStore):
                     WHERE run.run_id = candidate.run_id
                     RETURNING run.*
                     """,
-                    (release_id, deployment_key, assistant_id, artifact_sha256, owner, lease_seconds),
+                    (
+                        release_id,
+                        deployment_key,
+                        assistant_id,
+                        artifact_sha256,
+                        owner,
+                        lease_seconds,
+                    ),
                 )
 
-    def renew_lease(self, run_id: UUID, owner: str, version: int, lease_seconds: int) -> tuple[bool, bool]:
+    def renew_lease(
+        self, run_id: UUID, owner: str, version: int, lease_seconds: int
+    ) -> tuple[bool, bool]:
         with self.pool.connection() as connection:
             row = self._one(
                 connection,
@@ -118,8 +127,13 @@ class LeaseStore(ConnectionStore):
                     RETURNING status
                     """,
                     (
-                        Jsonb(result_payload), result_sha256, self.result_retention_hours,
-                        self.row_retention_days, run_id, owner, version,
+                        Jsonb(result_payload),
+                        result_sha256,
+                        self.result_retention_hours,
+                        self.row_retention_days,
+                        run_id,
+                        owner,
+                        version,
                     ),
                 )
                 row = cursor.fetchone()
@@ -153,6 +167,14 @@ class LeaseStore(ConnectionStore):
                         AND lease_owner = %s AND lease_version = %s
                         AND lease_expires_at > now()
                     """,
-                    (status, error_code, error_message, self.row_retention_days, run_id, owner, version),
+                    (
+                        status,
+                        error_code,
+                        error_message,
+                        self.row_retention_days,
+                        run_id,
+                        owner,
+                        version,
+                    ),
                 )
                 return cursor.rowcount == 1

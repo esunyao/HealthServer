@@ -23,6 +23,7 @@ from .tools import (
     bind_context_tools,
 )
 
+
 def _host(url: str) -> str:
     try:
         return (urlsplit(url).hostname or "").lower()
@@ -56,7 +57,9 @@ async def _access_token(settings: MealSettings) -> str:
             duration_ms=int((time.perf_counter() - started) * 1000),
             error_type=type(exception).__name__,
         )
-        raise McpSetupError("OAuth token endpoint could not be reached", stage="oauth") from exception
+        raise McpSetupError(
+            "OAuth token endpoint could not be reached", stage="oauth"
+        ) from exception
     duration_ms = int((time.perf_counter() - started) * 1000)
     if not response.is_success:
         error = McpSetupError(
@@ -91,9 +94,13 @@ async def _access_token(settings: MealSettings) -> str:
     try:
         access_token = response.json().get("access_token")
     except (ValueError, AttributeError) as exception:
-        raise McpSetupError("OAuth token endpoint returned invalid JSON", stage="oauth") from exception
+        raise McpSetupError(
+            "OAuth token endpoint returned invalid JSON", stage="oauth"
+        ) from exception
     if not isinstance(access_token, str) or not access_token:
-        raise McpSetupError("OAuth token response did not contain access_token", stage="oauth")
+        raise McpSetupError(
+            "OAuth token response did not contain access_token", stage="oauth"
+        )
     return access_token
 
 
@@ -122,7 +129,9 @@ async def connect_healthmind_mcp(
             )
         )
         stage = "initialize"
-        session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
+        session = await stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
         await session.initialize()
         stage = "list_tools"
         listed = await session.list_tools()

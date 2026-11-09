@@ -79,7 +79,8 @@ class RecordFormatter:
         message = record["message"]
         if exception is not None:
             exception_text, validation, chain, count = render_exception(
-                exception, content=self.content,
+                exception,
+                content=self.content,
             )
             fields.update(error_type=type(exception).__name__, error_chain=chain)
             if validation is not None:
@@ -91,9 +92,13 @@ class RecordFormatter:
                     else str(exception) or type(exception).__name__
                 )
         record["exception"] = None
-        record["message"] = truncate(redact_text(message, content=self.content), MAX_FIELD_CHARS)
+        record["message"] = truncate(
+            redact_text(message, content=self.content), MAX_FIELD_CHARS
+        )
         fields = {
-            key: safe_value(value, content=self.content or (event == "content" and key == "text"))
+            key: safe_value(
+                value, content=self.content or (event == "content" and key == "text")
+            )
             for key, value in fields.items()
         }
         snapshot = {
@@ -131,7 +136,11 @@ class RecordFormatter:
         size = 2
         marker = '"truncated": true'
         for key, value in payload.items():
-            item = json.dumps(key, ensure_ascii=False) + ": " + json.dumps(value, ensure_ascii=False, default=str)
+            item = (
+                json.dumps(key, ensure_ascii=False)
+                + ": "
+                + json.dumps(value, ensure_ascii=False, default=str)
+            )
             if size + len(item) + len(marker) + 4 > _MAX_EVENT_CHARS:
                 parts.append(marker)
                 break
@@ -167,16 +176,28 @@ class RecordFormatter:
             return tags + f"{{{_REF}[segments][{index}]}}" + ("</>" * tags.count("<"))
 
         def field(label: str, value: Any) -> str:
-            return fragment(label, "<dim>") + fragment("=") + fragment(json.dumps(value, ensure_ascii=False, default=str))
+            return (
+                fragment(label, "<dim>")
+                + fragment("=")
+                + fragment(json.dumps(value, ensure_ascii=False, default=str))
+            )
 
-        template = fragment(record["time"].strftime("%Y-%m-%d %H:%M:%S.%f")[:-3], "<dim>")
-        template += fragment(" | ") + fragment(f"{snapshot['level']:<8}", _LEVEL_TAGS.get(snapshot["level"], ""))
-        template += fragment(" | ") + fragment(f"{record['name']}:{record['function']}:{record['line']}", "<cyan>")
+        template = fragment(
+            record["time"].strftime("%Y-%m-%d %H:%M:%S.%f")[:-3], "<dim>"
+        )
+        template += fragment(" | ") + fragment(
+            f"{snapshot['level']:<8}", _LEVEL_TAGS.get(snapshot["level"], "")
+        )
+        template += fragment(" | ") + fragment(
+            f"{record['name']}:{record['function']}:{record['line']}", "<cyan>"
+        )
         context_started = False
 
         for key, label in _CONTEXT_LABELS:
             if key in fields:
-                template += fragment(" " if context_started else " | ") + field(label, fields.pop(key))
+                template += fragment(" " if context_started else " | ") + field(
+                    label, fields.pop(key)
+                )
                 context_started = True
         if event is not None:
             template += fragment(" | ") + fragment(f"event={event}", "<bold><blue>")
@@ -190,7 +211,9 @@ class RecordFormatter:
             for line in body:
                 if exhausted:
                     break
-                template += fragment("\n") + fragment("|", "<dim>") + fragment(" " + line)
+                template += (
+                    fragment("\n") + fragment("|", "<dim>") + fragment(" " + line)
+                )
         elif snapshot["exception"]:
             template += fragment("\n" + snapshot["exception"])
         snapshot["segments"] = segments

@@ -34,7 +34,9 @@ class ConnectionStore:
         self.pool.close()
 
     @staticmethod
-    def _one(connection: Any, query: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
+    def _one(
+        connection: Any, query: str, params: tuple[Any, ...] = ()
+    ) -> dict[str, Any] | None:
         with connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute(query, params)
             return cursor.fetchone()
@@ -54,5 +56,7 @@ class ConnectionStore:
                        to_regclass('nutriathena_agent.agent_runs') AS runs
                 """,
             )
-        if row is None or any(row[name] is None for name in ("ledger", "threads", "runs")):
+        if row is None or any(
+            row[name] is None for name in ("ledger", "threads", "runs")
+        ):
             raise RuntimeError("NutriAthenaAgent 数据库迁移尚未应用")

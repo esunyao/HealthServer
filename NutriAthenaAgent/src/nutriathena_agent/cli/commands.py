@@ -125,4 +125,5 @@ def main(argv: list[str] | None = None) -> int:
         return 2 if result.get("status") in {"error", "interrupted", "success"} else 3
     return 2
 
+
 __all__ = ["main", "build_parser", "DEFAULT_TEXT"]

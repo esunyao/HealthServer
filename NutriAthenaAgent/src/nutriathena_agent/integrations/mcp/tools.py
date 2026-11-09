@@ -39,7 +39,9 @@ class _McpSdkRemoteTool:
         self.session = session
         self.name = name
 
-    async def invoke_with_meta(self, arguments: dict[str, str], tool_call_id: str) -> Any:
+    async def invoke_with_meta(
+        self, arguments: dict[str, str], tool_call_id: str
+    ) -> Any:
         return await self.session.call_tool(
             self.name,
             arguments=arguments,
@@ -51,7 +53,9 @@ def _normalized_tool_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
-def _find_tool(tools: Iterable[Any], expected: str, *, stage: str = "list_tools") -> Any:
+def _find_tool(
+    tools: Iterable[Any], expected: str, *, stage: str = "list_tools"
+) -> Any:
     normalized = _normalized_tool_name(expected)
     matches = [
         remote
@@ -76,7 +80,9 @@ def _stable_tool_call_id(attempt_id: str, full_tool_code: str) -> str:
     return str(uuid5(namespace, full_tool_code))
 
 
-async def _invoke_remote(remote: Any, arguments: dict[str, str], tool_call_id: str) -> Any:
+async def _invoke_remote(
+    remote: Any, arguments: dict[str, str], tool_call_id: str
+) -> Any:
     invoke_with_meta = getattr(remote, "invoke_with_meta", None)
     if invoke_with_meta is not None:
         return await invoke_with_meta(arguments, tool_call_id)

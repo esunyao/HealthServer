@@ -6,7 +6,14 @@ import json
 import math
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
 NutrientCode: TypeAlias = Literal[
     "ENERGY_KCAL",
@@ -105,7 +112,9 @@ class NeedsReview(StrictResultModel):
         return value
 
 
-MealResult: TypeAlias = Annotated[MealAnalysis | NeedsReview, Field(union_mode="left_to_right")]
+MealResult: TypeAlias = Annotated[
+    MealAnalysis | NeedsReview, Field(union_mode="left_to_right")
+]
 _RESULT_ADAPTER = TypeAdapter(MealResult)
 
 

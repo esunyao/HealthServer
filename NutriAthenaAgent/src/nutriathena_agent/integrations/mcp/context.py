@@ -16,15 +16,36 @@ MAX_CONTEXT_CHARS = 64 * 1024
 
 
 _SENSITIVE_KEYS = {
-    "access_token", "attempt_id", "authorization", "capture_session_id", "image_urls",
-    "meal_id", "presigned_url", "subject_id", "task_id", "token", "trace_id", "url", "user_id",
+    "access_token",
+    "attempt_id",
+    "authorization",
+    "capture_session_id",
+    "image_urls",
+    "meal_id",
+    "presigned_url",
+    "subject_id",
+    "task_id",
+    "token",
+    "trace_id",
+    "url",
+    "user_id",
 }
 
 
-_SENSITIVE_KEYS_NORMALIZED = {re.sub(r"[^a-z0-9]", "", key.lower()) for key in _SENSITIVE_KEYS}
+_SENSITIVE_KEYS_NORMALIZED = {
+    re.sub(r"[^a-z0-9]", "", key.lower()) for key in _SENSITIVE_KEYS
+}
 
 
-_SENSITIVE_KEY_PARTS = ("token", "secret", "authorization", "credential", "password", "cookie", "apikey")
+_SENSITIVE_KEY_PARTS = (
+    "token",
+    "secret",
+    "authorization",
+    "credential",
+    "password",
+    "cookie",
+    "apikey",
+)
 
 
 _URL_PATTERN = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
@@ -75,8 +96,12 @@ def parse_capture_context(payload: dict[str, Any]) -> CaptureContext:
 
 
 def _parse_mcp_json(result: Any) -> Any:
-    if getattr(result, "isError", False) or (isinstance(result, dict) and result.get("isError")):
-        raise McpSetupError("HealthMind MCP tool returned an error", stage="parse_context")
+    if getattr(result, "isError", False) or (
+        isinstance(result, dict) and result.get("isError")
+    ):
+        raise McpSetupError(
+            "HealthMind MCP tool returned an error", stage="parse_context"
+        )
     if isinstance(result, CallToolResult):
         if isinstance(result.structuredContent, dict):
             return result.structuredContent
@@ -115,13 +140,19 @@ def _parse_mcp_json(result: Any) -> Any:
             return _parse_mcp_json(texts[0])
         if texts:
             return _parse_mcp_json("\n".join(texts))
-        raise McpSetupError("HealthMind MCP returned no JSON text", stage="parse_context")
+        raise McpSetupError(
+            "HealthMind MCP returned no JSON text", stage="parse_context"
+        )
     if isinstance(result, str):
         try:
             return json.loads(result)
         except json.JSONDecodeError as exception:
-            raise McpSetupError("HealthMind MCP returned invalid JSON", stage="parse_context") from exception
-    raise McpSetupError("HealthMind MCP returned an unsupported response", stage="parse_context")
+            raise McpSetupError(
+                "HealthMind MCP returned invalid JSON", stage="parse_context"
+            ) from exception
+    raise McpSetupError(
+        "HealthMind MCP returned an unsupported response", stage="parse_context"
+    )
 
 
 def _remove_sensitive_fields(value: Any) -> Any:
@@ -165,5 +196,7 @@ def _context_json(result: Any, *, capture: bool) -> tuple[str, dict[str, Any]]:
         safe_payload["confirmed_image_count"] = image_count
     serialized = json.dumps(safe_payload, ensure_ascii=False, separators=(",", ":"))
     if len(serialized) > MAX_CONTEXT_CHARS:
-        raise McpSetupError("HealthMind MCP context exceeded the safe response size", stage=stage)
+        raise McpSetupError(
+            "HealthMind MCP context exceeded the safe response size", stage=stage
+        )
     return serialized, raw_payload

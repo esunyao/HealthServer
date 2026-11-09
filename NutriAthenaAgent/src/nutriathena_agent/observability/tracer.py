@@ -57,5 +57,3 @@ class DebugTracer:
             log_event("content", level="DEBUG", label=label, text=str(text))
         except Exception:
             pass
-
-

@@ -17,7 +17,10 @@ from ..config import MAX_MEAL_IMAGE_BYTES, MAX_MEAL_IMAGES, MAX_MEAL_TOTAL_IMAGE
 _SIGNATURES = (
     ("image/jpeg", lambda data: data.startswith(b"\xff\xd8\xff")),
     ("image/png", lambda data: data.startswith(b"\x89PNG\r\n\x1a\n")),
-    ("image/webp", lambda data: len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"),
+    (
+        "image/webp",
+        lambda data: len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP",
+    ),
 )
 
 
@@ -78,24 +81,34 @@ def load_local_images(
             if size <= 0:
                 raise ImageInputError(f"图片文件为空：{path}")
             if size > max_image_bytes:
-                raise ImageInputError(f"单张图片超过 {max_image_bytes // (1024 * 1024)} MiB：{path.name}")
+                raise ImageInputError(
+                    f"单张图片超过 {max_image_bytes // (1024 * 1024)} MiB：{path.name}"
+                )
             data = path.read_bytes()
         except OSError as exception:
             raise ImageInputError(f"无法读取图片文件：{path}") from exception
 
         if len(data) > max_image_bytes:
-            raise ImageInputError(f"单张图片超过 {max_image_bytes // (1024 * 1024)} MiB：{path.name}")
+            raise ImageInputError(
+                f"单张图片超过 {max_image_bytes // (1024 * 1024)} MiB：{path.name}"
+            )
         mime_type = next((mime for mime, matches in _SIGNATURES if matches(data)), None)
         if mime_type is None:
-            raise ImageInputError(f"图片格式不支持或文件头无效：{path.name}（仅支持 JPEG、PNG、WebP）")
+            raise ImageInputError(
+                f"图片格式不支持或文件头无效：{path.name}（仅支持 JPEG、PNG、WebP）"
+            )
         total_bytes += len(data)
         if total_bytes > max_total_bytes:
-            raise ImageInputError(f"图片总大小超过 {max_total_bytes // (1024 * 1024)} MiB")
+            raise ImageInputError(
+                f"图片总大小超过 {max_total_bytes // (1024 * 1024)} MiB"
+            )
         images.append(LocalImage(path=path.resolve(), mime_type=mime_type, data=data))
     return images
 
 
-def image_message_parts(images: Iterable[LocalImage | CapturedImage]) -> list[dict[str, object]]:
+def image_message_parts(
+    images: Iterable[LocalImage | CapturedImage],
+) -> list[dict[str, object]]:
     parts: list[dict[str, object]] = []
     for index, image in enumerate(images, start=1):
         parts.append({"type": "text", "text": f"餐食图片 {index}（{image.name}）："})
@@ -159,7 +172,9 @@ async def load_captured_images(
                 raise ImageInputError("授权餐食图片记录缺少可下载地址")
             _validate_capture_url(url, allowed_hosts)
             try:
-                async with session.stream("GET", url, follow_redirects=False) as response:
+                async with session.stream(
+                    "GET", url, follow_redirects=False
+                ) as response:
                     if response.is_redirect:
                         raise ImageInputError("授权图片下载不接受重定向")
                     response.raise_for_status()
@@ -171,7 +186,11 @@ async def load_captured_images(
                             raise ImageInputError("授权图片长度标头无效") from exception
                         if parsed_size > max_image_bytes:
                             raise ImageInputError("授权图片超过单张大小限制")
-                    declared_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
+                    declared_type = (
+                        response.headers.get("content-type", "")
+                        .split(";", 1)[0]
+                        .lower()
+                    )
                     chunks = bytearray()
                     async for chunk in response.aiter_bytes():
                         chunks.extend(chunk)
@@ -182,13 +201,24 @@ async def load_captured_images(
             except httpx.HTTPError as exception:
                 raise ImageInputError("授权餐食图片下载失败") from exception
             data = bytes(chunks)
-            detected_type = next((mime for mime, matches in _SIGNATURES if matches(data)), None)
-            if detected_type is None or declared_type not in {detected_type, "application/octet-stream"}:
+            detected_type = next(
+                (mime for mime, matches in _SIGNATURES if matches(data)), None
+            )
+            if detected_type is None or declared_type not in {
+                detected_type,
+                "application/octet-stream",
+            }:
                 raise ImageInputError("授权图片内容不是受支持的 JPEG、PNG 或 WebP")
             total_bytes += len(data)
             if total_bytes > max_total_bytes:
                 raise ImageInputError("授权餐食图片总大小超过限制")
-            images.append(CapturedImage(name=f"image-{index}.{detected_type.split('/')[-1]}", mime_type=detected_type, data=data))
+            images.append(
+                CapturedImage(
+                    name=f"image-{index}.{detected_type.split('/')[-1]}",
+                    mime_type=detected_type,
+                    data=data,
+                )
+            )
     finally:
         if own_client:
             await session.aclose()

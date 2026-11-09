@@ -20,10 +20,12 @@ _MIGRATION_NAME = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
 # The original 0001 was applied from Windows with CRLF, while Git stores LF.
 # These exact known hashes differ only in line endings; no other bytes qualify.
 _LEGACY_CHECKSUM_EQUIVALENTS = {
-    "0001_create_agent_runtime.sql": frozenset({
-        "f3b079ca7328b288795c6825fdb76c9394987bcf230774533e46ff8ae1101607",
-        "f660e6b7c6dc6fa20a76df94828289e602673356dce1c72eebc7b36574d2719c",
-    }),
+    "0001_create_agent_runtime.sql": frozenset(
+        {
+            "f3b079ca7328b288795c6825fdb76c9394987bcf230774533e46ff8ae1101607",
+            "f660e6b7c6dc6fa20a76df94828289e602673356dce1c72eebc7b36574d2719c",
+        }
+    ),
 }
 
 
@@ -43,13 +45,17 @@ def apply_migrations(pool: Any, migrations_dir: Path = MIGRATIONS_DIR) -> list[s
     for path in sorted(migrations_dir.glob("*.sql")):
         match = _MIGRATION_NAME.fullmatch(path.name)
         if match is None:
-            raise MigrationError(f"迁移文件名必须为 4 位版本号_小写名称.sql：{path.name}")
+            raise MigrationError(
+                f"迁移文件名必须为 4 位版本号_小写名称.sql：{path.name}"
+            )
         raw = path.read_bytes()
         try:
             sql = raw.decode("utf-8")
         except UnicodeDecodeError as exception:
             raise MigrationError(f"迁移文件不是 UTF-8：{path.name}") from exception
-        scripts.append((int(match.group(1)), path, sql, hashlib.sha256(raw).hexdigest()))
+        scripts.append(
+            (int(match.group(1)), path, sql, hashlib.sha256(raw).hexdigest())
+        )
 
     if not scripts:
         raise MigrationError("没有找到 NutriAthenaAgent SQL 迁移文件")
@@ -75,23 +81,34 @@ def apply_migrations(pool: Any, migrations_dir: Path = MIGRATIONS_DIR) -> list[s
     applied_details: list[tuple[str, int, int]] = []
     with pool.connection() as connection:
         with connection.transaction():
-            connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", ("nutriathena_agent.storage.migrations",))
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                ("nutriathena_agent.storage.migrations",),
+            )
             with connection.cursor(row_factory=dict_row) as cursor:
-                cursor.execute(f"SELECT version, script_name, checksum_sha256 FROM {SCHEMA}.schema_migrations")
+                cursor.execute(
+                    f"SELECT version, script_name, checksum_sha256 FROM {SCHEMA}.schema_migrations"
+                )
                 applied = {row["version"]: row for row in cursor.fetchall()}
                 known_versions = {version for version, *_ in scripts}
                 unknown = sorted(set(applied) - known_versions)
                 if unknown:
-                    raise MigrationError(f"数据库包含当前代码不认识的迁移版本：{unknown}")
+                    raise MigrationError(
+                        f"数据库包含当前代码不认识的迁移版本：{unknown}"
+                    )
 
                 for version, path, sql, checksum in scripts:
                     existing = applied.get(version)
                     if existing is not None:
                         recorded_checksum = existing["checksum_sha256"].strip()
-                        if existing["script_name"] != path.name or not _checksum_matches(
+                        if existing[
+                            "script_name"
+                        ] != path.name or not _checksum_matches(
                             path.name, checksum, recorded_checksum
                         ):
-                            raise MigrationError(f"已应用的迁移文件或校验和发生变化：{path.name}")
+                            raise MigrationError(
+                                f"已应用的迁移文件或校验和发生变化：{path.name}"
+                            )
                         if recorded_checksum != checksum:
                             log_event(
                                 "migration.checksum.line_endings_compatible",

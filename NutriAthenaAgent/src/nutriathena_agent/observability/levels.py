@@ -14,8 +14,11 @@ _OFF_VALUES = frozenset({"", "0", "false", "no", "none", "off"})
 _TRACE_VALUES = frozenset({"1", "true", "yes", "on", "debug", "trace"})
 _FULL_VALUES = frozenset({"full", "verbose", "content"})
 
-_LOG_LEVELS = frozenset({"TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"})
+_LOG_LEVELS = frozenset(
+    {"TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"}
+)
 _LEVEL_ALIASES = {"WARN": "WARNING", "FATAL": "CRITICAL"}
+
 
 class DebugLevel(str, Enum):
     OFF = "off"
@@ -59,5 +62,3 @@ def parse_log_level(value: str | None) -> str:
         allowed = "、".join(sorted(_LOG_LEVELS))
         raise RuntimeError(f"运行配置 NUTRIATHENA_LOG_LEVEL 必须是 {allowed}")
     return raw
-
-

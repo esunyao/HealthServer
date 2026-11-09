@@ -13,7 +13,9 @@ from .pool import ConnectionStore
 
 
 class ThreadStore(ConnectionStore):
-    def create_thread(self, thread_id: UUID, task_id: UUID, attempt_id: UUID) -> dict[str, Any]:
+    def create_thread(
+        self, thread_id: UUID, task_id: UUID, attempt_id: UUID
+    ) -> dict[str, Any]:
         if thread_id != attempt_id:
             raise ConflictError("thread_id must equal attempt_id")
         with self.pool.connection() as connection:
@@ -39,8 +41,14 @@ class ThreadStore(ConnectionStore):
                         (attempt_id,),
                     )
                     existing = cursor.fetchone()
-                    if existing is None or existing["thread_id"] != thread_id or existing["task_id"] != task_id:
-                        raise ConflictError("thread identity is already bound to different task data")
+                    if (
+                        existing is None
+                        or existing["thread_id"] != thread_id
+                        or existing["task_id"] != task_id
+                    ):
+                        raise ConflictError(
+                            "thread identity is already bound to different task data"
+                        )
                     cursor.execute(
                         f"""
                         UPDATE {SCHEMA}.agent_threads

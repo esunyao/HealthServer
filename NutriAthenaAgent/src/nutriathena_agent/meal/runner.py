@@ -14,7 +14,11 @@ from ..config import load_meal_settings
 from ..integrations.model import build_meal_model
 from ..observability import DebugTraceCallback, DebugTracer
 from ..execution.ports import MealRunner
-from ..integrations.media import ImageInputError, image_message_parts, load_captured_images
+from ..integrations.media import (
+    ImageInputError,
+    image_message_parts,
+    load_captured_images,
+)
 from ..observability import (
     configure_logging,
     log_context,
@@ -32,7 +36,9 @@ from .prompt import build_system_prompt
 class LangChainMealRunner:
     """Production runner around the LangChain tool loop and maintained prompt."""
 
-    async def run(self, *, task_id: str, attempt_id: str, trace_id: str = "") -> dict[str, object]:
+    async def run(
+        self, *, task_id: str, attempt_id: str, trace_id: str = ""
+    ) -> dict[str, object]:
         started = time.perf_counter()
         stage = "init"
         status = "error"
@@ -61,8 +67,14 @@ class LangChainMealRunner:
                 )
 
                 stage = "mcp"
-                mcp = await connect_healthmind_mcp(settings, task_id=task_id, attempt_id=attempt_id)
-                raw_images = mcp.capture_payload.get("image_urls", []) if mcp.capture_payload else []
+                mcp = await connect_healthmind_mcp(
+                    settings, task_id=task_id, attempt_id=attempt_id
+                )
+                raw_images = (
+                    mcp.capture_payload.get("image_urls", [])
+                    if mcp.capture_payload
+                    else []
+                )
                 candidate_count = len(raw_images) if isinstance(raw_images, list) else 0
 
                 stage = "images"
@@ -121,7 +133,9 @@ class LangChainMealRunner:
                 )
 
                 stage = "context"
-                capture_context = CaptureContext.model_validate(mcp.capture_payload or {})
+                capture_context = CaptureContext.model_validate(
+                    mcp.capture_payload or {}
+                )
                 log_event(
                     "meal.context",
                     level="INFO",
@@ -139,7 +153,10 @@ class LangChainMealRunner:
                 stage = "agent_build"
                 agent = build_meal_agent(model, mcp.tools, system_prompt)
                 message_parts: list[dict[str, object]] = [
-                    {"type": "text", "text": _meal_request(capture_context.notes, evidence, images)},
+                    {
+                        "type": "text",
+                        "text": _meal_request(capture_context.notes, evidence, images),
+                    },
                     *image_message_parts(images),
                 ]
                 config: dict[str, Any] = {"recursion_limit": 12}

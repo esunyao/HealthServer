@@ -43,7 +43,9 @@ class RunStore(ConnectionStore):
                         (thread_id, task_id, attempt_id),
                     )
                     if thread is None:
-                        raise ConflictError("thread does not match the requested task and attempt")
+                        raise ConflictError(
+                            "thread does not match the requested task and attempt"
+                        )
                     existing = self._one(
                         connection,
                         f"SELECT * FROM {SCHEMA}.agent_runs WHERE attempt_id = %s FOR UPDATE",
@@ -100,11 +102,19 @@ class RunStore(ConnectionStore):
 
     def get_run(self, run_id: UUID) -> dict[str, Any] | None:
         with self.pool.connection() as connection:
-            return self._one(connection, f"SELECT * FROM {SCHEMA}.agent_runs WHERE run_id = %s", (run_id,))
+            return self._one(
+                connection,
+                f"SELECT * FROM {SCHEMA}.agent_runs WHERE run_id = %s",
+                (run_id,),
+            )
 
     def get_run_by_attempt(self, attempt_id: UUID) -> dict[str, Any] | None:
         with self.pool.connection() as connection:
-            return self._one(connection, f"SELECT * FROM {SCHEMA}.agent_runs WHERE attempt_id = %s", (attempt_id,))
+            return self._one(
+                connection,
+                f"SELECT * FROM {SCHEMA}.agent_runs WHERE attempt_id = %s",
+                (attempt_id,),
+            )
 
     def list_runs(self, thread_id: UUID) -> list[dict[str, Any]]:
         with self.pool.connection() as connection:

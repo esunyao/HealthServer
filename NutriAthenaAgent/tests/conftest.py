@@ -6,7 +6,7 @@ from typing import Iterator
 import pytest
 from loguru import logger
 
-from nutriathena_agent.logging_service import reset_logging
+from nutriathena_agent.observability import reset_logging
 
 _LOGGER_NAMES = (
     "",

@@ -22,7 +22,9 @@ def _load_evidence(path: str | Path | None, settings: MealSettings) -> Any:
     except (OSError, UnicodeError) as exception:
         raise ValueError(f"无法读取知识库证据文件：{evidence_path}") from exception
     if len(raw_bytes) > settings.max_evidence_bytes:
-        raise ValueError(f"知识库证据文件超过 {settings.max_evidence_bytes // 1024} KiB")
+        raise ValueError(
+            f"知识库证据文件超过 {settings.max_evidence_bytes // 1024} KiB"
+        )
     try:
         raw = raw_bytes.decode("utf-8")
     except UnicodeError as exception:
@@ -62,7 +64,9 @@ def _final_text(result: dict[str, Any]) -> str:
         text_parts = [
             block["text"]
             for block in content
-            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str)
+            if isinstance(block, dict)
+            and block.get("type") == "text"
+            and isinstance(block.get("text"), str)
         ]
         return "\n".join(text_parts)
     raise ValueError("Agent final message did not contain text")

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import traceback
-from typing import Any, Iterator
+from typing import Iterator
 
 from .redaction import redact_text, truncate
 
 _MAX_EXCEPTION_CHARS = 64 * 1024
 _MAX_VALIDATION_ERRORS = 20
+
 
 def _iter_exception_chain(exception: BaseException) -> Iterator[BaseException]:
     seen: set[int] = set()
@@ -29,7 +30,9 @@ def _iter_exception_chain(exception: BaseException) -> Iterator[BaseException]:
 
 
 def _is_validation_error(exception: BaseException) -> bool:
-    return type(exception).__name__ == "ValidationError" and callable(getattr(exception, "errors", None))
+    return type(exception).__name__ == "ValidationError" and callable(
+        getattr(exception, "errors", None)
+    )
 
 
 def _validation_errors(exception: BaseException) -> list[dict[str, str]]:
@@ -80,10 +83,12 @@ def render_exception(
         text = f"{error_chain}: {total} validation error(s)"
         return text, errors, error_chain, total
     try:
-        text = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
+        text = "".join(
+            traceback.format_exception(
+                type(exception), exception, exception.__traceback__
+            )
+        )
     except Exception:
         text = f"{type(exception).__name__}: {exception}"
     text = truncate(redact_text(text, content=content), _MAX_EXCEPTION_CHARS)
     return text, None, error_chain, 0
-
-

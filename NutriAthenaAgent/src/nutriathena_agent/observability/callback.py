@@ -14,6 +14,7 @@ from .tracer import DebugTracer
 
 _IMAGE_BLOCK_TYPES = frozenset({"image_url", "input_image", "image"})
 
+
 def _content_text(content: Any) -> str:
     if isinstance(content, str):
         return content
@@ -56,7 +57,11 @@ def _tool_output_text(output: Any) -> str:
     return _content_text(content if content is not None else output)
 
 
-def _model_name(serialized: dict[str, Any] | None, metadata: dict[str, Any] | None, kwargs: dict[str, Any]) -> str:
+def _model_name(
+    serialized: dict[str, Any] | None,
+    metadata: dict[str, Any] | None,
+    kwargs: dict[str, Any],
+) -> str:
     serialized = serialized or {}
     serialized_kwargs = serialized.get("kwargs") or {}
     invocation = kwargs.get("invocation_params") or {}
@@ -173,7 +178,9 @@ class DebugTraceCallback(AsyncCallbackHandler):
         del outputs, parent_run_id, tags, kwargs
         node = self._node_runs.pop(run_id, None)
         if node is not None:
-            self.tracer.event("node.finished", node=node, duration_ms=self._duration_ms(run_id))
+            self.tracer.event(
+                "node.finished", node=node, duration_ms=self._duration_ms(run_id)
+            )
 
     async def on_chain_error(
         self,
@@ -220,7 +227,8 @@ class DebugTraceCallback(AsyncCallbackHandler):
                 image_parts += sum(
                     1
                     for block in content
-                    if isinstance(block, dict) and block.get("type") in _IMAGE_BLOCK_TYPES
+                    if isinstance(block, dict)
+                    and block.get("type") in _IMAGE_BLOCK_TYPES
                 )
         self.tracer.event(
             "llm.started",
@@ -246,7 +254,9 @@ class DebugTraceCallback(AsyncCallbackHandler):
         duration = self._duration_ms(run_id)
         message = _first_message(response)
         text = _message_text(message) if message is not None else ""
-        raw_calls = getattr(message, "tool_calls", None) if message is not None else None
+        raw_calls = (
+            getattr(message, "tool_calls", None) if message is not None else None
+        )
         tool_calls = [
             call.get("name")
             for call in raw_calls or []
@@ -266,7 +276,10 @@ class DebugTraceCallback(AsyncCallbackHandler):
         if self.tracer.full:
             self.tracer.content("llm.output", text)
             if raw_calls:
-                self.tracer.content("llm.tool_calls", json.dumps(raw_calls, ensure_ascii=False, default=str))
+                self.tracer.content(
+                    "llm.tool_calls",
+                    json.dumps(raw_calls, ensure_ascii=False, default=str),
+                )
 
     async def on_llm_error(
         self,

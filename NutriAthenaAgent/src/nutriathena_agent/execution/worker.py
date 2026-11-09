@@ -20,7 +20,13 @@ from .types import RuntimeIdentity
 
 
 def _canonical_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
 
 
 class DurableWorker:
@@ -89,7 +95,10 @@ class DurableWorker:
                     worked = False
                 if not worked:
                     try:
-                        await asyncio.wait_for(self._stopping.wait(), timeout=self.settings.worker_poll_seconds)
+                        await asyncio.wait_for(
+                            self._stopping.wait(),
+                            timeout=self.settings.worker_poll_seconds,
+                        )
                     except TimeoutError:
                         pass
         finally:
@@ -100,9 +109,13 @@ class DurableWorker:
 
     async def run_once(self) -> bool:
         self._phase = "maintenance"
-        expired_leases = await asyncio.to_thread(self.repository.interrupt_expired_leases)
+        expired_leases = await asyncio.to_thread(
+            self.repository.interrupt_expired_leases
+        )
         purged_results = await asyncio.to_thread(self.repository.purge_expired_results)
-        purged_runs, purged_threads = await asyncio.to_thread(self.repository.purge_expired_rows)
+        purged_runs, purged_threads = await asyncio.to_thread(
+            self.repository.purge_expired_rows
+        )
         if expired_leases or purged_results or purged_runs or purged_threads:
             log_event(
                 "worker.maintenance",
@@ -243,10 +256,16 @@ class DurableWorker:
                         attempt_id=attempt_id,
                         trace_id=trace_id,
                     )
-                return await self.runner.run(task_id=task_id, attempt_id=attempt_id, trace_id=trace_id)
+                return await self.runner.run(
+                    task_id=task_id, attempt_id=attempt_id, trace_id=trace_id
+                )
 
-            analysis_task = asyncio.create_task(invoke_runner(), name=f"agent-run-{run_id}")
-            heartbeat_task = asyncio.create_task(heartbeat(), name=f"agent-lease-{run_id}")
+            analysis_task = asyncio.create_task(
+                invoke_runner(), name=f"agent-run-{run_id}"
+            )
+            heartbeat_task = asyncio.create_task(
+                heartbeat(), name=f"agent-lease-{run_id}"
+            )
             try:
                 done, _ = await asyncio.wait(
                     {analysis_task, heartbeat_task},
@@ -268,7 +287,9 @@ class DurableWorker:
                             "Cancellation was requested.",
                             "interrupted",
                         )
-                    elif lost_lease.is_set() or (heartbeat_task in done and not analysis_task.done()):
+                    elif lost_lease.is_set() or (
+                        heartbeat_task in done and not analysis_task.done()
+                    ):
                         await self._cancel_analysis(analysis_task)
                         log_event(
                             "worker.run.lease_lost",
@@ -346,7 +367,9 @@ class DurableWorker:
                 try:
                     parsed = parse_meal_result(_canonical_json(result))
                     normalized = result_dict(parsed)
-                    digest = hashlib.sha256(_canonical_json(normalized).encode("utf-8")).hexdigest()
+                    digest = hashlib.sha256(
+                        _canonical_json(normalized).encode("utf-8")
+                    ).hexdigest()
                 except asyncio.CancelledError:
                     raise
                 except Exception as exception:
@@ -379,7 +402,11 @@ class DurableWorker:
                         reason="lease_or_cancellation_changed",
                     )
                     return
-                item_count = len(normalized.get("items", [])) if isinstance(normalized.get("items"), list) else 0
+                item_count = (
+                    len(normalized.get("items", []))
+                    if isinstance(normalized.get("items"), list)
+                    else 0
+                )
                 log_event(
                     "worker.run.succeeded",
                     level="INFO",

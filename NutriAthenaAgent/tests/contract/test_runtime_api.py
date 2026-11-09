@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from nutriathena_agent.api import create_app
 from nutriathena_agent.execution.types import ConflictError
 from nutriathena_agent.observability import DebugLevel, LogFormat, configure_logging
-from nutriathena_agent.models import RunCreateRequest, RunResponse, ThreadCreateRequest, ThreadResponse
+from nutriathena_agent.api.schemas import RunCreateRequest, RunResponse, ThreadCreateRequest, ThreadResponse
 from nutriathena_agent.config import RuntimeSettings
 
 _FIXTURES = (
