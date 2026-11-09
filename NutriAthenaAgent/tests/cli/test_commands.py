@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from nutriathena_agent import main as cli
+from nutriathena_agent.cli import commands as cli
 
 
 def test_cli_without_arguments_runs_the_default_offline_graph(monkeypatch):

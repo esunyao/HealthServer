@@ -6,7 +6,7 @@ from uuid import UUID
 
 import httpx
 
-from nutriathena_agent import smoke
+from nutriathena_agent.cli import smoke
 from nutriathena_agent.runtime_config import RuntimeSettings
 
 
