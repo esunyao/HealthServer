@@ -10,7 +10,7 @@ from uuid import UUID, uuid5
 
 from langchain_core.tools import BaseTool, tool
 
-from ...logging_service import log_event, log_exception
+from ...observability import log_event, log_exception
 from .context import McpSetupError, _context_json
 
 CAPTURE_CONTEXT_TOOL = "nutrimemo.capture_context.get"

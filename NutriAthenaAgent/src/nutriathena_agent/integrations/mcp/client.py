@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from ...config import MealSettings
-from ...logging_service import log_event, log_exception
+from ...observability import log_event, log_exception
 from .context import McpSetupError, _context_json
 from .tools import (
     CAPTURE_CONTEXT_TOOL,

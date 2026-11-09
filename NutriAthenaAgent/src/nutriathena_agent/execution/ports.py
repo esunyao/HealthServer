@@ -1,64 +1,95 @@
 """Structural ports allow isolated HTTP, worker and database tests."""
+
 from typing import Any, Protocol
 from uuid import UUID
 
+
 class MealRunner(Protocol):
-    async def run(self, *, task_id: str, attempt_id: str, trace_id: str) -> dict[str, object]: ...
+    async def run(
+        self, *, task_id: str, attempt_id: str, trace_id: str
+    ) -> dict[str, object]: ...
+
 
 class TokenVerifier(Protocol):
     async def verify(self, token: str) -> dict[str, Any]: ...
 
+
 class RunRepository(Protocol):
-    def open(self) -> None:
-        ...
+    def open(self) -> None: ...
 
-    def close(self) -> None:
-        ...
+    def close(self) -> None: ...
 
-    def health_check(self) -> bool:
-        ...
+    def health_check(self) -> bool: ...
 
-    def assert_schema_ready(self) -> None:
-        ...
+    def assert_schema_ready(self) -> None: ...
 
-    def create_thread(self, thread_id: UUID, task_id: UUID, attempt_id: UUID) -> dict[str, Any]:
-        ...
+    def create_thread(
+        self, thread_id: UUID, task_id: UUID, attempt_id: UUID
+    ) -> dict[str, Any]: ...
 
-    def get_thread(self, thread_id: UUID) -> dict[str, Any] | None:
-        ...
+    def get_thread(self, thread_id: UUID) -> dict[str, Any] | None: ...
 
-    def submit_run(self, *, thread_id: UUID, task_id: UUID, attempt_id: UUID, release_id: UUID, request_payload: dict[str, Any], request_sha256: str, requested_assistant_id: str, requested_artifact_sha256: str, deployment_key: str, assistant_id: str, artifact_sha256: str) -> tuple[dict[str, Any], bool]:
-        ...
+    def submit_run(
+        self,
+        *,
+        thread_id: UUID,
+        task_id: UUID,
+        attempt_id: UUID,
+        release_id: UUID,
+        request_payload: dict[str, Any],
+        request_sha256: str,
+        requested_assistant_id: str,
+        requested_artifact_sha256: str,
+        deployment_key: str,
+        assistant_id: str,
+        artifact_sha256: str,
+    ) -> tuple[dict[str, Any], bool]: ...
 
-    def get_run(self, run_id: UUID) -> dict[str, Any] | None:
-        ...
+    def get_run(self, run_id: UUID) -> dict[str, Any] | None: ...
 
-    def get_run_by_attempt(self, attempt_id: UUID) -> dict[str, Any] | None:
-        ...
+    def get_run_by_attempt(self, attempt_id: UUID) -> dict[str, Any] | None: ...
 
-    def list_runs(self, thread_id: UUID) -> list[dict[str, Any]]:
-        ...
+    def list_runs(self, thread_id: UUID) -> list[dict[str, Any]]: ...
 
-    def interrupt_expired_leases(self) -> int:
-        ...
+    def interrupt_expired_leases(self) -> int: ...
 
-    def claim_pending(self, owner: str, lease_seconds: int, *, release_id: UUID, deployment_key: str, assistant_id: str, artifact_sha256: str) -> dict[str, Any] | None:
-        ...
+    def claim_pending(
+        self,
+        owner: str,
+        lease_seconds: int,
+        *,
+        release_id: UUID,
+        deployment_key: str,
+        assistant_id: str,
+        artifact_sha256: str,
+    ) -> dict[str, Any] | None: ...
 
-    def renew_lease(self, run_id: UUID, owner: str, version: int, lease_seconds: int) -> tuple[bool, bool]:
-        ...
+    def renew_lease(
+        self, run_id: UUID, owner: str, version: int, lease_seconds: int
+    ) -> tuple[bool, bool]: ...
 
-    def finish_success(self, run_id: UUID, owner: str, version: int, result_payload: dict[str, Any], result_sha256: str) -> bool:
-        ...
+    def finish_success(
+        self,
+        run_id: UUID,
+        owner: str,
+        version: int,
+        result_payload: dict[str, Any],
+        result_sha256: str,
+    ) -> bool: ...
 
-    def finish_terminal(self, run_id: UUID, owner: str, version: int, *, status: str, error_code: str, error_message: str) -> bool:
-        ...
+    def finish_terminal(
+        self,
+        run_id: UUID,
+        owner: str,
+        version: int,
+        *,
+        status: str,
+        error_code: str,
+        error_message: str,
+    ) -> bool: ...
 
-    def request_cancel(self, run_id: UUID) -> dict[str, Any] | None:
-        ...
+    def request_cancel(self, run_id: UUID) -> dict[str, Any] | None: ...
 
-    def purge_expired_results(self) -> int:
-        ...
+    def purge_expired_results(self) -> int: ...
 
-    def purge_expired_rows(self) -> tuple[int, int]:
-        ...
+    def purge_expired_rows(self) -> tuple[int, int]: ...

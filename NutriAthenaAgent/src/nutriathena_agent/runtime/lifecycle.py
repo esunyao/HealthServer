@@ -1,9 +1,10 @@
 """Own resources for one application lifespan, including partial startup failure."""
+
 import asyncio
 import time
 from contextlib import AsyncExitStack, asynccontextmanager
 
-from ..logging_service import log_event, log_exception
+from ..observability import log_event, log_exception
 
 
 async def _stop_worker(worker, task):
@@ -32,13 +33,23 @@ async def lifespan(app):
             except Exception as exception:
                 log_exception("service.database.failed", exception)
                 raise
-            log_event("service.database.ready", level="INFO",
-                      duration_ms=int((time.perf_counter() - started) * 1000))
+            log_event(
+                "service.database.ready",
+                level="INFO",
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
         if resources.worker is not None:
-            task = asyncio.create_task(resources.worker.run_forever(), name="nutriathena-agent-worker")
+            task = asyncio.create_task(
+                resources.worker.run_forever(), name="nutriathena-agent-worker"
+            )
             stack.push_async_callback(_stop_worker, resources.worker, task)
-        log_event("service.started", level="INFO", host=resources.settings.host,
-                  port=resources.settings.port, worker=resources.worker is not None)
+        log_event(
+            "service.started",
+            level="INFO",
+            host=resources.settings.host,
+            port=resources.settings.port,
+            worker=resources.worker is not None,
+        )
         try:
             yield
         finally:

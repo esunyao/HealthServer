@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import MealSettings
-from ..images import CapturedImage
+from ..integrations.media import CapturedImage
 
 
 def _load_evidence(path: str | Path | None, settings: MealSettings) -> Any:

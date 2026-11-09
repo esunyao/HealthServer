@@ -11,7 +11,7 @@ from __future__ import annotations
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from ..config import build_model
+from ..integrations.model import build_model
 
 SYSTEM_PROMPT = "你是一个简洁的助手。需要数词数时调用 word_count 工具，不要自己估算。"
 DEFAULT_QUESTION = "统计一下这句话的词数：今天午饭吃了番茄炒蛋"

@@ -1,4 +1,5 @@
 """Attempt-bound thread transport."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -11,8 +12,12 @@ router = APIRouter(dependencies=[Depends(authorize)])
 
 
 @router.post("/threads", status_code=200, response_model=ThreadResponse)
-async def create_thread(body: ThreadCreateRequest, service: RunService = Depends(get_service)):
-    row = await service.create_thread(body.thread_id, body.metadata.task_id, body.metadata.attempt_id)
+async def create_thread(
+    body: ThreadCreateRequest, service: RunService = Depends(get_service)
+):
+    row = await service.create_thread(
+        body.thread_id, body.metadata.task_id, body.metadata.attempt_id
+    )
     return _thread_response(row)
 
 

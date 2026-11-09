@@ -12,17 +12,21 @@ import httpx
 
 from ..runtime.artifact import compute_artifact_sha256
 from ..config import load_env
-from ..logging_service import log_event
+from ..observability import log_event
 from ..config import load_runtime_settings
 
 
-async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str, object]:
+async def run_smoke(
+    *, task_id: str, attempt_id: str, trace_id: str
+) -> dict[str, object]:
     """Submit once, reconcile ambiguous transport results, and print no meal data."""
     load_env()
     settings = load_runtime_settings()
     task = str(UUID(task_id))
     attempt = str(UUID(attempt_id))
-    base_url = os.environ.get("NUTRIATHENA_SMOKE_BASE_URL", f"http://127.0.0.1:{settings.port}").rstrip("/")
+    base_url = os.environ.get(
+        "NUTRIATHENA_SMOKE_BASE_URL", f"http://127.0.0.1:{settings.port}"
+    ).rstrip("/")
     try:
         base_host = urlsplit(base_url).hostname or ""
     except ValueError:
@@ -62,7 +66,9 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
             },
         )
         if not token_response.is_success:
-            raise RuntimeError(f"Smoke OAuth 请求失败，HTTP {token_response.status_code}")
+            raise RuntimeError(
+                f"Smoke OAuth 请求失败，HTTP {token_response.status_code}"
+            )
         access_token = token_response.json().get("access_token")
         if not isinstance(access_token, str) or not access_token:
             raise RuntimeError("Smoke OAuth 响应缺少 access_token")
@@ -70,10 +76,15 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
         thread_response = await client.post(
             f"{base_url}/threads",
             headers=headers,
-            json={"thread_id": attempt, "metadata": {"task_id": task, "attempt_id": attempt}},
+            json={
+                "thread_id": attempt,
+                "metadata": {"task_id": task, "attempt_id": attempt},
+            },
         )
         if not thread_response.is_success:
-            raise RuntimeError(f"Agent 创建或复用 thread 失败，HTTP {thread_response.status_code}")
+            raise RuntimeError(
+                f"Agent 创建或复用 thread 失败，HTTP {thread_response.status_code}"
+            )
         log_event("smoke.thread.ready", level="INFO", attempt_id=attempt)
 
         body = {
@@ -99,17 +110,23 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
             response = None
 
         if response is None:
-            listed = await client.get(f"{base_url}/threads/{attempt}/runs", headers=headers)
+            listed = await client.get(
+                f"{base_url}/threads/{attempt}/runs", headers=headers
+            )
             if not listed.is_success:
                 raise RuntimeError("Run 提交结果不确定，且无法通过 list runs 对账")
             rows = listed.json()
             matching = [row for row in rows if row.get("attempt_id") == attempt]
             if len(matching) != 1:
-                raise RuntimeError("Run 提交结果不确定；没有唯一可对账记录，请勿重复创建新 attempt")
+                raise RuntimeError(
+                    "Run 提交结果不确定；没有唯一可对账记录，请勿重复创建新 attempt"
+                )
             run = matching[0]
         else:
             if not response.is_success:
-                raise RuntimeError(f"Agent 创建或复用 run 失败，HTTP {response.status_code}")
+                raise RuntimeError(
+                    f"Agent 创建或复用 run 失败，HTTP {response.status_code}"
+                )
             run = response.json()
 
         run_id = run.get("run_id")
@@ -121,13 +138,19 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
             run_id=run_id,
             status=run.get("status"),
         )
-        deadline = time.monotonic() + int(os.environ.get("NUTRIATHENA_SMOKE_TIMEOUT_SECONDS", "660"))
+        deadline = time.monotonic() + int(
+            os.environ.get("NUTRIATHENA_SMOKE_TIMEOUT_SECONDS", "660")
+        )
         status = run.get("status", "pending")
         while status in {"pending", "running"} and time.monotonic() < deadline:
             await asyncio.sleep(2)
-            status_response = await client.get(f"{base_url}/runs/{run_id}", headers=headers)
+            status_response = await client.get(
+                f"{base_url}/runs/{run_id}", headers=headers
+            )
             if not status_response.is_success:
-                raise RuntimeError(f"Agent 状态查询失败，HTTP {status_response.status_code}")
+                raise RuntimeError(
+                    f"Agent 状态查询失败，HTTP {status_response.status_code}"
+                )
             run = status_response.json()
             status = run.get("status")
         summary: dict[str, object] = {
@@ -137,12 +160,24 @@ async def run_smoke(*, task_id: str, attempt_id: str, trace_id: str) -> dict[str
             "artifact_sha256": run.get("metadata", {}).get("artifact_sha256"),
         }
         if status == "success":
-            result_response = await client.get(f"{base_url}/runs/{run_id}/wait?timeout_seconds=1", headers=headers)
+            result_response = await client.get(
+                f"{base_url}/runs/{run_id}/wait?timeout_seconds=1", headers=headers
+            )
             if not result_response.is_success:
-                raise RuntimeError(f"Agent 结果读取失败，HTTP {result_response.status_code}")
+                raise RuntimeError(
+                    f"Agent 结果读取失败，HTTP {result_response.status_code}"
+                )
             output = result_response.json().get("output")
-            summary["output_status"] = output.get("status", "analysis") if isinstance(output, dict) else "invalid"
-            summary["item_count"] = len(output.get("items", [])) if isinstance(output, dict) and isinstance(output.get("items"), list) else 0
+            summary["output_status"] = (
+                output.get("status", "analysis")
+                if isinstance(output, dict)
+                else "invalid"
+            )
+            summary["item_count"] = (
+                len(output.get("items", []))
+                if isinstance(output, dict) and isinstance(output.get("items"), list)
+                else 0
+            )
         elif status in {"error", "interrupted"}:
             summary["error_code"] = run.get("error_code")
         else:

@@ -12,9 +12,9 @@ from typing import Any
 from uuid import uuid4
 
 from ..config import RuntimeSettings
-from ..contracts import parse_meal_result, result_dict
-from ..logging_service import configure_logging, log_context, log_event, log_exception
-from ..meal_agent import run_meal_analysis
+from ..meal.contract import parse_meal_result, result_dict
+from ..observability import configure_logging, log_context, log_event, log_exception
+from ..meal.runner import run_meal_analysis
 from .ports import MealRunner, RunRepository
 from .types import RuntimeIdentity
 

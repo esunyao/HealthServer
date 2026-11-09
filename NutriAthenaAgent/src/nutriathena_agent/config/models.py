@@ -1,7 +1,8 @@
 """Immutable values passed explicitly to runtime components."""
+
 from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
-from ..logging_service import DebugLevel
+from ..observability.levels import DebugLevel
 
 DEFAULT_MODEL = "deepseek-chat"
 DEFAULT_MCP_SCOPES = "healthmind.tool.nutrimemo.capture-context.read healthmind.tool.orion.nutrition-context.read"
@@ -10,13 +11,16 @@ MAX_MEAL_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_MEAL_TOTAL_IMAGE_BYTES = 100 * 1024 * 1024
 MAX_EVIDENCE_BYTES = 1024 * 1024
 
+
 class SettingsValue(BaseModel):
     model_config = ConfigDict(frozen=True, hide_input_in_errors=True)
+
 
 class ModelSettings(SettingsValue):
     model: str = DEFAULT_MODEL
     api_key: str = Field(repr=False)
     base_url: str
+
 
 class MealSettings(ModelSettings):
     mcp_url: str
@@ -30,6 +34,7 @@ class MealSettings(ModelSettings):
     max_evidence_bytes: int = MAX_EVIDENCE_BYTES
     media_allowed_hosts: frozenset[str] = Field(default_factory=frozenset)
     debug_level: DebugLevel = DebugLevel.OFF
+
 
 class RuntimeSettings(SettingsValue):
     host: str

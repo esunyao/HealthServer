@@ -1,4 +1,5 @@
 """Explicit migration command; never called by application startup."""
+
 from ..storage import Repository
 from ..storage.migrations import apply_migrations
 

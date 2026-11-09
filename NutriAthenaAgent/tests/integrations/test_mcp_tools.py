@@ -16,7 +16,7 @@ from nutriathena_agent.integrations.mcp import (
     bind_context_tools,
     _stable_tool_call_id,
 )
-from nutriathena_agent.logging_service import DebugLevel, configure_logging
+from nutriathena_agent.observability import DebugLevel, configure_logging
 from ._fakes import ATTEMPT_ID, TASK_ID, FakeMcpTool, capture_context_payload
 
 

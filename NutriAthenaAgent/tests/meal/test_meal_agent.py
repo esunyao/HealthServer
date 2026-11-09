@@ -11,9 +11,9 @@ from langchain_core.tools import StructuredTool
 
 from nutriathena_agent.meal.contract import MealAnalysis, NeedsReview, parse_meal_result, result_dict
 from nutriathena_agent.meal.prompt import build_system_prompt
-from nutriathena_agent.images import CapturedImage, ImageInputError, image_message_parts, load_captured_images, load_local_images
+from nutriathena_agent.integrations.media import CapturedImage, ImageInputError, image_message_parts, load_captured_images, load_local_images
 from nutriathena_agent.meal.agent import build_meal_agent
-from nutriathena_agent.mcp_tools import _McpSdkRemoteTool, bind_context_tools, _stable_tool_call_id
+from nutriathena_agent.integrations.mcp import _McpSdkRemoteTool, bind_context_tools, _stable_tool_call_id
 
 from .fake_model import ScriptedMealModel
 

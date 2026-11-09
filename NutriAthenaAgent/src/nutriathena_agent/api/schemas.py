@@ -93,7 +93,29 @@ class RunResponse(BaseModel):
 
 
 def _thread_response(row: dict[str, Any]) -> ThreadResponse:
-    return ThreadResponse(thread_id=row['thread_id'], metadata={'task_id': row['task_id'], 'attempt_id': row['attempt_id']})
+    return ThreadResponse(
+        thread_id=row["thread_id"],
+        metadata={"task_id": row["task_id"], "attempt_id": row["attempt_id"]},
+    )
+
 
 def _run_response(row: dict[str, Any]) -> RunResponse:
-    return RunResponse(run_id=row['run_id'], thread_id=row['thread_id'], task_id=row['task_id'], attempt_id=row['attempt_id'], assistant_id=row['agent_assistant_id'], status=row['status'], metadata={'task_id': row['task_id'], 'attempt_id': row['attempt_id'], 'release_id': row['release_id'], 'artifact_sha256': row['agent_artifact_sha256'].strip()}, created_at=row['created_at'], started_at=row.get('started_at'), completed_at=row.get('completed_at'), error_code=row.get('error_code'), error_message=row.get('error_message'))
+    return RunResponse(
+        run_id=row["run_id"],
+        thread_id=row["thread_id"],
+        task_id=row["task_id"],
+        attempt_id=row["attempt_id"],
+        assistant_id=row["agent_assistant_id"],
+        status=row["status"],
+        metadata={
+            "task_id": row["task_id"],
+            "attempt_id": row["attempt_id"],
+            "release_id": row["release_id"],
+            "artifact_sha256": row["agent_artifact_sha256"].strip(),
+        },
+        created_at=row["created_at"],
+        started_at=row.get("started_at"),
+        completed_at=row.get("completed_at"),
+        error_code=row.get("error_code"),
+        error_message=row.get("error_message"),
+    )

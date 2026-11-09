@@ -25,8 +25,7 @@ def test_build_model_loads_public_settings_lazily_and_assembles_only_configured_
         calls.append(kwargs)
         return client
 
-    # The parent agent supplies this public loader while migrating config.
-    monkeypatch.setattr(config, "load_model_settings", load_settings, raising=False)
+    monkeypatch.setattr(config, "load_model_settings", load_settings)
     monkeypatch.setattr(model, "ChatOpenAI", create_model)
     assert calls == []
     assert model.build_model() is client
@@ -45,7 +44,7 @@ def test_build_model_preserves_configuration_failure_without_constructing_a_clie
     def unexpected_constructor(**kwargs):
         pytest.fail("No client may be constructed after settings fail")
 
-    monkeypatch.setattr(config, "load_model_settings", load_settings, raising=False)
+    monkeypatch.setattr(config, "load_model_settings", load_settings)
     monkeypatch.setattr(model, "ChatOpenAI", unexpected_constructor)
     with pytest.raises(ValueError) as caught:
         model.build_model()

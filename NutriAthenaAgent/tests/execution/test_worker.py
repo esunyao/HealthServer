@@ -6,8 +6,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from nutriathena_agent.logging_service import DebugLevel, LogFormat, configure_logging
-from nutriathena_agent.mcp_tools import McpSetupError
+from nutriathena_agent.observability import DebugLevel, LogFormat, configure_logging
+from nutriathena_agent.integrations.mcp import McpSetupError
 from nutriathena_agent.config import RuntimeSettings
 from nutriathena_agent.execution.worker import DurableWorker
 

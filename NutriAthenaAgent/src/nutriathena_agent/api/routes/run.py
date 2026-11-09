@@ -1,4 +1,5 @@
 """Run submission, reconciliation, waiting and cancellation transport."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query
@@ -12,13 +13,22 @@ router = APIRouter(dependencies=[Depends(authorize)])
 
 
 @router.post("/threads/{thread_id}/runs", status_code=200, response_model=RunResponse)
-async def create_run(thread_id: UUID, body: RunCreateRequest,
-                     idempotency_key: str = Header(alias="Idempotency-Key"),
-                     service: RunService = Depends(get_service)):
-    command = RunSubmission(body.assistant_id, body.input.task_id, body.input.attempt_id,
-                            body.metadata.task_id, body.metadata.attempt_id,
-                            body.metadata.release_id, body.metadata.artifact_sha256,
-                            body.model_dump(mode="json"))
+async def create_run(
+    thread_id: UUID,
+    body: RunCreateRequest,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    service: RunService = Depends(get_service),
+):
+    command = RunSubmission(
+        body.assistant_id,
+        body.input.task_id,
+        body.input.attempt_id,
+        body.metadata.task_id,
+        body.metadata.attempt_id,
+        body.metadata.release_id,
+        body.metadata.artifact_sha256,
+        body.model_dump(mode="json"),
+    )
     return _run_response(await service.create_run(thread_id, command, idempotency_key))
 
 
@@ -33,8 +43,11 @@ async def get_run(run_id: UUID, service: RunService = Depends(get_service)):
 
 
 @router.get("/runs/{run_id}/wait")
-async def wait_run(run_id: UUID, timeout_seconds: int = Query(default=120, ge=1, le=600),
-                   service: RunService = Depends(get_service)):
+async def wait_run(
+    run_id: UUID,
+    timeout_seconds: int = Query(default=120, ge=1, le=600),
+    service: RunService = Depends(get_service),
+):
     return await service.wait_run(run_id, timeout_seconds)
 
 

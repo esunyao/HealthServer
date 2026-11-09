@@ -7,11 +7,11 @@ from types import SimpleNamespace
 import pytest
 from mcp.types import CallToolResult, TextContent
 
-from nutriathena_agent.debug import DebugLevel
-from nutriathena_agent.images import CapturedImage
+from nutriathena_agent.observability import DebugLevel
+from nutriathena_agent.integrations.media import CapturedImage
 from nutriathena_agent.meal.runner import LangChainMealRunner
 from nutriathena_agent.meal.input import _load_evidence, _meal_request
-from nutriathena_agent.mcp_tools import (
+from nutriathena_agent.integrations.mcp import (
     CaptureContext,
     McpSetupError,
     _context_json,

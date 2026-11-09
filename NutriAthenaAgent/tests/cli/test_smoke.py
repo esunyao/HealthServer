@@ -7,7 +7,7 @@ from uuid import UUID
 import httpx
 
 from nutriathena_agent.cli import smoke
-from nutriathena_agent.runtime_config import RuntimeSettings
+from nutriathena_agent.config import RuntimeSettings
 
 
 def test_smoke_uses_release_uuid_and_never_prints_response_details(monkeypatch):

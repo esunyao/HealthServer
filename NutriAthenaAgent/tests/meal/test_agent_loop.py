@@ -11,11 +11,11 @@ import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 
-from nutriathena_agent.debug import DebugLevel
-from nutriathena_agent.images import load_captured_images
+from nutriathena_agent.observability import DebugLevel
+from nutriathena_agent.integrations.media import load_captured_images
 from nutriathena_agent.meal.agent import build_meal_agent
 from nutriathena_agent.meal.runner import LangChainMealRunner, run_meal_analysis
-from nutriathena_agent.mcp_tools import (
+from nutriathena_agent.integrations.mcp import (
     CAPTURE_CONTEXT_TOOL,
     NUTRITION_CONTEXT_TOOL,
     McpSetupError,

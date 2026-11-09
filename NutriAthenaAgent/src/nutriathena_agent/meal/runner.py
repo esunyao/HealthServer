@@ -10,18 +10,19 @@ from uuid import UUID
 from langchain_core.messages import HumanMessage
 from pydantic import ValidationError
 
-from ..config import build_meal_model, load_meal_settings
-from ..debug import DebugTraceCallback, DebugTracer
+from ..config import load_meal_settings
+from ..integrations.model import build_meal_model
+from ..observability import DebugTraceCallback, DebugTracer
 from ..execution.ports import MealRunner
-from ..images import ImageInputError, image_message_parts, load_captured_images
-from ..logging_service import (
+from ..integrations.media import ImageInputError, image_message_parts, load_captured_images
+from ..observability import (
     configure_logging,
     log_context,
     log_event,
     log_exception,
     render_exception,
 )
-from ..mcp_tools import CaptureContext, McpSetupError, connect_healthmind_mcp
+from ..integrations.mcp import CaptureContext, McpSetupError, connect_healthmind_mcp
 from .agent import REQUIRED_CONTEXT_TOOLS, build_meal_agent
 from .contract import NeedsReview, parse_meal_result, result_dict
 from .input import _final_text, _load_evidence, _meal_request

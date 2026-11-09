@@ -22,7 +22,7 @@ from nutriathena_agent.integrations.mcp import (
     connect_healthmind_mcp,
 )
 from nutriathena_agent.integrations.mcp import client as mcp_client
-from nutriathena_agent.logging_service import DebugLevel, configure_logging, log_exception
+from nutriathena_agent.observability import DebugLevel, configure_logging, log_exception
 from ._fakes import ATTEMPT_ID, TASK_ID, capture_payload
 
 

@@ -16,7 +16,9 @@ def _manifest_files(root: Path, *, suffixes: set[str] | None = None) -> Iterable
             yield path
 
 
-def compute_artifact_sha256(module_root: Path | None = None, skills_root: Path | None = None) -> str:
+def compute_artifact_sha256(
+    module_root: Path | None = None, skills_root: Path | None = None
+) -> str:
     root = module_root or MODULE_ROOT
     package_root = root / "src" / "nutriathena_agent"
     prompt_root = skills_root or root / "skills"

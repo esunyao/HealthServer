@@ -10,7 +10,7 @@ from typing import Any
 
 from psycopg.rows import dict_row
 
-from ..logging_service import log_event
+from ..observability import log_event
 from ..runtime.paths import MIGRATIONS_ROOT
 
 SCHEMA = "nutriathena_agent"
@@ -75,7 +75,7 @@ def apply_migrations(pool: Any, migrations_dir: Path = MIGRATIONS_DIR) -> list[s
     applied_details: list[tuple[str, int, int]] = []
     with pool.connection() as connection:
         with connection.transaction():
-            connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", ("nutriathena_agent.migrations",))
+            connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", ("nutriathena_agent.storage.migrations",))
             with connection.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(f"SELECT version, script_name, checksum_sha256 FROM {SCHEMA}.schema_migrations")
                 applied = {row["version"]: row for row in cursor.fetchall()}
