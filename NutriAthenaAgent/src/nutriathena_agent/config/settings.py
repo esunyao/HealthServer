@@ -9,11 +9,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-from .logging_service import DebugLevel, parse_debug_level
+from ..logging_service import DebugLevel, parse_debug_level
 
 # 模块根目录 NutriAthenaAgent/，.env 固定放在这里。
 # config.py 位于 NutriAthenaAgent/src/nutriathena_agent/，故上溯三层。
-_MODULE_ROOT = Path(__file__).resolve().parents[2]
+from ..runtime.paths import MODULE_ROOT
+
+_MODULE_ROOT = MODULE_ROOT
 
 _ENV_FILE = _MODULE_ROOT / ".env"
 _ENV_EXAMPLE = _MODULE_ROOT / ".env.example"
