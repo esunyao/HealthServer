@@ -8,8 +8,8 @@ import pytest
 
 from nutriathena_agent.logging_service import DebugLevel, LogFormat, configure_logging
 from nutriathena_agent.mcp_tools import McpSetupError
-from nutriathena_agent.runtime_config import RuntimeSettings
-from nutriathena_agent.worker import DurableWorker
+from nutriathena_agent.config import RuntimeSettings
+from nutriathena_agent.execution.worker import DurableWorker
 
 _RELEASE_ID = UUID("33333333-3333-4333-8333-333333333333")
 _ARTIFACT_SHA256 = "a" * 64
@@ -278,3 +278,80 @@ def test_worker_run_failure_logs_cause_chain_and_context():
     assert "issuer.test" not in output
     assert "never-log" not in output
     assert repository.finished_terminal[0][-1]["error_code"] == "AGENT_RUN_FAILED"
+
+
+def test_worker_loop_recovers_from_maintenance_failures_and_stops_after_one_run():
+    class FlakyRepository(FakeRepository):
+        maintenance_calls = 0
+
+        def interrupt_expired_leases(self):
+            self.maintenance_calls += 1
+            if self.maintenance_calls <= 2:
+                raise RuntimeError("test maintenance unavailable")
+            return 0
+
+    async def scenario():
+        repository = FlakyRepository(_pending_row())
+        runner = SuccessfulRunner()
+        worker = DurableWorker(
+            repository,
+            _settings(worker_poll_seconds=0.001),
+            artifact_sha256=_ARTIFACT_SHA256,
+            runner=runner,
+        )
+        loop_task = asyncio.create_task(worker.run_forever())
+        try:
+            await asyncio.wait_for(runner.started.wait(), timeout=1)
+            await worker.stop()
+            await asyncio.wait_for(loop_task, timeout=1)
+        finally:
+            if not loop_task.done():
+                loop_task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await loop_task
+
+        assert repository.maintenance_calls >= 3
+        assert len(repository.finished_success) == 1
+        assert repository.finished_terminal == []
+
+    asyncio.run(scenario())
+
+
+def test_worker_does_not_replay_a_completed_claim():
+    async def scenario():
+        repository = FakeRepository(_pending_row())
+        worker = DurableWorker(
+            repository,
+            _settings(),
+            artifact_sha256=_ARTIFACT_SHA256,
+            runner=SuccessfulRunner(),
+        )
+
+        assert await worker.run_once()
+        assert not await worker.run_once()
+        assert len(repository.finished_success) == 1
+        assert repository.finished_terminal == []
+
+    asyncio.run(scenario())
+
+
+def test_worker_rejects_invalid_output_before_success_commit():
+    class InvalidRunner:
+        async def run(self, *, task_id, attempt_id, trace_id):
+            return {"items": "invalid result"}
+
+    repository = FakeRepository(_pending_row())
+    worker = DurableWorker(
+        repository,
+        _settings(),
+        artifact_sha256=_ARTIFACT_SHA256,
+        runner=InvalidRunner(),
+    )
+
+    assert asyncio.run(worker.run_once())
+    assert repository.finished_success == []
+    assert repository.finished_terminal[0][-1] == {
+        "status": "error",
+        "error_code": "AGENT_RUN_FAILED",
+        "error_message": "The meal analysis run failed.",
+    }
