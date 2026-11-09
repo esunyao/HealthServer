@@ -3,8 +3,8 @@
 import hashlib
 import json
 
-from nutriathena_agent.contracts import MealAnalysis, NeedsReview
-from nutriathena_agent.dietary_prompt import build_system_prompt
+from nutriathena_agent.meal.contract import MealAnalysis, NeedsReview
+from nutriathena_agent.meal.prompt import build_system_prompt
 
 
 def test_prompt_assembly_preserves_the_approved_skill_bundle():

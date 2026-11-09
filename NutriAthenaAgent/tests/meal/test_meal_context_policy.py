@@ -9,7 +9,8 @@ from mcp.types import CallToolResult, TextContent
 
 from nutriathena_agent.debug import DebugLevel
 from nutriathena_agent.images import CapturedImage
-from nutriathena_agent.meal_agent import DeepAgentMealRunner, _load_evidence, _meal_request
+from nutriathena_agent.meal.runner import LangChainMealRunner
+from nutriathena_agent.meal.input import _load_evidence, _meal_request
 from nutriathena_agent.mcp_tools import (
     CaptureContext,
     McpSetupError,
@@ -221,7 +222,7 @@ def test_runner_passes_capture_notes_to_request_with_empty_evidence(monkeypatch)
         return FakeAgent()
 
     monkeypatch.setattr(
-        "nutriathena_agent.meal_agent.load_meal_settings",
+        "nutriathena_agent.meal.runner.load_meal_settings",
         lambda: SimpleNamespace(
             model="test-model",
             debug_level=DebugLevel.OFF,
@@ -231,13 +232,13 @@ def test_runner_passes_capture_notes_to_request_with_empty_evidence(monkeypatch)
             max_total_image_bytes=10 * 1024 * 1024,
         ),
     )
-    monkeypatch.setattr("nutriathena_agent.meal_agent.connect_healthmind_mcp", fake_connect)
-    monkeypatch.setattr("nutriathena_agent.meal_agent.load_captured_images", fake_load_images)
-    monkeypatch.setattr("nutriathena_agent.meal_agent.build_meal_model", lambda settings: object())
-    monkeypatch.setattr("nutriathena_agent.meal_agent.build_meal_agent", fake_agent)
+    monkeypatch.setattr("nutriathena_agent.meal.runner.connect_healthmind_mcp", fake_connect)
+    monkeypatch.setattr("nutriathena_agent.meal.runner.load_captured_images", fake_load_images)
+    monkeypatch.setattr("nutriathena_agent.meal.runner.build_meal_model", lambda settings: object())
+    monkeypatch.setattr("nutriathena_agent.meal.runner.build_meal_agent", fake_agent)
 
     asyncio.run(
-        DeepAgentMealRunner().run(
+        LangChainMealRunner().run(
             task_id="11111111-1111-4111-8111-111111111111",
             attempt_id="22222222-2222-4222-8222-222222222222",
             trace_id="trace-test",

@@ -1,14 +1,18 @@
 """守护第①段纯图：不依赖任何模型、API Key 或网络。"""
 
 import json
+import runpy
 from pathlib import Path
 
-from nutriathena_agent.basic_graph import build_graph, graph
+from nutriathena_agent.examples.basic_graph import build_graph, graph
 
 
 def test_langgraph_dev_config_points_to_compiled_graph():
-    config = json.loads((Path(__file__).resolve().parents[1] / "langgraph.json").read_text(encoding="utf-8"))
-    assert config["graphs"] == {"basic_graph": "./src/nutriathena_agent/basic_graph.py:graph"}
+    config = json.loads((Path(__file__).resolve().parents[2] / "langgraph.json").read_text(encoding="utf-8"))
+    assert set(config["graphs"]) == {"basic_graph"}
+    source, variable = config["graphs"]["basic_graph"].rsplit(":", 1)
+    configured_graph = runpy.run_path(str(Path(__file__).resolve().parents[2] / source))[variable]
+    assert configured_graph.invoke({"text": "午饭吃了番茄炒蛋", "notes": []})["route"] == "accept"
     assert graph.invoke({"text": "午饭吃了番茄炒蛋", "notes": []})["route"] == "accept"
 
 

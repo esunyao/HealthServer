@@ -6,15 +6,16 @@ import json
 import httpx
 import pytest
 from pydantic import ValidationError
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import StructuredTool
-from langchain_openai import ChatOpenAI
 
-from nutriathena_agent.contracts import MealAnalysis, NeedsReview, parse_meal_result, result_dict
-from nutriathena_agent.dietary_prompt import build_system_prompt
+from nutriathena_agent.meal.contract import MealAnalysis, NeedsReview, parse_meal_result, result_dict
+from nutriathena_agent.meal.prompt import build_system_prompt
 from nutriathena_agent.images import CapturedImage, ImageInputError, image_message_parts, load_captured_images, load_local_images
-from nutriathena_agent.meal_agent import build_meal_agent
+from nutriathena_agent.meal.agent import build_meal_agent
 from nutriathena_agent.mcp_tools import _McpSdkRemoteTool, bind_context_tools, _stable_tool_call_id
+
+from .fake_model import ScriptedMealModel
 
 
 def capture_context_payload(*, url: str = "https://media.example.test/photo") -> dict[str, object]:
@@ -357,7 +358,7 @@ def test_mcp_failed_call_is_not_counted_as_successful():
     assert called == set()
 
 
-def test_deep_agent_dispatch_surface_contains_only_readonly_mcp_tools():
+def test_agent_dispatch_surface_contains_only_readonly_mcp_tools():
     async def noop() -> str:
         return "{}"
 
@@ -365,15 +366,10 @@ def test_deep_agent_dispatch_surface_contains_only_readonly_mcp_tools():
         StructuredTool.from_function(coroutine=noop, name=name, description="authorized read")
         for name in ("capture_context", "nutrition_context")
     ]
-    model = ChatOpenAI(
-        model="agent-isolation-test",
-        api_key="test-only",
-        base_url="https://example.invalid/v1",
-    )
+    model = ScriptedMealModel(responses=[AIMessage(content="{}")])
     agent = build_meal_agent(model, mcp_tools, "test prompt")
-
-    dispatch = agent.nodes["tools"].bound._tools_by_name
-    assert set(dispatch) == {"capture_context", "nutrition_context"}
+    asyncio.run(agent.ainvoke({"messages": [{"role": "user", "content": "test"}]}))
+    assert set(model.tool_bindings[0]) == {"capture_context", "nutrition_context"}
 
 
 def test_mcp_tools_must_match_both_allowlisted_reads():
