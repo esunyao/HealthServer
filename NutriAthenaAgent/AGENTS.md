@@ -1,44 +1,20 @@
 # NutriAthenaAgent — AI 导航
 
-根 [`../AGENTS.md`](../AGENTS.md) 是仓库级规范；本文件说明模块边界和代码入口。实现以源码、[`pyproject.toml`](./pyproject.toml)、[`uv.lock`](./uv.lock) 与自动测试为准。
+上级规范：[根 AGENTS.md](../AGENTS.md)。公开入口：[运行契约](doc/README.md) · [架构概览](doc/architecture.md) · [使用说明](README.md)。
 
-## 模块边界
+本模块拥有 Agent HTTP run API、独立 PostgreSQL schema、持久化 worker、餐食分析和只读 HealthMind MCP 客户端。HealthMind/NutriMemo/Orion 的业务数据、Kafka 和共享契约由各自模块拥有。餐食技能资产位于 [skills](skills/README.md)，本轮保持正文与营养规则。
 
-本模块拥有 HealthMind-compatible HTTP run API、JWT 校验、独立 PostgreSQL schema、持久化 worker、餐食分析 runner、只读 HealthMind MCP 客户端和本目录工程。它不拥有 HealthMind 业务记录、Kafka、NutriMemo/Orion 业务服务或跨模块数据库迁移。不得从 Agent 写入业务数据或绕过 HealthMind 的授权流程。
+## 按任务阅读
 
-餐食 prompt 与营养推理规则维护在本模块 [`skills/`](./skills/)；迁移保留原有资产，不调整 prompt 文本、工具编排策略或营养估算规则。
-
-## 快速事实
-
-| 项 | 值 |
+| 任务 | 入口 |
 |---|---|
-| Python 包 | `nutriathena_agent`，Python 3.11+，`uv` 管理，`src/` 布局 |
-| 服务入口 | `nutriathena-agent serve`，FastAPI + PostgreSQL worker；Docker 部署先执行 `migrate` |
-| CLI | `nutriathena-agent migrate/serve/smoke/meal/graph/agent`；`serve`/`meal` 支持 `--debug [off\|trace\|full]`；兼容旧 `agentdevelop` 脚本名 |
-| 数据库 | 独立 `nutriathena_agent` schema；版本 SQL 位于 [`migrations/`](./migrations/) |
-| HTTP 契约 | [`doc/README.md`](./doc/README.md)；仓库级对接定义见 `HealthMind/doc/agent-runtime.md` |
-| 主要依赖 | FastAPI、Psycopg 3、PyJWT、MCP Python SDK、LangGraph/DeepAgents |
-| 测试 | [`tests/`](./tests/)；默认不连接真实 OAuth、MCP、模型或生产数据库；HTTP 契约使用 [`integration-contracts/agent-protocol/v1`](../integration-contracts/src/main/resources/agent-protocol/v1/) 共享夹具 |
-
-## 代码地图
-
-| 文件 | 职责 |
-|---|---|
-| [`Dockerfile`](./Dockerfile)、[`docker-compose.yaml`](./docker-compose.yaml) | GitHub 子目录远程构建、现有网络与自动迁移启动；部署说明见 README |
-| [`src/nutriathena_agent/api.py`](./src/nutriathena_agent/api.py) | HealthMind 线程/run HTTP 契约、JWT 依赖、显式数据库迁移入口 |
-| [`src/nutriathena_agent/database.py`](./src/nutriathena_agent/database.py) | 线程/run 幂等、持久化队列、worker 租约 fencing、取消与保留清理 |
-| [`src/nutriathena_agent/worker.py`](./src/nutriathena_agent/worker.py) | pending claim、心跳续租、超时/取消、调用 runner、条件终态写入 |
-| [`src/nutriathena_agent/auth.py`](./src/nutriathena_agent/auth.py) | JWKS 签名、issuer/audience/caller/scope 验证 |
-| [`src/nutriathena_agent/runtime_config.py`](./src/nutriathena_agent/runtime_config.py) | 服务、数据库、OAuth、部署与 worker 配置 |
-| [`src/nutriathena_agent/logging_service.py`](./src/nutriathena_agent/logging_service.py) | 统一 loguru 日志服务：文本/JSON 预渲染、上下文、脱敏、异常链、可选文件 sink、stdlib 接管 |
-| [`src/nutriathena_agent/debug.py`](./src/nutriathena_agent/debug.py) | opt-in 调试级别与 LangChain 执行轨迹回调（日志出口统一走 logging_service） |
-| [`src/nutriathena_agent/meal_agent.py`](./src/nutriathena_agent/meal_agent.py) | 可替换 `MealRunner` 协议和现有 DeepAgent meal graph 适配 |
-| [`src/nutriathena_agent/mcp_tools.py`](./src/nutriathena_agent/mcp_tools.py) | MCP SDK session、稳定 `_meta.tool_call_id`、授权上下文预取与脱敏 |
-| [`src/nutriathena_agent/images.py`](./src/nutriathena_agent/images.py) | MCP 授权图片的主机白名单、大小/MIME 限制和内存多模态编码 |
-| [`src/nutriathena_agent/contracts.py`](./src/nutriathena_agent/contracts.py) | 餐食成功与 `needs_review` 结果契约 |
-| [`src/nutriathena_agent/artifact.py`](./src/nutriathena_agent/artifact.py) | 从实际运行代码、迁移、prompt 资产和锁文件计算 SHA-256 |
-| [`src/nutriathena_agent/migrations.py`](./src/nutriathena_agent/migrations.py) | 版本 SQL 校验和账本、显式迁移 |
-| [`src/nutriathena_agent/smoke.py`](./src/nutriathena_agent/smoke.py) | 安全真实端到端 smoke；提交后通过 list-runs 对账，不打印餐食详情 |
+| 定位源码与依赖方向 | [src 导航](src/AGENTS.md) → [包导航](src/nutriathena_agent/AGENTS.md) |
+| 修改某项职责 | 包导航中对应子目录 AGENTS.md → 实现与对应测试 |
+| 运行与依赖 | [pyproject.toml](pyproject.toml)、[锁文件](uv.lock)、[README](README.md) |
+| 验证行为 | [测试导航](tests/AGENTS.md) |
+| HTTP 对接 | [运行契约](doc/README.md)、[共享 HTTP 夹具](../integration-contracts/src/main/resources/agent-protocol/v1/) |
+| 发布身份 | [release 说明](doc/release.md) |
+| 部署 | [Dockerfile](Dockerfile)、[Compose](docker-compose.yaml)，操作方法见 README |
 
 ## 重要运行约束
 
@@ -53,16 +29,15 @@
 - 不读、不打印或提交 `.env`、OAuth token、模型 key、图片或真实餐食输出。真实 smoke 只能使用已有授权 task/attempt 和用户提供的测试上下文。
 - `artifact_sha256` 从当前加载代码、迁移、模型 prompt 资产和 lock 文件计算，不能回显调用请求中的值。受 Git 管理的制品输入通过 `.gitattributes` 固定 LF；旧工作副本需转换，未跟踪文件仍会影响摘要。
 
-## 本地验证
+## 验证入口
 
-测试目录导航：[`tests/AGENTS.md`](./tests/AGENTS.md)。
+在本模块执行：
 
 ```bash
 uv sync --extra test
-uv run pytest -q
-uv run nutriathena-agent graph
+PYTHON_DOTENV_DISABLED=1 uv run pytest -q -m "not integration"
+PYTHON_DOTENV_DISABLED=1 uv run nutriathena-agent graph
+uv run pytest -q -m integration
 ```
 
-数据库迁移和真实 smoke 需要各自配置的非生产测试环境；不要通过清空现有业务库来验证迁移。真实 smoke 的准备说明见 [`README.md`](./README.md) 与 [`doc/README.md`](./doc/README.md)。
-
-HTTP 契约测试位于 [`tests/contract`](./tests/contract/)；该目录应读取 integration-contracts 的共享 JSON，而不是复制一份本地样例。
+离线测试使用合成数据，不连接真实 OAuth、模型、MCP 或业务数据库。集成测试只创建隔离 PostgreSQL 容器，跳过原因见 pytest 输出。运行 CLI 的 migrate/serve/meal/smoke 所需配置和真实 smoke 授权准备见 README。

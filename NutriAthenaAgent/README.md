@@ -2,6 +2,8 @@
 
 # NutriAthenaAgent
 
+[模块导航](AGENTS.md) · [运行契约](doc/README.md) · [架构概览](doc/architecture.md)
+
 NutriAthenaAgent 是为 HealthMind 提供持久化执行能力的餐食分析运行服务。HealthMind 创建一次分析尝试（attempt）后，通过 HTTP 调用本服务；服务先将请求保存到 PostgreSQL，再由持有租约的工作进程（worker）执行餐食分析流程，最后由 HealthMind 获取结果。本模块同时保留两个小型 LangGraph/LangChain 教学示例。
 
 ## 启动服务
@@ -51,7 +53,7 @@ docker compose logs -f nutriathena-agent
 ```bash
 # 镜像构建后可在服务器上执行，不连接数据库。
 docker run --rm --network none --entrypoint python nutriathena-agent:local \
-  -c "from nutriathena_agent.artifact import compute_artifact_sha256; print(compute_artifact_sha256())"
+  -c "from nutriathena_agent.runtime.artifact import compute_artifact_sha256; print(compute_artifact_sha256())"
 ```
 
 Compose 重建并重启容器，但不会自动登记或晋升 HealthMind release。如果镜像摘要与现有 release 不一致，请登记匹配的新 release 并配置相应的 `NUTRIATHENA_RELEASE_ID`；否则请求会被拒绝或旧任务无法被新 worker 领取。
@@ -109,12 +111,12 @@ NUTRIATHENA_LOG_COLOR=always uv run nutriathena-agent serve
 失败时即使 `off` 也能直接看到阶段与根因，例如：
 
 ```text
-... | ERROR | nutriathena_agent.meal_agent:run:335 | trace="..." run="..." task="..." attempt="..." | event=meal.failed | stage="oauth" | mcp_stage="oauth" | status="error" | error_type="McpSetupError" | error_chain="McpSetupError <- ConnectError <- OSError <- ConnectionRefusedError" OAuth token endpoint could not be reached
+... | ERROR | nutriathena_agent.meal.runner:run:335 | trace="..." run="..." task="..." attempt="..." | event=meal.failed | stage="oauth" | mcp_stage="oauth" | status="error" | error_type="McpSetupError" | error_chain="McpSetupError <- ConnectError <- OSError <- ConnectionRefusedError" OAuth token endpoint could not be reached
 Traceback (most recent call last):
   ...
 httpx.ConnectError: All connection attempts failed
 The above exception was the direct cause of the following exception:
-nutriathena_agent.mcp_tools.McpSetupError: OAuth token endpoint could not be reached
+nutriathena_agent.integrations.mcp.McpSetupError: OAuth token endpoint could not be reached
 ```
 
 常规日志（`off`/`trace`）不会输出 `.env`、OAuth token/模型 key、Authorization、JWT、data URL、签名图片 URL 或图片字节；`ValidationError` 只输出 `loc/type` 摘要。`full` 会包含真实餐食备注与模型输出，仍会移除上述凭据与 URL，并在启动时打印一次警告；不要在生产环境或长期留存中使用。文件 sink 面向当前单进程 `serve`；若未来启用多进程，应改用外部日志采集。

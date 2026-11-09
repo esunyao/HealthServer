@@ -1,14 +1,18 @@
-# NutriAthenaAgent tests
+# 测试导航
 
-上级规范与导航：[根 AGENTS.md](../../AGENTS.md) · [模块 AGENTS.md](../AGENTS.md) · [公开说明](../doc/README.md)
+上级：[模块导航](../AGENTS.md) · [源码职责](../src/nutriathena_agent/AGENTS.md)。[conftest.py](conftest.py) 隔离 loguru 和 stdlib 全局状态。
 
-本目录只负责测试导航：
+| 目录 | 关注点 |
+|---|---|
+| [contract](contract/AGENTS.md) | 共享 HTTP 夹具、提示词/结果 Schema 基线 |
+| [runtime](runtime/AGENTS.md) | 资源生命周期和制品摘要 |
+| [config](config/AGENTS.md) | 变量兼容、边界与凭据表示 |
+| [cli](cli/AGENTS.md) | 命令默认值、smoke 对账 |
+| [execution](execution/AGENTS.md) | worker 租约、终态和取消 |
+| [storage](storage/AGENTS.md) | 迁移校验、仓储协议与隔离 PostgreSQL |
+| [integrations](integrations/AGENTS.md) | JWT、图像、MCP 与模型装配 |
+| [meal](meal/AGENTS.md) | 真实假模型循环、图像/备注/工具/输出 |
+| [observability](observability/AGENTS.md) | 日志格式、颜色、脱敏、异常、回调和并发上下文 |
+| [examples](examples/AGENTS.md) | 离线图及最小 agent |
 
-- `contract/` 读取 `integration-contracts/src/main/resources/agent-protocol/v1/` 的共享 HTTP 夹具。
-- `test_runtime_api.py` 覆盖 Thread/Run HTTP 与鉴权；`test_worker.py` 覆盖租约和终态 fencing。
-- `test_meal_agent.py` 覆盖视觉输入、备注、空证据、MCP 工具和输出契约。
-- `test_debug.py` 覆盖调试级别解析、脱敏、回调事件与 CLI 优先级。
-- `test_logging_service.py` 覆盖文本/JSON 格式、上下文、完整异常链、ValidationError 安全摘要、stdlib 接管、文件 sink、颜色（auto/always/never、文件与 JSON 保持无色）与 OAuth 失败根因；`conftest.py` 负责 loguru/stdlib 全局状态隔离。
-- `test_migration_checksums.py` 覆盖历史迁移换行兼容及篡改拒绝；`test_postgres_runtime.py` 需要 Docker；跳过时必须报告。
-- 默认测试不得连接真实 OAuth、MCP、模型或生产数据库，不得读取或打印 `.env`。
-
+离线执行：`PYTHON_DOTENV_DISABLED=1 uv run pytest -q -m "not integration"`。数据库验证：`uv run pytest -q -m integration`，仅使用临时 PostgreSQL 容器。夹具直接读取仓库 integration-contracts，目录变更时以模块根定位，不能复制为另一份契约。

@@ -4,7 +4,7 @@
 
 | 文件 | 验证内容 |
 |---|---|
-| [conftest.py](conftest.py) | 新日志实现与 stdlib 全局状态的测试隔离 |
+| [conftest.py](../conftest.py) | 新日志实现与 stdlib 全局状态的测试隔离 |
 | [test_logging.py](test_logging.py)、[test_levels.py](test_levels.py) | 原日志格式、颜色、文件 sink、级别解析断言 |
 | [test_tracer.py](test_tracer.py)、[test_callback.py](test_callback.py) | 原 tracer 与 LangChain 回调断言 |
 | [test_context.py](test_context.py) | 嵌套、并发 asyncio、线程和取消后的上下文隔离 |

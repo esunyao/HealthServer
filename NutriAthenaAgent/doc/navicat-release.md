@@ -13,7 +13,7 @@ HealthMind <────── {overall_confidence, items} ───────
                             输出 schema
 ```
 
-之后 HealthMind 才把输出包装成 `nutrition.analysis.completed` Kafka 事件；那个事件还有 event_id 等外层字段，不能直接作为 Agent 的输出 schema。`needs_review` 有独立处理路径。输出模型见 [`contracts.py`](../src/nutriathena_agent/contracts.py)。
+之后 HealthMind 才把输出包装成 `nutrition.analysis.completed` Kafka 事件；那个事件还有 event_id 等外层字段，不能直接作为 Agent 的输出 schema。`needs_review` 有独立处理路径。输出模型见 [`contracts.py`](../src/nutriathena_agent/meal/contract.py)。
 
 ## 1. 准备实际配置
 

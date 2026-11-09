@@ -36,7 +36,7 @@ WHERE tool_code IN ('nutrimemo.capture_context.get', 'orion.nutrition_context.ge
 
 Agent 本身还需使用独立数据库，完成其版本化迁移并启动；不要用 HealthMind 的 release 脚本代替 Agent 迁移。确认 Authentik、MCP、模型及图片访问配置可用。`/healthz` 仅检查 Agent 与数据库的连通性，不能证明整条链路可用。
 
-> **日志/依赖变更后的制品摘要**：`artifact_sha256` 由 `NutriAthenaAgent/src/nutriathena_agent/*.py`、`migrations/*.sql`、`pyproject.toml`、`uv.lock` 和餐食 skill 资产计算。升级日志库（如新增 `loguru`）或改动源码都会产生新摘要。升级前先 drain/对账旧 release 的 pending/running run；新 worker 只 claim 摘要完全匹配的 run。部署后必须重新登记并提升 release，否则旧 pending run 会一直停留在 pending。
+> **日志/依赖变更后的制品摘要**：`artifact_sha256` 由 `NutriAthenaAgent/src/nutriathena_agent/**/*.py`、`migrations/*.sql`、`pyproject.toml`、`uv.lock` 和餐食 skill 资产计算。升级日志库（如新增 `loguru`）或改动源码都会产生新摘要。升级前先 drain/对账旧 release 的 pending/running run；新 worker 只 claim 摘要完全匹配的 run。部署后必须重新登记并提升 release，否则旧 pending run 会一直停留在 pending。
 
 ## 2. 准备 release 身份
 
@@ -60,12 +60,12 @@ Agent 的配置可来自环境变量或 `NutriAthenaAgent/.env`，以实际启�
 在 **实际运行 Agent 的同一份部署制品**中，从 `NutriAthenaAgent` 目录使用项目 Python 环境执行。Windows Git Bash 可先执行 `source .venv/Scripts/activate` 激活项目虚拟环境：
 
 ```bash
-python -B -c "from nutriathena_agent.artifact import compute_artifact_sha256; print(compute_artifact_sha256())"
+python -B -c "from nutriathena_agent.runtime.artifact import compute_artifact_sha256; print(compute_artifact_sha256())"
 ```
 
 仓库中的制品输入通过 `.gitattributes` 固定 LF 换行，已有 Windows 工作区需将这些文件的工作副本转换为 LF；新检出自动遵守规则。摘要仍按实际字节计算，未跟踪文件、文件内容或依赖锁差异也会影响结果。以目标容器的启动日志或容器内计算结果为最终依据。
 
-输出为 64 位小写十六进制值。实现见 [`artifact.py`](../src/nutriathena_agent/artifact.py)：它包含 Python 代码、迁移、`NutriAthenaAgent/skills`、`pyproject.toml` 和 `uv.lock`，不是某一个文件的哈希。Agent 启动时也会计算摘要；如果启动后改变了这些文件，重新计算的值可能与运行进程持有的值不一致。先确定制品，再计算并启动与之相同的制品。
+输出为 64 位小写十六进制值。实现见 [`artifact.py`](../src/nutriathena_agent/runtime/artifact.py)：它包含 Python 代码、迁移、`NutriAthenaAgent/skills`、`pyproject.toml` 和 `uv.lock`，不是某一个文件的哈希。Agent 启动时也会计算摘要；如果启动后改变了这些文件，重新计算的值可能与运行进程持有的值不一致。先确定制品，再计算并启动与之相同的制品。
 
 ## 4. 准备输入、输出 schema 及摘要
 
@@ -73,7 +73,7 @@ python -B -c "from nutriathena_agent.artifact import compute_artifact_sha256; pr
 |---|---|
 | `input_schema` | 完整 Kafka capture-ready 事件的 JSON Schema，参考 [`nutrition-capture-ready-v1.schema.json`](../../integration-contracts/src/main/resources/schema/nutrition-capture-ready-v1.schema.json)。 |
 | `input_schema_version` | 所选输入契约的版本，例如 `1.0`。 |
-| `output_schema` | Agent 成功返回的**裸分析对象**的 JSON Schema，对照 [`MealAnalysis`](../src/nutriathena_agent/contracts.py) 的 `overall_confidence` 和 `items` 等字段。 |
+| `output_schema` | Agent 成功返回的**裸分析对象**的 JSON Schema，对照 [`MealAnalysis`](../src/nutriathena_agent/meal/contract.py) 的 `overall_confidence` 和 `items` 等字段。 |
 | `output_schema_version` | 所选输出契约的版本，由部署者确定。 |
 | `input_schema_sha256`、`output_schema_sha256` | 对各自 schema 按 HealthMind 的 [`CanonicalJson`](../../HealthMind/src/main/kotlin/cn/esuny/healthmind/infrastructure/json/CanonicalJson.kt) 递归排序、紧凑序列化后计算的 SHA-256。 |
 
@@ -82,7 +82,7 @@ python -B -c "from nutriathena_agent.artifact import compute_artifact_sha256; pr
 例如在 Agent 环境中查看候选 schema：
 
 ```bash
-python -B -c "import json; from nutriathena_agent.contracts import MealAnalysis; print(json.dumps(MealAnalysis.model_json_schema(), ensure_ascii=False, indent=2))"
+python -B -c "import json; from nutriathena_agent.meal.contract import MealAnalysis; print(json.dumps(MealAnalysis.model_json_schema(), ensure_ascii=False, indent=2))"
 ```
 
 可以在 Agent 环境、从仓库根目录运行下面的命令，打印可复制到 `psql` 的输入 schema、候选输出 schema 和摘要。它仅接受 ASCII 字符串、整数、布尔值和 null，并将整数值的浮点数转换为整数：在此受限范围内，紧凑 JSON 与 HealthMind 的排序序列化一致。遇到非 ASCII、控制字符、单引号或非整数浮点数会拒绝处理；不要把这个示例哈希方法直接用于任意 JSON。
@@ -93,7 +93,7 @@ cd NutriAthenaAgent
 import hashlib
 import json
 from pathlib import Path
-from nutriathena_agent.contracts import MealAnalysis
+from nutriathena_agent.meal.contract import MealAnalysis
 
 def restricted(value):
     if isinstance(value, dict):

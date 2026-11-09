@@ -2,6 +2,8 @@
 
 This document records the public HTTP and persistence boundary implemented by NutriAthenaAgent. HealthMind integration details are maintained in `HealthMind/doc/agent-runtime.md`.
 
+Component responsibilities and internal import migration: [runtime architecture](architecture.md).
+
 Release registration and deployment: [HealthMind release registration guide](release.md).
 
 ## HTTP API
