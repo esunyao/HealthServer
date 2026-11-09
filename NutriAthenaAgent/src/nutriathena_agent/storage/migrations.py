@@ -83,7 +83,8 @@ def apply_migrations(pool: Any, migrations_dir: Path = MIGRATIONS_DIR) -> list[s
         with connection.transaction():
             connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
-                ("nutriathena_agent.storage.migrations",),
+                # Stable across runtime versions; unrelated to Python import paths.
+                ("nutriathena_agent.migrations",),
             )
             with connection.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
