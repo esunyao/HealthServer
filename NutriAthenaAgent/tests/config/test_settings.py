@@ -8,9 +8,17 @@ from nutriathena_agent.config import loader
 @pytest.fixture(autouse=True)
 def isolated_environment(monkeypatch):
     for name in tuple(os.environ):
-        if name.startswith(("NUTRIATHENA_", "AGENTDEVELOP_")):
+        if name.startswith("NUTRIATHENA_") and name != "NUTRIATHENA_SKIP_LOCAL_CONFIG":
             monkeypatch.delenv(name)
-    monkeypatch.setattr(loader, "load_env", lambda: None)
+
+
+@pytest.fixture
+def local_config(monkeypatch, tmp_path):
+    monkeypatch.setattr(os, "environ", os.environ.copy())
+    monkeypatch.setattr(loader, "ENV_FILE", tmp_path / ".env")
+    monkeypatch.setattr(loader, "CONFIG_FILE", tmp_path / "config.yaml")
+    monkeypatch.delenv("NUTRIATHENA_SKIP_LOCAL_CONFIG")
+    return loader.ENV_FILE, loader.CONFIG_FILE
 
 
 def meal_environment(monkeypatch):
@@ -39,12 +47,64 @@ def runtime_environment(monkeypatch):
         monkeypatch.setenv("NUTRIATHENA_" + suffix, value)
 
 
-def test_new_alias_wins_and_empty_new_value_falls_back(monkeypatch):
+@pytest.mark.parametrize(
+    "shell,dotenv,expected",
+    [("shell", "dotenv", "shell"), (None, "dotenv", "dotenv"), (None, "", "yaml")],
+)
+def test_local_config_precedence(local_config, monkeypatch, shell, dotenv, expected):
+    env_file, yaml_file = local_config
+    env_file.write_text(f"NUTRIATHENA_MODEL_ID={dotenv}\n", encoding="utf-8")
+    yaml_file.write_text("model: {id: yaml}\n", encoding="utf-8")
+    if shell is not None:
+        monkeypatch.setenv(loader.MODEL_VAR, shell)
+    loader.load_env()
+    assert os.environ[loader.MODEL_VAR] == expected
+
+
+def test_yaml_mapping_and_literal_dotenv_values(local_config, monkeypatch):
     meal_environment(monkeypatch)
-    monkeypatch.setenv("AGENTDEVELOP_MEAL_MODEL", "legacy-vision")
-    assert loader.load_meal_settings().model == "vision-test"
-    monkeypatch.setenv("NUTRIATHENA_MEAL_MODEL_ID", "")
-    assert loader.load_meal_settings().model == "legacy-vision"
+    monkeypatch.delenv(loader.API_KEY_VAR)
+    env_file, yaml_file = local_config
+    env_file.write_text(
+        "\n# NUTRIATHENA_DEBUG=full\nNUTRIATHENA_MODEL_API_KEY='test=${literal}'\n"
+        'NUTRIATHENA_MCP_SCOPES=""\nUNRELATED_CONFIG=ignored\n',
+        encoding="utf-8",
+    )
+    yaml_file.write_text(
+        "model: {api_key: null}\nmcp: {scopes: yaml.scope}\n"
+        'media: {allowed_hosts: [media.example.test, "*.example.test"]}\n'
+        "debug: off\nlog: {file: ''}\n",
+        encoding="utf-8",
+    )
+    settings = loader.load_meal_settings()
+    assert settings.api_key == "test=${literal}"
+    assert settings.mcp_scopes == "yaml.scope"
+    assert settings.media_allowed_hosts == {"media.example.test", "*.example.test"}
+    assert settings.debug_level.value == "off"
+    assert "NUTRIATHENA_LOG_FILE" not in os.environ
+    assert "UNRELATED_CONFIG" not in os.environ
+
+
+@pytest.mark.parametrize(
+    "content, message",
+    [("model: {api_key: '\nprivate-test-key", "格式错误"), ("[]", "键值映射")],
+)
+def test_invalid_yaml_does_not_disclose_input(local_config, content, message):
+    _, yaml_file = local_config
+    yaml_file.write_text(content, encoding="utf-8")
+    with pytest.raises(RuntimeError, match=message) as error:
+        loader.load_env()
+    assert "private-test-key" not in str(error.value)
+    assert error.value.__cause__ is None
+
+
+def test_skip_local_config_ignores_both_files(local_config, monkeypatch):
+    env_file, yaml_file = local_config
+    env_file.write_text("NUTRIATHENA_MODEL_ID=dotenv\n", encoding="utf-8")
+    yaml_file.write_text("not: [valid", encoding="utf-8")
+    monkeypatch.setenv("NUTRIATHENA_SKIP_LOCAL_CONFIG", "1")
+    loader.load_env()
+    assert loader.MODEL_VAR not in os.environ
 
 
 def test_csv_hosts_debug_alias_and_secret_repr(monkeypatch):
@@ -86,8 +146,9 @@ def test_environment_limits_are_enforced_without_leaking_values(
 def test_model_example_configuration_does_not_require_runtime_configuration(
     monkeypatch,
 ):
-    monkeypatch.setenv("AGENTDEVELOP_API_KEY", "unit-test-key")
-    monkeypatch.setenv("AGENTDEVELOP_BASE_URL", "https://model.example.invalid/v1")
+    monkeypatch.setenv(loader.API_KEY_VAR, "unit-test-key")
+    monkeypatch.setenv(loader.BASE_URL_VAR, "https://model.example.invalid/v1")
+    monkeypatch.setenv("AGENTDEVELOP_MODEL", "legacy-model")
     assert loader.load_model_settings().model == "deepseek-chat"
 
 

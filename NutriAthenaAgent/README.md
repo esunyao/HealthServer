@@ -15,7 +15,34 @@ cd NutriAthenaAgent
 uv sync --extra test
 ```
 
-将 `.env.example` 复制为 `.env`，配置运行参数、数据库、OAuth 签发方（issuer）与 JWKS、模型，以及只读的 HealthMind MCP 客户端。不要提交 `.env`，也不要在命令行参数中填写凭据。为兼容已有本地环境，旧的 `AGENTDEVELOP_*` 模型和 MCP 环境变量仍可作为回退配置。
+在 `NutriAthenaAgent/` 下建立本地 `config.yaml`。运行服务所需的配置如下，空凭据和示例地址需在本地填写或通过环境变量注入。
+
+```yaml
+database:
+  url: ""                     # PostgreSQL DSN
+release_id: ""                # 已登记 release 的 UUID
+deployment_key: meal-analysis-v1
+assistant_id: nutriathena-meal-agent
+oauth:
+  issuer: https://issuer.example.invalid/application/o/healthmind/
+  jwks_url: https://issuer.example.invalid/application/o/healthmind/jwks/
+model:
+  base_url: https://model.example.invalid/v1
+  api_key: ""
+meal:
+  model_id: ""                # 支持图片输入的模型
+mcp:
+  url: https://healthmind.example.invalid/mcp
+  oauth_token_url: https://issuer.example.invalid/application/o/token/
+  client_id: ""
+  client_secret: ""
+media:
+  allowed_hosts: [media.example.invalid]
+```
+
+`config.yaml`、`.env` 和本地样例 `config.example.yaml`、`.env.example` 均不受 Git 跟踪。不要在命令行参数中填写凭据。
+
+配置优先级：**Shell/容器环境变量 > `.env` > `config.yaml` > 代码默认值**（`serve`/`meal` 的 `--debug` 优先于环境变量）。YAML 键按路径映射至环境变量，例如 `model.api_key` → `NUTRIATHENA_MODEL_API_KEY`；列表转为逗号分隔值，文件中的空字符串和 `null` 不覆盖低优先级配置。应用读取 `.env` 时只处理 `NUTRIATHENA_*` 的逐行 `KEY=VALUE`，支持成对引号，不支持 `export`、行尾注释、转义、多行或 `${VAR}` 展开。旧的 `AGENTDEVELOP_*` 变量不再读取。
 
 启动服务前，先执行版本化 SQL 迁移：
 
@@ -34,7 +61,7 @@ Agent 的代码、迁移与餐食技能都位于本目录。Compose 默认从 Gi
 
 ### 使用本地 Compose 或 Dockge 部署
 
-在本地 `NutriAthenaAgent` 目录或 Dockge 的 stack 目录配置 `.env`：设置 PostgreSQL、模型、OAuth、HealthMind MCP 以及已有 Docker 网络名称 `HEALTHSERVER_DOCKER_NETWORK`。`NUTRIATHENA_PUBLISHED_PORT` 可选，默认宿主机端口 8101，容器内固定监听 8101。容器中的 `localhost` 指容器自身；数据库和 MCP 地址需在容器网络内可访问，OAuth issuer 须与令牌一致。Compose 解析 `.env` 时，含美元符号的密钥使用单引号包裹或按 Compose 规则转义。
+在本地 `NutriAthenaAgent` 目录或 Dockge 的 stack 目录配置 `.env`：设置 PostgreSQL、模型、OAuth、HealthMind MCP 以及已有 Docker 网络名称 `HEALTHSERVER_DOCKER_NETWORK`（应用配置项使用 `config.yaml` 路径推导出的 `NUTRIATHENA_*` 名称）。镜像不包含任何配置文件；也可以按 Compose 文件中的注释把本地 `config.yaml` 只读挂载进容器，此时 `.env` 只需保留 Compose 变量和需要覆盖的项。`NUTRIATHENA_PUBLISHED_PORT` 可选，默认宿主机端口 8101，容器内固定监听 8101。容器中的 `localhost` 指容器自身；数据库和 MCP 地址需在容器网络内可访问，OAuth issuer 须与令牌一致。Compose 解析 `.env` 时，含美元符号的密钥使用单引号包裹或按 Compose 规则转义。
 
 首次部署请先将相关代码提交并推送；每次手动重新部署可在 stack 目录执行：
 
@@ -71,7 +98,7 @@ uv run nutriathena-agent smoke \
   --trace-id <trace-id>
 ```
 
-在本地配置 `NUTRIATHENA_SMOKE_TOKEN_URL`、`NUTRIATHENA_SMOKE_CLIENT_ID` 和 `NUTRIATHENA_SMOKE_CLIENT_SECRET`。使用相同 attempt 和相同请求重复执行时，会复用已有 run；如果修改已有 attempt 的请求内容，则会因幂等冲突而被拒绝。
+在本地配置 `smoke.token_url`、`smoke.client_id` 和 `smoke.client_secret`（或对应的 `NUTRIATHENA_SMOKE_*` 环境变量）。使用相同 attempt 和相同请求重复执行时，会复用已有 run；如果修改已有 attempt 的请求内容，则会因幂等冲突而被拒绝。
 
 ## 测试与教学命令
 
@@ -90,7 +117,7 @@ uv run nutriathena-agent agent "统计一下这句话的词数：晚饭吃了清
 
 服务日志统一由 loguru 输出到 stderr；设置 `NUTRIATHENA_LOG_FILE` 时额外写入轮转文件（10 MB 轮转、保留 7 天）。默认文本格式，`NUTRIATHENA_LOG_FORMAT=json` 时每行输出一个 JSON。`NUTRIATHENA_LOG_LEVEL` 控制基础级别（默认 INFO）；`NUTRIATHENA_DEBUG != off` 时 sink 强制到 DEBUG。
 
-文本日志默认 `NUTRIATHENA_LOG_COLOR=auto`：在 TTY 终端或 PyCharm/JetBrains 运行窗口中为时间戳、级别、logger、trace/run 上下文、event 与字段名着色；`always` 强制彩色，`never` 关闭；`auto` 尊重 `NO_COLOR`/`FORCE_COLOR`，管道/重定向/文件/JSON 默认无色。若 JetBrains Run 窗口没有自动着色，在运行配置或 `.env` 中设 `NUTRIATHENA_LOG_COLOR=always`。
+文本日志默认 `NUTRIATHENA_LOG_COLOR=auto`：在 TTY 终端或 PyCharm/JetBrains 运行窗口中为时间戳、级别、logger、trace/run 上下文、event 与字段名着色；`always` 强制彩色，`never` 关闭；`auto` 尊重 `NO_COLOR`/`FORCE_COLOR`，管道/重定向/文件/JSON 默认无色。若 JetBrains Run 窗口没有自动着色，在运行配置、`.env` 或 `config.yaml`（`log.color: always`）中设置。
 
 通过环境变量 `NUTRIATHENA_DEBUG` 或 `serve`/`meal` 子命令的 `--debug` 选择细节级别；CLI 优先于环境变量：
 
@@ -119,7 +146,7 @@ The above exception was the direct cause of the following exception:
 nutriathena_agent.integrations.mcp.McpSetupError: OAuth token endpoint could not be reached
 ```
 
-常规日志（`off`/`trace`）不会输出 `.env`、OAuth token/模型 key、Authorization、JWT、data URL、签名图片 URL 或图片字节；`ValidationError` 只输出 `loc/type` 摘要。`full` 会包含真实餐食备注与模型输出，仍会移除上述凭据与 URL，并在启动时打印一次警告；不要在生产环境或长期留存中使用。文件 sink 面向当前单进程 `serve`；若未来启用多进程，应改用外部日志采集。
+常规日志（`off`/`trace`）不会输出 `.env`/`config.yaml` 内容、OAuth token/模型 key、Authorization、JWT、data URL、签名图片 URL 或图片字节；`ValidationError` 只输出 `loc/type` 摘要。`full` 会包含真实餐食备注与模型输出，仍会移除上述凭据与 URL，并在启动时打印一次警告；不要在生产环境或长期留存中使用。文件 sink 面向当前单进程 `serve`；若未来启用多进程，应改用外部日志采集。
 
 新增依赖或源码会改变 `artifact_sha256`。升级本模块前先 drain/对账旧 release 的 pending/running run，部署后重新登记 release（见 [`doc/release.md`](./doc/release.md)），避免旧 pending run 无法被新 worker claim。
 

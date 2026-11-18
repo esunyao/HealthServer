@@ -14,7 +14,7 @@ def run_cli(arguments):
         if not key.startswith(("NUTRIATHENA_", "AGENTDEVELOP_"))
     }
     environment.update(
-        PYTHON_DOTENV_DISABLED="1",
+        NUTRIATHENA_SKIP_LOCAL_CONFIG="1",
         PYTHONIOENCODING="utf-8",
         LANGSMITH_TRACING="false",
         LANGCHAIN_TRACING_V2="false",

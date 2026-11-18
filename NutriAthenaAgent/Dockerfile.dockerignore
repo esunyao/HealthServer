@@ -12,4 +12,5 @@
 **/*.pyc
 **/.env
 **/.env.*
+**/config.yaml
 **/.git/

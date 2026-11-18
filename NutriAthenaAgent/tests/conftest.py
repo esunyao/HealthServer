@@ -27,6 +27,11 @@ _LOGGER_NAMES = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _skip_local_config(monkeypatch):
+    monkeypatch.setenv("NUTRIATHENA_SKIP_LOCAL_CONFIG", "1")
+
+
 def _capture_logger_states() -> dict[str, tuple[list[logging.Handler], int, bool]]:
     states: dict[str, tuple[list[logging.Handler], int, bool]] = {}
     for name in _LOGGER_NAMES:

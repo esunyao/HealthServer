@@ -56,6 +56,8 @@ confidence, and never claim database retrieval or fabricate citations.
 
 ## Logging and debug tracing
 
+Configuration is read from the local `config.yaml` and optional `.env`, neither tracked by Git. Precedence is process environment > `.env` > `config.yaml` > code defaults. Nested YAML keys map to `NUTRIATHENA_*` names by path (`log.format` → `NUTRIATHENA_LOG_FORMAT`); see the [setup example](../README.md).
+
 All service logs go through one loguru-based renderer. The default is human-readable text on
 stderr; `NUTRIATHENA_LOG_FORMAT=json` emits one flat JSON object per line. `NUTRIATHENA_LOG_LEVEL`
 sets the base level (default `INFO`); setting `NUTRIATHENA_LOG_FILE` adds a rotating file sink

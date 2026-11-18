@@ -51,9 +51,9 @@ Agent 本身还需使用独立数据库，完成其版本化迁移并启动；�
 | `max_attempts` | 最大 attempt 数，范围 1–10；按实际重试策略决定。 |
 | `actor_id`、`reason`、`trace_id` | 登记操作者 UUID、操作原因和追踪标识，用于审计；不填 token 或密码。 |
 
-Agent 的配置可来自环境变量或 `NutriAthenaAgent/.env`，以实际启动进程取得的值为准；现有环境变量优先。注意仓库示例中 Agent key 是 `meal-analysis-v1`，HealthMind 配置中示例映射键是 `meal-v1`，部署时必须自行对齐。HealthMind 的地址映射位于 [`application.yaml`](../../HealthMind/src/main/resources/application.yaml)，也可由部署配置或 Nacos 覆盖；远程地址使用 HTTPS，本机 loopback 开发可以使用 HTTP。
+Agent 的配置可来自环境变量、`NutriAthenaAgent/.env` 或 `NutriAthenaAgent/config.yaml`，以实际启动进程取得的值为准；优先级为环境变量 > `.env` > `config.yaml`。注意仓库示例中 Agent key 是 `meal-analysis-v1`，HealthMind 配置中示例映射键是 `meal-v1`，部署时必须自行对齐。HealthMind 的地址映射位于 [`application.yaml`](../../HealthMind/src/main/resources/application.yaml)，也可由部署配置或 Nacos 覆盖；远程地址使用 HTTPS，本机 loopback 开发可以使用 HTTP。
 
-产生新 UUID 可在 PostgreSQL 中执行 `SELECT gen_random_uuid();`。将同一个 UUID 配置给 Agent 并登记为 `release_id`。配置改变后，应使 Agent 以新配置启动；运行中的进程不会因编辑 `.env` 自动切换身份。
+产生新 UUID 可在 PostgreSQL 中执行 `SELECT gen_random_uuid();`。将同一个 UUID 配置给 Agent（`config.yaml` 的 `release_id` 或 `NUTRIATHENA_RELEASE_ID`）并登记为 `release_id`。配置改变后，应使 Agent 以新配置启动；运行中的进程不会因编辑配置文件自动切换身份。
 
 ## 3. 计算制品摘要
 

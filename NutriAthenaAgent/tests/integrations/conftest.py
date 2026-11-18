@@ -14,7 +14,6 @@ def _offline_integrations(monkeypatch):
     async def reject_async_network(*args, **kwargs):
         reject_network()
 
-    monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
     monkeypatch.setattr(socket, "create_connection", reject_network)
     monkeypatch.setattr(socket, "getaddrinfo", reject_network)
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", reject_network)

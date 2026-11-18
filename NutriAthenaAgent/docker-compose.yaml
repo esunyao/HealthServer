@@ -7,10 +7,15 @@ services:
     pull_policy: build
     restart: unless-stopped
     env_file:
-      - ${NUTRIATHENA_ENV_FILE:-.env}
+      - path: ${NUTRIATHENA_ENV_FILE:-.env}
+        required: false
     environment:
       NUTRIATHENA_HOST: 0.0.0.0
       NUTRIATHENA_PORT: "8101"
+    # 可选：只读挂载本地 config.yaml（优先级低于 env_file 与 environment）。
+    # 确认宿主机文件存在后再取消注释，否则 Docker 会把它创建成目录。
+    # volumes:
+    #   - ./config.yaml:/workspace/NutriAthenaAgent/config.yaml:ro
     ports:
       - "${NUTRIATHENA_PUBLISHED_PORT:-8101}:8101"
     networks:

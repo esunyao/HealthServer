@@ -1,6 +1,6 @@
 """② 最小 agent 样板：create_agent + 一个自定义工具。
 
-这一段会真正调用模型，需要先按 `.env.example` 配好 `.env`。
+这一段会真正调用模型，需要先按模块 README 配置模型。
 
 注意用的是 `langchain.agents.create_agent`；
 `langgraph.prebuilt.create_react_agent` 已被官方标记废弃，新代码不要再用。

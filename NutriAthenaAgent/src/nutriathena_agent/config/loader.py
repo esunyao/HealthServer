@@ -1,8 +1,11 @@
-"""Validate environment settings while retaining the established aliases."""
+"""Load local configuration and validate runtime settings."""
 
+import os
+from pathlib import Path
 from typing import Annotated
-from dotenv import load_dotenv
-from pydantic import AliasChoices, Field, ValidationError, field_validator
+
+import yaml
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from ..observability.levels import DebugLevel, parse_debug_level
 from ..runtime.paths import MODULE_ROOT
@@ -18,11 +21,64 @@ API_KEY_VAR = "NUTRIATHENA_MODEL_API_KEY"
 BASE_URL_VAR = "NUTRIATHENA_MODEL_BASE_URL"
 MODEL_VAR = "NUTRIATHENA_MODEL_ID"
 MEAL_MODEL_VAR = "NUTRIATHENA_MEAL_MODEL_ID"
+CONFIG_FILE = MODULE_ROOT / "config.yaml"
+ENV_FILE = MODULE_ROOT / ".env"
+_PREFIX = "NUTRIATHENA_"
+
+
+def _read_dotenv(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    values = {}
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        key, separator, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if not separator or not key.startswith(_PREFIX) or not key.isidentifier():
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if value:
+            values[key] = value
+    return values
+
+
+def _flatten(node: dict, prefix: str):
+    for key, value in node.items():
+        if not isinstance(key, str) or not key.isidentifier():
+            raise RuntimeError("config.yaml 的键必须由字母、数字或下划线组成")
+        name = prefix + key.upper()
+        if isinstance(value, dict):
+            yield from _flatten(value, name + "_")
+        elif isinstance(value, list):
+            yield name, ",".join(map(str, value))
+        elif value is not None:
+            yield name, str(value)
+
+
+def _read_yaml(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, UnicodeError) as exception:
+        mark = getattr(exception, "problem_mark", None)
+        where = f"第 {mark.line + 1} 行" if mark is not None else "未知位置"
+        raise RuntimeError(f"config.yaml 格式错误（{where}）") from None
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise RuntimeError("config.yaml 顶层必须是键值映射")
+    return dict(_flatten(data, _PREFIX))
 
 
 def load_env() -> None:
-    """Shell values win per key; new names win over legacy names after merging."""
-    load_dotenv(MODULE_ROOT / ".env", override=False)
+    """Process environment wins over .env, which wins over config.yaml."""
+    if os.environ.get("NUTRIATHENA_SKIP_LOCAL_CONFIG") == "1":
+        return
+    for source in (_read_dotenv(ENV_FILE), _read_yaml(CONFIG_FILE)):
+        for name, value in source.items():
+            if value:
+                os.environ.setdefault(name, value)
 
 
 class _Environment(BaseSettings):
@@ -32,23 +88,23 @@ class _Environment(BaseSettings):
         frozen=True,
         hide_input_in_errors=True,
         populate_by_name=True,
-        env_prefix="NUTRIATHENA_",
+        env_prefix=_PREFIX,
     )
 
 
 class _ModelEnvironment(_Environment):
     model: str = Field(
         default=DEFAULT_MODEL,
-        validation_alias=AliasChoices(MODEL_VAR, "AGENTDEVELOP_MODEL"),
+        validation_alias=MODEL_VAR,
     )
     api_key: str = Field(
         min_length=1,
         repr=False,
-        validation_alias=AliasChoices(API_KEY_VAR, "AGENTDEVELOP_API_KEY"),
+        validation_alias=API_KEY_VAR,
     )
     base_url: str = Field(
         min_length=1,
-        validation_alias=AliasChoices(BASE_URL_VAR, "AGENTDEVELOP_BASE_URL"),
+        validation_alias=BASE_URL_VAR,
     )
     model_config = SettingsConfigDict(env_ignore_empty=True)
 
@@ -56,36 +112,28 @@ class _ModelEnvironment(_Environment):
 class _MealEnvironment(_ModelEnvironment):
     model: str = Field(
         min_length=1,
-        validation_alias=AliasChoices(MEAL_MODEL_VAR, "AGENTDEVELOP_MEAL_MODEL"),
+        validation_alias=MEAL_MODEL_VAR,
     )
     mcp_url: str = Field(
         min_length=1,
-        validation_alias=AliasChoices("NUTRIATHENA_MCP_URL", "AGENTDEVELOP_MCP_URL"),
+        validation_alias="NUTRIATHENA_MCP_URL",
     )
     token_url: str = Field(
         min_length=1,
-        validation_alias=AliasChoices(
-            "NUTRIATHENA_MCP_OAUTH_TOKEN_URL", "AGENTDEVELOP_OAUTH_TOKEN_URL"
-        ),
+        validation_alias="NUTRIATHENA_MCP_OAUTH_TOKEN_URL",
     )
     oauth_client_id: str = Field(
         min_length=1,
-        validation_alias=AliasChoices(
-            "NUTRIATHENA_MCP_CLIENT_ID", "AGENTDEVELOP_OAUTH_CLIENT_ID"
-        ),
+        validation_alias="NUTRIATHENA_MCP_CLIENT_ID",
     )
     oauth_client_secret: str = Field(
         min_length=1,
         repr=False,
-        validation_alias=AliasChoices(
-            "NUTRIATHENA_MCP_CLIENT_SECRET", "AGENTDEVELOP_OAUTH_CLIENT_SECRET"
-        ),
+        validation_alias="NUTRIATHENA_MCP_CLIENT_SECRET",
     )
     mcp_scopes: str = Field(
         default=DEFAULT_MCP_SCOPES,
-        validation_alias=AliasChoices(
-            "NUTRIATHENA_MCP_SCOPES", "AGENTDEVELOP_MCP_SCOPES"
-        ),
+        validation_alias="NUTRIATHENA_MCP_SCOPES",
     )
     media_allowed_hosts: Annotated[frozenset[str], NoDecode] = frozenset()
     debug_level: DebugLevel = Field(

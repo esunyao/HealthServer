@@ -18,6 +18,5 @@ def offline_only(monkeypatch):
     monkeypatch.setattr(socket, "create_connection", forbidden)
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", forbidden)
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", forbidden_async)
-    monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")

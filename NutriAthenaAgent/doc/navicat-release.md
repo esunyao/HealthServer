@@ -28,7 +28,7 @@ HealthMind <────── {overall_confidence, items} ───────
 | `v_actor_id` | 本次登记人的 UUID，用于审计 |
 | `v_release_version`、`v_timeout_seconds`、`v_max_attempts` | 自定版本、超时时间及尝试次数；示例不是生产推荐值 |
 
-环境变量可能覆盖 `.env`；以实际运行进程取得的值为准。示例中的 `meal-v1` 和 `meal-analysis-v1` 不是同一个键。不要把密码、token 填入 SQL。
+环境变量可能覆盖 `.env`，`.env` 又覆盖 `config.yaml`；以实际运行进程取得的值为准。示例中的 `meal-v1` 和 `meal-analysis-v1` 不是同一个键。不要把密码、token 填入 SQL。
 
 下面内置的输入 schema 来自仓库 capture-ready v1；输出 schema 是按当前 `MealAnalysis` 模型生成的**候选**。摘要由限制在 ASCII/整数 JSON 的教程命令计算，尚需用 HealthMind `CanonicalJson` 核对；输出 schema 需先用 HealthMind `JsonSchemaService`、当前 Agent 和事件契约验证正反例。自定义校验（例如空白名称、重复营养素）不一定能由此 JSON Schema 完整表达。若部署版本或契约有变化，应重新生成、验证并更新 schema 与摘要；release 身份与契约登记后受数据库保护，不能依赖事后原地修正。
 

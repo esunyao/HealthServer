@@ -7,8 +7,11 @@ __pycache__/
 .pytest_cache/
 .langgraph_api/
 
-# 本地凭据，禁止提交（模板见 .env.example）
+# 本地配置、样例与凭据，均不提交
 .env
+.env.example
+config.yaml
+config.example.yaml
 
 # 本地服务日志（NUTRIATHENA_LOG_FILE）
 logs/

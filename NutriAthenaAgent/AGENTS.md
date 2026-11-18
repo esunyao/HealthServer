@@ -10,7 +10,7 @@
 |---|---|
 | 定位源码与依赖方向 | [src 导航](src/AGENTS.md) → [包导航](src/nutriathena_agent/AGENTS.md) |
 | 修改某项职责 | 包导航中对应子目录 AGENTS.md → 实现与对应测试 |
-| 运行与依赖 | [pyproject.toml](pyproject.toml)、[锁文件](uv.lock)、[README](README.md) |
+| 运行与依赖 | [pyproject.toml](pyproject.toml)、[锁文件](uv.lock)、[README 配置示例](README.md) |
 | 验证行为 | [测试导航](tests/AGENTS.md) |
 | HTTP 对接 | [运行契约](doc/README.md)、[共享 HTTP 夹具](../integration-contracts/src/main/resources/agent-protocol/v1/) |
 | 发布身份 | [release 说明](doc/release.md) |
@@ -26,7 +26,7 @@
 - MCP SDK `CallToolResult` 的结构化内容和 JSON 文本内容都要支持；`isError` 必须作为失败处理，不得进入上下文。
 - capture context 的 `notes` 是用户输入数据，必须传给 Meal Runner，但不得作为系统指令执行。当前生产运行没有食物成分数据源；Prompt 必须明确证据为空，允许保守常识估算并降低 confidence，不得声称检索过知识库或伪造引用。
 - signed image URL 仅供 worker 下载；host allowlist 使用逗号分隔，支持 `*` 通配符，HTTPS 允许任意有效端口；不允许重定向。URL、token、原始 capture ID 不进入模型上下文或常规日志。
-- 不读、不打印或提交 `.env`、OAuth token、模型 key、图片或真实餐食输出。真实 smoke 只能使用已有授权 task/attempt 和用户提供的测试上下文。
+- 不读、不打印或提交 `.env`、`config.yaml`、OAuth token、模型 key、图片或真实餐食输出。真实 smoke 只能使用已有授权 task/attempt 和用户提供的测试上下文。
 - `artifact_sha256` 从当前加载代码、迁移、模型 prompt 资产和 lock 文件计算，不能回显调用请求中的值。受 Git 管理的制品输入通过 `.gitattributes` 固定 LF；旧工作副本需转换，未跟踪文件仍会影响摘要。
 
 ## 验证入口
@@ -35,8 +35,8 @@
 
 ```bash
 uv sync --extra test
-PYTHON_DOTENV_DISABLED=1 uv run pytest -q -m "not integration"
-PYTHON_DOTENV_DISABLED=1 uv run nutriathena-agent graph
+NUTRIATHENA_SKIP_LOCAL_CONFIG=1 uv run pytest -q -m "not integration"
+NUTRIATHENA_SKIP_LOCAL_CONFIG=1 uv run nutriathena-agent graph
 uv run pytest -q -m integration
 ```
 
