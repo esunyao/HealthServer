@@ -33,10 +33,49 @@ def _apply_debug_argument(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """构建 ``nutriathena-agent`` CLI 参数解析器。
+
+    指令树::
+
+        nutriathena-agent  (不传子命令时默认等价于: graph)
+        ├── -h, --help
+        │
+        ├── graph [text]                          运行离线 LangGraph 教学示例
+        │   ├── -h, --help
+        │   └── text                              可选位置参数，默认 "午饭吃了番茄炒蛋和米饭"
+        │
+        ├── agent [question]                      运行最小 LangChain agent 教学示例
+        │   ├── -h, --help
+        │   └── question                          可选位置参数，默认 "统计一下这句话的词数：今天午饭吃了番茄炒蛋"
+        │
+        ├── serve                                 启动 HealthMind-compatible HTTP 服务和持久 worker
+        │   ├── -h, --help
+        │   └── --debug [{off,trace,full}]        可选（不写=None；仅写 --debug 等价 trace；大小写不敏感）
+        │
+        ├── migrate                               应用校验和保护的 PostgreSQL 版本迁移
+        │   └── -h, --help
+        │
+        ├── meal                                  直接运行一个 HealthMind 餐食 attempt（生产使用 serve）
+        │   ├── -h, --help
+        │   ├── --debug [{off,trace,full}]        可选（不写=None；仅写 --debug 等价 trace；大小写不敏感）
+        │   ├── --task-id <UUID>                  必填，UUID 格式校验
+        │   ├── --attempt-id <UUID>               必填，UUID 格式校验
+        │   └── --trace-id <STR>                  可选，默认 "manual-run"
+        │
+        └── smoke                                 通过 OAuth 对已部署服务运行安全真实 smoke
+            ├── -h, --help
+            ├── --task-id <UUID>                  必填，UUID 格式校验
+            ├── --attempt-id <UUID>               必填，UUID 格式校验
+            └── --trace-id <STR>                  必填
+
+    :return: 配置好全部子命令与参数校验规则的 ``argparse.ArgumentParser`` 实例。
+    """
     parser = argparse.ArgumentParser(prog="nutriathena-agent")
     commands = parser.add_subparsers(dest="command")
+
     graph = commands.add_parser("graph", help="运行离线 LangGraph 教学示例")
     graph.add_argument("text", nargs="?", default=DEFAULT_TEXT)
+
     agent = commands.add_parser("agent", help="运行最小 LangChain agent 教学示例")
     agent.add_argument("question", nargs="?", default=DEFAULT_QUESTION)
     serve = commands.add_parser(

@@ -10,6 +10,7 @@ from ..observability import (
     log_exception,
     parse_debug_level,
 )
+import argparse
 from ..examples.basic_graph import DEFAULT_TEXT, run as run_graph
 from ..examples.simple_agent import run as run_agent
 from .parser import build_parser, _apply_debug_argument
@@ -37,7 +38,7 @@ def _migrate() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    args: argparse.Namespace = build_parser().parse_args(argv)
     _apply_debug_argument(args)
     load_env()
     configure_logging(parse_debug_level(os.environ.get("NUTRIATHENA_DEBUG", "off")))
